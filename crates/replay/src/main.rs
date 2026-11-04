@@ -193,7 +193,8 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                             tag(c, format!("{} spent {cost} with fuel {}", u.kind, u.fuel))
                         });
                         let want = u.fuel - cost as i32;
-                        r.check("move.fuel_after", rec.fuel == want, || {
+                        let alt = r.maybe_supplied.get(&u.id).map(|&(f, _)| f - cost as i32);
+                        r.check("move.fuel_after", rec.fuel == want || alt == Some(rec.fuel), || {
                             tag(c, format!("{} fuel {} -{cost} = {want}, recorded {}", u.kind, u.fuel, rec.fuel))
                         });
                     }
@@ -309,7 +310,18 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let rd = &a["defender"];
                 let (aid, did) = (num(&ra["units_id"]) as u32, num(&rd["units_id"]) as u32);
                 if aid == 0 || did == 0 {
+                    // One side is hidden from this view (a dived sub). Take the visible side's
+                    // recorded result as given.
                     r.skip("fire: a side is hidden from this view (id 0)");
+                    for (id, rv) in [(aid, ra), (did, rd)] {
+                        if id == 0 { continue; }
+                        let hp = hp_display(&rv["units_hit_points"]);
+                        if let Some(m) = s.units.get_mut(&id) {
+                            m.hp = Hp::from_display(hp);
+                            m.ammo = num(&rv["units_ammo"]) as i32;
+                        }
+                        if hp == 0 { remove_unit(s, id); }
+                    }
                     continue;
                 }
                 let (Some(att), Some(def)) = (s.units.get(&aid).cloned(), s.units.get(&did).cloned()) else {
@@ -480,7 +492,9 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 if let (Some(b), Some(t)) = (s.units.get(&boat).cloned(), s.units.get(&rid).cloned()) {
                     r.check("repair.adjacent", dist((b.x, b.y), (t.x, t.y)) == 1, || tag(c, t.kind.clone()));
                     if let Some(before) = t.hp.display() {
-                        let want = (before + 1).min(10);
+                        let have0 = s.player(t.owner).map(|p| p.funds).unwrap_or(0);
+                        let afford = have0 >= tables().unit(&t.kind).cost as i64 / 10;
+                        let want = if afford { (before + 1).min(10) } else { before };
                         r.check("repair.hp", hp_after == want, || tag(c, format!("{} {before} -> {hp_after}", t.kind)));
                         let cost = if want > before { tables().unit(&t.kind).cost as i64 / 10 } else { 0 };
                         let have = s.player(t.owner).map(|p| p.funds).unwrap_or(0);
