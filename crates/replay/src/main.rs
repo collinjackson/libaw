@@ -552,6 +552,53 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     }
                 }
             }
+            "Launch" => {
+                let (sx, sy) = (num(&a["siloX"]) as u16, num(&a["siloY"]) as u16);
+                let (tx, ty) = (num(&a["targetX"]) as u16, num(&a["targetY"]) as u16);
+                let launcher = s.unit_at(sx, sy).cloned();
+                r.check("launch.foot_on_silo", launcher.as_ref().is_some_and(|u| is_foot(&u.kind)), || {
+                    tag(c, format!("silo {:?} has {:?}", (sx, sy), launcher.as_ref().map(|u| u.kind.clone())))
+                });
+                let silo = s.buildings.get(&(sx, sy)).map(|b| b.terrain);
+                r.check("launch.loaded_silo", silo.is_some_and(|t| tables().tile(t).building.as_deref() == Some("Missile")), || {
+                    tag(c, format!("silo terrain {silo:?}"))
+                });
+                if let Some(b) = s.buildings.get_mut(&(sx, sy)) {
+                    b.terrain = 112; // Missile Silo Empty
+                }
+                // 3 HP to every unit within 2 tiles of the target; it can't kill (leaves 0.1).
+                let dmg = (-num(&a["hp"])).max(0) as u8 * 10;
+                for u in s.units.values_mut() {
+                    if u.carried_by.is_none() && dist((tx, ty), (u.x, u.y)) <= 2 {
+                        u.hp = Hp { lo: u.hp.lo.saturating_sub(dmg).max(1), hi: u.hp.hi.saturating_sub(dmg).max(1) };
+                    }
+                }
+                if let Some(u) = launcher {
+                    s.units.get_mut(&u.id).unwrap().moved = true;
+                }
+            }
+            "AttackSeam" => {
+                let (x, y) = (num(&a["seamX"]) as u16, num(&a["seamY"]) as u16);
+                let hp = num(&a["seamHp"]) as i32;
+                let aid = num(&a["attacker"]["units_id"]) as u32;
+                if let Some(u) = s.units.get(&aid).cloned() {
+                    let d = dist((u.x, u.y), (x, y));
+                    let ri = tables().unit(&u.kind).range;
+                    r.check("seam.range", d >= ri[0] as u32 && d <= ri[1] as u32, || tag(c, format!("{} at {d}", u.kind)));
+                    let m = s.units.get_mut(&aid).unwrap();
+                    m.ammo = num(&a["attacker"]["units_ammo"]) as i32;
+                    m.moved = true;
+                }
+                if hp <= 0 {
+                    if let Some(b) = s.buildings.remove(&(x, y)) {
+                        let rubble = if b.terrain == 113 { 115 } else { 116 };
+                        let w = s.width as usize;
+                        s.terrain[y as usize * w + x as usize] = rubble;
+                    }
+                } else if let Some(b) = s.buildings.get_mut(&(x, y)) {
+                    b.capture = hp;
+                }
+            }
             "Resign" => return Err("resign".into()),
             "Power" => return Err("co power".into()),
             other => return Err(format!("unsupported action {other}")),
