@@ -95,7 +95,7 @@ fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
     let t = tables().tile(att_terrain);
     let stars = stars(s, att, att_terrain);
     let v = 100 + 10 * towers(s, att.owner) as i32 * tower_multiplier(s, att.owner)
-        + awbw_engine::co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &t.kind, stars);
+        + awbw_engine::co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars);
     v.max(0) as u32
 }
 
@@ -123,6 +123,20 @@ fn tower_multiplier(s: &State, p: PlayerId) -> i32 {
         "S" => 3,
         _ => 1,
     }
+}
+
+/// The terrain kind a CO's terrain-conditional bonus sees (Koal roads, Jake plains,
+/// Kindle buildings). A bridge isn't a road here, and an emptied missile silo isn't plain.
+fn bonus_terrain(u: &Unit, terrain: u16, kind: &str) -> String {
+    let _ = u;
+    let name = &tables().tile(terrain).name;
+    if name.ends_with("Bridge") {
+        return "Bridge".into();
+    }
+    if name.starts_with("Missile Silo") {
+        return "Silo".into();
+    }
+    kind.to_string()
 }
 
 /// Terrain stars a unit gets; Lash's Prime Tactics doubles them.
