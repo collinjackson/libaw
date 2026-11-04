@@ -86,18 +86,19 @@ pub struct AttackParams {
     pub def_value: u32,
     pub def_terrain: u32,
     pub def_hp: u8,
-    pub luck_max: u32,
+    pub luck_min: i32,
+    pub luck_max: i32,
 }
 
 pub fn damage_range(p: &AttackParams) -> (u32, u32) {
-    let f = |luck: u32| -> f64 {
+    let f = |luck: i32| -> f64 {
         let a = p.base as f64 * p.att_value as f64 / 100.0 + luck as f64;
         let d = (200.0 - (p.def_value as f64 + p.def_terrain as f64 * p.def_hp as f64)) / 100.0;
         (a * p.att_hp as f64 / 10.0 * d).max(0.0)
     };
     // Floor with a small epsilon, the way AWBW avoids float artefacts like 54.9999.
     let fl = |v: f64| (v + 1e-6).floor() as u32;
-    (fl(f(0)), fl(f(p.luck_max)))
+    (fl(f(p.luck_min)), fl(f(p.luck_max)))
 }
 
 /// Terrain defence stars that apply to a unit (air units get none).

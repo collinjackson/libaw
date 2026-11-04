@@ -34,6 +34,7 @@ pub struct Tables {
     pub units: HashMap<String, UnitInfo>,
     /// Base damage, attacker -> defender, percent. Missing = can't attack.
     pub damage: HashMap<String, HashMap<String, u8>>,
+    pub cos: HashMap<String, serde_json::Value>,
 }
 
 pub fn tables() -> &'static Tables {
@@ -45,6 +46,7 @@ pub fn tables() -> &'static Tables {
             terrain: terrain.into_iter().map(|(k, v)| (k.parse().unwrap(), v)).collect(),
             units: serde_json::from_str(include_str!("../../../data/units.json")).unwrap(),
             damage: serde_json::from_str(include_str!("../../../data/damage.json")).unwrap(),
+            cos: serde_json::from_str(include_str!("../../../data/cos.json")).unwrap(),
         }
     })
 }

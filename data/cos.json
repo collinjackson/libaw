@@ -1,0 +1,923 @@
+{
+ "Andy": {
+  "id": 1,
+  "d2d": {},
+  "cop": {
+   "PowerStars": 3
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1
+    }
+   ]
+  }
+ },
+ "Hachi": {
+  "id": 17,
+  "d2d": {
+   "UnitPriceMultiplier": 0.9
+  },
+  "cop": {
+   "PowerStars": 3,
+   "UnitPriceMultiplier": 0.5
+  },
+  "scop": {
+   "PowerStars": 5,
+   "UnitPriceMultiplier": 0.5
+  }
+ },
+ "Jake": {
+  "id": 22,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1,
+     "ConditionalTerrain": "Plain"
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1,
+     "ConditionalTerrain": "Plain"
+    },
+    {
+     "AffectedUnits": [
+      "Artillery",
+      "Rocket",
+      "Missile"
+     ],
+     "RangeIncrease": 1
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.3,
+     "ConditionalTerrain": "Plain"
+    },
+    {
+     "AffectedUnits": [
+      "Artillery",
+      "Rocket",
+      "Missile"
+     ],
+     "RangeIncrease": 1
+    }
+   ]
+  }
+ },
+ "Max": {
+  "id": 7,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "B-Copter",
+      "Bomber",
+      "Cruiser",
+      "Fighter",
+      "Md.Tank",
+      "Mega Tank",
+      "Neotank",
+      "Recon",
+      "Stealth",
+      "Sub",
+      "Tank"
+     ],
+     "PowerIncrease": 0.2
+    },
+    {
+     "AffectedUnits": [
+      "Artillery",
+      "Battleship",
+      "Carrier",
+      "Missile",
+      "Piperunner",
+      "Missile"
+     ],
+     "PowerIncrease": -0.1,
+     "RangeIncrease": -1
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "B-Copter",
+      "Bomber",
+      "Cruiser",
+      "Fighter",
+      "Md.Tank",
+      "Mega Tank",
+      "Neotank",
+      "Recon",
+      "Stealth",
+      "Sub",
+      "Tank"
+     ],
+     "PowerIncrease": 0.1
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "B-Copter",
+      "Bomber",
+      "Cruiser",
+      "Fighter",
+      "Md.Tank",
+      "Mega Tank",
+      "Neotank",
+      "Recon",
+      "Stealth",
+      "Sub",
+      "Tank"
+     ],
+     "PowerIncrease": 0.3
+    }
+   ]
+  }
+ },
+ "Nell": {
+  "id": 24,
+  "d2d": {
+   "LuckRange": {
+    "x": 0,
+    "y": 19
+   }
+  },
+  "cop": {
+   "PowerStars": 3,
+   "LuckRange": {
+    "x": 0,
+    "y": 59
+   }
+  },
+  "scop": {
+   "PowerStars": 6,
+   "LuckRange": {
+    "x": 0,
+    "y": 99
+   }
+  }
+ },
+ "Rachel": {
+  "id": 28,
+  "d2d": {},
+  "cop": {
+   "PowerStars": 3,
+   "LuckRange": {
+    "x": 0,
+    "y": 39
+   }
+  },
+  "scop": {
+   "PowerStars": 6
+  }
+ },
+ "Sami": {
+  "id": 8,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Infantry",
+      "Mech"
+     ],
+     "PowerIncrease": 0.3
+    },
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "B-Copter",
+      "Bomber",
+      "Cruiser",
+      "Fighter",
+      "Md.Tank",
+      "Mega Tank",
+      "Neotank",
+      "Recon",
+      "Stealth",
+      "Sub",
+      "Tank"
+     ],
+     "PowerIncrease": -0.1
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Infantry",
+      "Mech"
+     ],
+     "PowerIncrease": 0.2
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 8,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Infantry",
+      "Mech"
+     ],
+     "PowerIncrease": 0.4
+    }
+   ]
+  }
+ },
+ "Colin": {
+  "id": 15,
+  "d2d": {
+   "UnitPriceMultiplier": 0.8,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": -0.1
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 2
+  },
+  "scop": {
+   "PowerStars": 6
+  }
+ },
+ "Grit": {
+  "id": 2,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Artillery",
+      "Battleship",
+      "Carrier",
+      "Missile",
+      "Piperunner",
+      "Rocket"
+     ],
+     "PowerIncrease": 0.2,
+     "RangeIncrease": 1
+    },
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "B-Copter",
+      "Bomber",
+      "Cruiser",
+      "Fighter",
+      "Md.Tank",
+      "Mega Tank",
+      "Neotank",
+      "Recon",
+      "Stealth",
+      "Sub",
+      "Tank"
+     ],
+     "PowerIncrease": -0.2
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Artillery",
+      "Battleship",
+      "Carrier",
+      "Missile",
+      "Piperunner",
+      "Rocket"
+     ],
+     "PowerIncrease": 0.2,
+     "RangeIncrease": 1
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Artillery",
+      "Battleship",
+      "Carrier",
+      "Missile",
+      "Piperunner",
+      "Rocket"
+     ],
+     "PowerIncrease": 0.2,
+     "RangeIncrease": 2
+    }
+   ]
+  }
+ },
+ "Olaf": {
+  "id": 9,
+  "d2d": {
+   "WeatherWithNoMovementAffect": "Snow",
+   "WeatherWithAdditionalMovementAffect": "Rain"
+  },
+  "cop": {
+   "PowerStars": 3
+  },
+  "scop": {
+   "PowerStars": 7
+  }
+ },
+ "Sasha": {
+  "id": 19,
+  "d2d": {
+   "PropertyFundIncrease": 100
+  },
+  "cop": {
+   "PowerStars": 2
+  },
+  "scop": {
+   "PowerStars": 6
+  }
+ },
+ "Drake": {
+  "id": 5,
+  "d2d": {
+   "WeatherWithNoMovementAffect": "Rain",
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Battleship",
+      "Black Boat",
+      "Carrier",
+      "Cruiser",
+      "Lander",
+      "Sub"
+     ],
+     "DefenseIncrease": 0.25
+    },
+    {
+     "AffectedUnits": [
+      "B-Copter",
+      "Bomber",
+      "Fighter",
+      "Stealth",
+      "T-Copter"
+     ],
+     "PowerIncrease": -0.2
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 4
+  },
+  "scop": {
+   "PowerStars": 7
+  }
+ },
+ "Eagle": {
+  "id": 10,
+  "d2d": {
+   "AirFuelUsageDecrease": 2,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "B-Copter",
+      "Bomber",
+      "Fighter",
+      "Stealth",
+      "T-Copter"
+     ],
+     "PowerIncrease": 0.15,
+     "DefenseIncrease": 0.1
+    },
+    {
+     "AffectedUnits": [
+      "Battleship",
+      "Black Boat",
+      "Carrier",
+      "Cruiser",
+      "Lander",
+      "Sub"
+     ],
+     "PowerIncrease": -0.3
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "B-Copter",
+      "Bomber",
+      "Fighter",
+      "Stealth",
+      "T-Copter"
+     ],
+     "PowerIncrease": 0.05,
+     "DefenseIncrease": 0.1
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 9,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "B-Copter",
+      "Bomber",
+      "Fighter",
+      "Stealth",
+      "T-Copter"
+     ],
+     "PowerIncrease": 0.05,
+     "DefenseIncrease": 0.1
+    }
+   ]
+  }
+ },
+ "Javier": {
+  "id": 27,
+  "d2d": {},
+  "cop": {
+   "PowerStars": 3
+  },
+  "scop": {
+   "PowerStars": 6
+  }
+ },
+ "Jess": {
+  "id": 14,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "Artillery",
+      "Md.Tank",
+      "Mega Tank",
+      "Missile",
+      "Neotank",
+      "Piperunner",
+      "Recon",
+      "Rocket",
+      "Tank"
+     ],
+     "PowerIncrease": 0.1
+    },
+    {
+     "AffectedUnits": [
+      "B-Copter",
+      "Battleship",
+      "Bomber",
+      "Carrier",
+      "Cruiser",
+      "Fighter",
+      "Infantry",
+      "Mech",
+      "Lander",
+      "Stealth",
+      "Sub"
+     ],
+     "PowerIncrease": -0.1
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "Artillery",
+      "Md.Tank",
+      "Mega Tank",
+      "Missile",
+      "Neotank",
+      "Piperunner",
+      "Recon",
+      "Rocket",
+      "Tank"
+     ],
+     "PowerIncrease": 0.1
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "Artillery",
+      "Md.Tank",
+      "Mega Tank",
+      "Missile",
+      "Neotank",
+      "Piperunner",
+      "Recon",
+      "Rocket",
+      "Tank"
+     ],
+     "PowerIncrease": 0.3
+    }
+   ]
+  }
+ },
+ "Grimm": {
+  "id": 20,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.3,
+     "DefenseIncrease": -0.2
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.2
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.5
+    }
+   ]
+  }
+ },
+ "No CO": {
+  "id": 31,
+  "d2d": {},
+  "cop": {},
+  "scop": {}
+ },
+ "Kanbei": {
+  "id": 3,
+  "d2d": {
+   "UnitPriceMultiplier": 1.2,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.3,
+     "DefenseIncrease": 0.3
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 4,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 7,
+   "CounterAttackPower": 1.5,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1,
+     "DefenseIncrease": 0.2
+    }
+   ]
+  }
+ },
+ "Sensei": {
+  "id": 13,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "B-Copter"
+     ],
+     "PowerIncrease": 0.5
+    },
+    {
+     "AffectedUnits": [
+      "Infantry",
+      "Mech"
+     ],
+     "PowerIncrease": 0.4
+    },
+    {
+     "AffectedUnits": [
+      "Anti-Air",
+      "Artillery",
+      "Battleship",
+      "Carrier",
+      "Cruiser",
+      "Md.Tank",
+      "Mega Tank",
+      "Missile",
+      "Neotank",
+      "Piperunner",
+      "Recon",
+      "Missile",
+      "Sub",
+      "Tank"
+     ],
+     "PowerIncrease": -0.1
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 2,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "B-Copter"
+     ],
+     "PowerIncrease": 0.15
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "B-Copter"
+     ],
+     "PowerIncrease": 0.15
+    }
+   ]
+  }
+ },
+ "Sonja": {
+  "id": 18,
+  "d2d": {
+   "HiddenHP": true,
+   "CounterAttackPower": 1.5,
+   "SightIncrease": 1,
+   "LuckRange": {
+    "x": -9,
+    "y": 9
+   }
+  },
+  "cop": {
+   "PowerStars": 3,
+   "SeeIntoHiddenTiles": true
+  },
+  "scop": {
+   "PowerStars": 5,
+   "AttackFirst": true,
+   "SeeIntoHiddenTiles": true
+  }
+ },
+ "Adder": {
+  "id": 11,
+  "d2d": {},
+  "cop": {
+   "PowerStars": 2
+  },
+  "scop": {
+   "PowerStars": 5
+  }
+ },
+ "Flak": {
+  "id": 25,
+  "d2d": {
+   "LuckRange": {
+    "x": -9,
+    "y": 24
+   }
+  },
+  "cop": {
+   "PowerStars": 3,
+   "LuckRange": {
+    "x": -19,
+    "y": 49
+   }
+  },
+  "scop": {
+   "PowerStars": 6,
+   "LuckRange": {
+    "x": -39,
+    "y": 89
+   }
+  }
+ },
+ "Hawke": {
+  "id": 12,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 5
+  },
+  "scop": {
+   "PowerStars": 9
+  }
+ },
+ "Jugger": {
+  "id": 26,
+  "d2d": {
+   "LuckRange": {
+    "x": -14,
+    "y": 29
+   }
+  },
+  "cop": {
+   "PowerStars": 3,
+   "LuckRange": {
+    "x": -24,
+    "y": 54
+   }
+  },
+  "scop": {
+   "PowerStars": 7,
+   "LuckRange": {
+    "x": -44,
+    "y": 94
+   }
+  }
+ },
+ "Kindle": {
+  "id": 23,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.4,
+     "ConditionalTerrain": "Building"
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.4,
+     "ConditionalTerrain": "Building"
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 6,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.9,
+     "ConditionalTerrain": "Building"
+    }
+   ]
+  }
+ },
+ "Koal": {
+  "id": 21,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1,
+     "ConditionalTerrain": "Road"
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 3,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1,
+     "ConditionalTerrain": "Road"
+    }
+   ]
+  },
+  "scop": {
+   "PowerStars": 5,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.2,
+     "ConditionalTerrain": "Road"
+    }
+   ]
+  }
+ },
+ "Lash": {
+  "id": 16,
+  "d2d": {},
+  "cop": {
+   "PowerStars": 4
+  },
+  "scop": {
+   "PowerStars": 7
+  }
+ },
+ "Sturm": {
+  "id": 29,
+  "d2d": {
+   "MoveCostPerTile": 1,
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": -0.2,
+     "DefenseIncrease": 0.2
+    }
+   ]
+  },
+  "cop": {
+   "PowerStars": 6
+  },
+  "scop": {
+   "PowerStars": 10
+  }
+ },
+ "Von Bolt": {
+  "id": 30,
+  "d2d": {
+   "PowerIncreases": [
+    {
+     "AffectedUnits": [
+      "all"
+     ],
+     "PowerIncrease": 0.1,
+     "DefenseIncrease": 0.1
+    }
+   ]
+  },
+  "cop": {},
+  "scop": {
+   "PowerStars": 10
+  }
+ }
+}

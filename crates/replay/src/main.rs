@@ -81,56 +81,26 @@ fn is_foot(kind: &str) -> bool {
     matches!(kind, "Infantry" | "Mech")
 }
 
-fn is_air(kind: &str) -> bool {
-    tables().unit(kind).move_type == "A"
-}
-
-fn is_sea(kind: &str) -> bool {
-    matches!(tables().unit(kind).move_type.as_str(), "S" | "L")
-}
-
 /// Attack and defence values (100 = neutral) from COs' day-to-day abilities and com towers.
 fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
     let co = co_of(s, att.owner);
-    let k = att.kind.as_str();
-    let mut v: i32 = 100 + 10 * towers(s, att.owner) as i32;
-    let direct = !is_indirect(k);
-    match co.as_str() {
-        "Max" if direct && !is_foot(k) && tables().unit(k).ammo + 1 > 0 && !matches!(k, "APC" | "T-Copter" | "Lander" | "Black Boat") => v += 20,
-        "Max" if !direct => v -= 10,
-        "Sami" if is_foot(k) => v += 30,
-        "Sami" if direct => v -= 10,
-        "Von Bolt" => v += 10,
-        "Jake" if tables().tile(att_terrain).kind == "Plain" => v += 10,
-        "Koal" if tables().tile(att_terrain).kind == "Road" => v += 10,
-        "Eagle" if is_air(k) => v += 15,
-        "Eagle" if is_sea(k) => v -= 30,
-        "Jess" if matches!(tables().unit(k).move_type.as_str(), "T" | "W") => v += 10,
-        "Jess" => v -= 10,
-        _ => {}
-    }
+    let t = tables().tile(att_terrain);
+    let stars = terrain_stars(att_terrain, &att.kind);
+    let v = 100 + 10 * towers(s, att.owner) as i32
+        + awbw_engine::co::attack_bonus(&co, &att.kind, &t.kind, stars);
     v.max(0) as u32
 }
 
 fn def_value(s: &State, def: &Unit, attacker_kind: &str) -> u32 {
     let co = co_of(s, def.owner);
-    let mut v: i32 = 100;
-    match co.as_str() {
-        "Von Bolt" => v += 10,
-        "Eagle" if is_air(&def.kind) => v += 10,
-        "Javier" => {
-            v += 10 * towers(s, def.owner) as i32;
-            if is_indirect(attacker_kind) {
-                v += 20;
-            }
+    let mut v: i32 = 100 + awbw_engine::co::defense_bonus(&co, &def.kind);
+    if co == "Javier" {
+        v += 10 * towers(s, def.owner) as i32;
+        if is_indirect(attacker_kind) {
+            v += 20;
         }
-        _ => {}
     }
     v as u32
-}
-
-fn luck_max(s: &State, p: PlayerId) -> u32 {
-    if co_of(s, p) == "Nell" { 19 } else { 9 }
 }
 
 /// Does an attack from `att` on `def` leave `def` with the recorded displayed HP?
@@ -148,7 +118,8 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8) ->
                 def_value: def_value(s, def, &att.kind),
                 def_terrain: terrain_stars(dt, &def.kind),
                 def_hp: dhp,
-                luck_max: luck_max(s, att.owner),
+                luck_min: awbw_engine::co::luck(&co_of(s, att.owner)).0,
+                luck_max: awbw_engine::co::luck(&co_of(s, att.owner)).1,
             };
             let (dlo, dhi) = damage_range(&p);
             let cand = def.hp.intersect(Hp::from_display(dhp))?;
@@ -240,7 +211,8 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
             }
             "Build" => {
                 let nu = unit_from(&a["newUnit"]);
-                let cost = tables().unit(&nu.kind).cost as i64;
+                let cost = (tables().unit(&nu.kind).cost as f64
+                    * awbw_engine::co::price_multiplier(&co_of(s, nu.owner))).round() as i64;
                 let funds = s.player(nu.owner).map(|p| p.funds).unwrap_or(0);
                 r.check("build.affordable", cost <= funds, || {
                     tag(c, format!("{} costs {cost}, funds {funds}", nu.kind))
@@ -331,8 +303,8 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let d = dist((att.x, att.y), (def.x, def.y));
                 let ai = tables().unit(&att.kind);
                 let mut maxr = ai.range[1] as u32;
-                if co_of(s, att.owner) == "Max" && maxr > 1 {
-                    maxr -= 1;
+                if maxr > 1 {
+                    maxr = (maxr as i32 + awbw_engine::co::range_bonus(&co_of(s, att.owner), &att.kind)).max(2) as u32;
                 }
                 r.check("fire.range", d >= ai.range[0] as u32 && d <= maxr, || {
                     tag(c, format!("{} -> {} at distance {d}, range {}..{maxr}", att.kind, def.kind, ai.range[0]))
@@ -704,7 +676,7 @@ fn start_turn(s: &mut State, next: PlayerId, day: u32, _r: &mut Report, _c: &Ctx
     let props = s.buildings.values()
         .filter(|b| b.owner == Some(next) && is_income_property(b.terrain))
         .count() as i64;
-    let fpp = s.funds_per_property;
+    let fpp = s.funds_per_property + awbw_engine::co::property_fund_increase(&co_of(s, next));
     if let Some(p) = s.player_mut(next) {
         p.funds += props * fpp;
     }
@@ -719,8 +691,8 @@ fn start_turn(s: &mut State, next: PlayerId, day: u32, _r: &mut Report, _c: &Ctx
         if u.dived {
             burn = if u.kind == "Sub" { 5 } else { 8 };
         }
-        if co == "Eagle" && info.move_type == "A" {
-            burn -= 2;
+        if info.move_type == "A" {
+            burn = (burn - awbw_engine::co::air_fuel_decrease(&co)).max(0);
         }
         if burn > 0 && u.carried_by.is_none() && day > 1 {
             u.fuel = (u.fuel - burn).max(0);

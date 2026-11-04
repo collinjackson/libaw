@@ -36,6 +36,15 @@ def terrain():
     return {str(k): out[k] for k in sorted(out)}
 
 
+def cos():
+    """Each CO's day-to-day (always-on) ability, as the replay player's data has it."""
+    out = {}
+    for name, c in load(SRC / "COs.json").items():
+        out[name] = {"id": c.get("AWBWID"), "d2d": c.get("DayToDayPower") or {},
+                     "cop": c.get("NormalPower") or {}, "scop": c.get("SuperPower") or {}}
+    return out
+
+
 def units():
     out = {}
     for name, u in load(SRC / "Units.json").items():
@@ -72,6 +81,7 @@ def main():
     data = ROOT / "data"
     (data / "terrain.json").write_text(json.dumps(terrain(), indent=1) + "\n")
     (data / "units.json").write_text(json.dumps(units(), indent=1) + "\n")
+    (data / "cos.json").write_text(json.dumps(cos(), indent=1) + "\n")
     if len(sys.argv) > 1:
         (data / "damage.json").write_text(json.dumps(damage(sys.argv[1]), indent=1) + "\n")
     print("wrote", ", ".join(p.name for p in sorted(data.glob("*.json"))))
