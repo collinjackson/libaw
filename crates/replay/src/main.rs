@@ -340,6 +340,16 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 r.check("fire.attacker_ammo", ammo_after == want_ammo || att_rec == 0, || {
                     tag(c, format!("{} ammo {} -> {ammo_after} vs {} (primary={primary})", att.kind, att.ammo, def.kind))
                 });
+                let powered = |p: PlayerId| s.player(p).map(|p| p.power != "N").unwrap_or(false);
+                if powered(att.owner) || powered(def.owner) {
+                    r.skip("fire: a CO power is active (not modelled yet)");
+                    if let Some(m) = s.units.get_mut(&aid) { m.hp = Hp::from_display(att_rec); m.ammo = ammo_after; }
+                    if let Some(m) = s.units.get_mut(&did) { m.hp = Hp::from_display(def_rec); m.ammo = num(&rd["units_ammo"]) as i32; }
+                    for id in [aid, did] {
+                        if s.units.get(&id).map(|u| u.hp.hi == 0).unwrap_or(false) { remove_unit(s, id); }
+                    }
+                    continue;
+                }
                 let new_def = attack_feasible(s, &att, &def, def_rec, base);
                 r.check("fire.damage", new_def.is_some(), || {
                     tag(c, format!("{} {}hp ({}) -> {} {}hp ({}) on {}: recorded {}hp",
@@ -608,6 +618,12 @@ fn can_carry(t: &str, l: &str) -> bool {
 
 fn remove_unit(s: &mut State, id: UnitId) {
     if let Some(u) = s.units.remove(&id) {
+        // A capture in progress is lost with the unit.
+        if u.carried_by.is_none() {
+            if let Some(b) = s.buildings.get_mut(&(u.x, u.y)) {
+                b.capture = CAPTURE_POINTS;
+            }
+        }
         for c in u.cargo {
             s.units.remove(&c);
         }

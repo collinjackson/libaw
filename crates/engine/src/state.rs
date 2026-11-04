@@ -77,6 +77,8 @@ pub struct Player {
     pub funds: i64,
     pub eliminated: bool,
     pub order: u32,
+    /// "N" none, "Y" CO power, "S" super power (AWBW's players_co_power_on).
+    pub power: String,
 }
 
 #[derive(Clone, Debug)]
