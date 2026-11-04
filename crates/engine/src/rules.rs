@@ -116,17 +116,18 @@ pub fn uses_primary(att: &Unit, def_kind: &str) -> bool {
     if info.ammo == 0 {
         return false;
     }
+    if att.kind == "Cruiser" && tables().unit(def_kind).move_type == "A" {
+        return false; // anti-air gun, no ammo
+    }
     if !info.second_weapon {
         return att.ammo > 0;
     }
-    let secondary_target = matches!(def_kind, "Infantry" | "Mech" | "B-Copter" | "T-Copter");
-    let mech_like = att.kind == "Mech";
-    let primary_ok = if mech_like {
-        !matches!(def_kind, "Infantry" | "Mech" | "B-Copter" | "T-Copter")
-    } else {
-        !secondary_target
+    // Targets for the second weapon (machine gun / anti-air gun), which costs no ammo.
+    let secondary_target = match att.kind.as_str() {
+        "Cruiser" => tables().unit(def_kind).move_type == "A",
+        _ => matches!(def_kind, "Infantry" | "Mech" | "B-Copter" | "T-Copter"),
     };
-    primary_ok && att.ammo > 0
+    !secondary_target && att.ammo > 0
 }
 
 pub fn dist(a: (u16, u16), b: (u16, u16)) -> u32 {

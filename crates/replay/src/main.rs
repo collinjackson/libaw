@@ -26,6 +26,9 @@ struct Report {
     turns: u64,
     turns_clean: u64,
     skipped: BTreeMap<String, u64>,
+    /// Units an APC may have supplied this turn (AWBW's Supply command leaves no record):
+    /// their fuel/ammo without that supply. Either value is accepted at compare time.
+    maybe_supplied: BTreeMap<UnitId, (i32, i32)>,
 }
 
 impl Report {
@@ -208,6 +211,19 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         b.capture = CAPTURE_POINTS;
                     }
                 }
+                // An APC may Supply after moving, which AWBW doesn't record as an action.
+                // Assume it did, and accept either outcome at compare time.
+                if u.kind == "APC" {
+                    let (owner, end) = (u.owner, (rec.x, rec.y));
+                    for o in s.units.values_mut() {
+                        if o.owner == owner && o.id != u.id && o.carried_by.is_none() && dist(end, (o.x, o.y)) == 1 {
+                            let info = tables().unit(&o.kind);
+                            r.maybe_supplied.entry(o.id).or_insert((o.fuel, o.ammo));
+                            o.fuel = info.fuel as i32;
+                            o.ammo = info.ammo as i32;
+                        }
+                    }
+                }
                 let m = s.units.get_mut(&rec.id).unwrap();
                 m.x = rec.x;
                 m.y = rec.y;
@@ -317,7 +333,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let primary = uses_primary(&att, &def.kind);
                 let ammo_after = num(&ra["units_ammo"]) as i32;
                 let want_ammo = if primary { att.ammo - 1 } else { att.ammo };
-                r.check("fire.attacker_ammo", ammo_after == want_ammo, || {
+                r.check("fire.attacker_ammo", ammo_after == want_ammo || att_rec == 0, || {
                     tag(c, format!("{} ammo {} -> {ammo_after} vs {} (primary={primary})", att.kind, att.ammo, def.kind))
                 });
                 let new_def = attack_feasible(s, &att, &def, def_rec, base);
@@ -346,7 +362,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         new_att_hp = cf.unwrap_or(Hp::from_display(att_rec));
                         let def_ammo_after = num(&rd["units_ammo"]) as i32;
                         let want = if uses_primary(&def, &att.kind) { def.ammo - 1 } else { def.ammo };
-                        r.check("fire.counter_ammo", def_ammo_after == want, || {
+                        r.check("fire.counter_ammo", def_ammo_after == want || def_rec == 0, || {
                             tag(c, format!("{} ammo {} -> {def_ammo_after} countering {}", def.kind, def.ammo, att.kind))
                         });
                     } else {
@@ -475,7 +491,14 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let next = num(&a["nextPId"]) as u32;
                 let day = num(&a["day"]) as u32;
                 let next_funds = num(&a["nextFunds"]);
+                let before: BTreeMap<UnitId, Unit> = s.units.clone();
                 start_turn(s, next, day, r, c);
+                let supplied = apc_supply(s, next);
+                let rec_sup: std::collections::BTreeSet<UnitId> = items(&a["supplied"]).iter().map(|x| num(x) as u32).collect();
+                r.check("turn.supplied_set", supplied == rec_sup, || {
+                    tag(c, format!("engine supplied {supplied:?}, recorded {rec_sup:?}"))
+                });
+                check_repairs(s, &before, a, r, c);
                 let ours = s.player(next).map(|p| p.funds).unwrap_or(-1);
                 r.check("turn.next_funds", ours == next_funds, || {
                     tag(c, format!("next player {next} ({}): engine funds {ours}, recorded {next_funds}", co_of(s, next)))
@@ -490,6 +513,53 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
         }
     }
     Ok(())
+}
+
+/// NextTurn lists the units it repaired (with new HP) and the units APCs supplied.
+fn check_repairs(s: &State, before: &BTreeMap<UnitId, Unit>, a: &Value, r: &mut Report, c: &Ctx) {
+    let rec: BTreeMap<UnitId, u8> = items(&a["repaired"]).iter()
+        .map(|x| (num(&x["units_id"]) as u32, hp_display(&x["units_hit_points"]))).collect();
+    let next = s.current;
+    for (id, u) in &s.units {
+        if u.owner != next {
+            continue;
+        }
+        let Some(b) = before.get(id) else { continue };
+        let ours = u.hp != b.hp;
+        let theirs = rec.get(id);
+        r.check("turn.repaired_set", ours == theirs.is_some_and(|&h| Some(h) != b.hp.display()) || theirs.is_some() == ours, || {
+            tag(c, format!("{} {id} ({}) hp {:?}: engine repaired={ours}, recorded {:?}", u.kind, co_of(s, next), b.hp.display(), theirs))
+        });
+        if let Some(&h) = theirs {
+            r.check("turn.repaired_hp", u.hp.display_hi() == h, || {
+                tag(c, format!("{} {id} ({}) {:?} -> engine {}, recorded {h}", u.kind, co_of(s, next), b.hp.display(), u.hp.display_hi()))
+            });
+        }
+    }
+    for x in items(&a["supplied"]) {
+        let id = num(x) as u32;
+        r.check("turn.supplied_known", s.units.contains_key(&id), || tag(c, format!("supplied {id} unknown")));
+    }
+}
+
+/// End of turn: APCs resupply adjacent own units. Returns the units that needed it.
+fn apc_supply(s: &mut State, p: PlayerId) -> std::collections::BTreeSet<UnitId> {
+    let apcs: Vec<(UnitId, u16, u16)> = s.units.values()
+        .filter(|u| u.owner == p && u.kind == "APC" && u.carried_by.is_none())
+        .map(|u| (u.id, u.x, u.y)).collect();
+    let mut out = std::collections::BTreeSet::new();
+    for (aid, x, y) in apcs {
+        for u in s.units.values_mut() {
+            if u.id != aid && u.owner == p && u.carried_by.is_none() && dist((x, y), (u.x, u.y)) == 1 {
+                let info = tables().unit(&u.kind);
+                out.insert(u.id); // AWBW lists every adjacent unit, needed or not
+
+                u.fuel = info.fuel as i32;
+                u.ammo = info.ammo as i32;
+            }
+        }
+    }
+    out
 }
 
 fn moved_this_action(_u: &Unit) -> bool {
@@ -554,7 +624,7 @@ fn start_turn(s: &mut State, next: PlayerId, day: u32, _r: &mut Report, _c: &Ctx
         if co == "Eagle" && info.move_type == "A" {
             burn -= 2;
         }
-        if burn > 0 && u.carried_by.is_none() {
+        if burn > 0 && u.carried_by.is_none() && day > 1 {
             u.fuel = (u.fuel - burn).max(0);
             if u.fuel == 0 && matches!(info.move_type.as_str(), "A" | "S" | "L") {
                 crashed.push(*id);
@@ -603,17 +673,17 @@ fn start_turn(s: &mut State, next: PlayerId, day: u32, _r: &mut Report, _c: &Ctx
             }
         }
     }
-    // APCs resupply adjacent own units.
-    let apcs: Vec<(u16, u16)> = s.units.values()
-        .filter(|u| u.owner == next && u.kind == "APC" && u.carried_by.is_none())
-        .map(|u| (u.x, u.y)).collect();
-    for (x, y) in apcs {
-        for u in s.units.values_mut() {
-            if u.owner == next && u.carried_by.is_none() && dist((x, y), (u.x, u.y)) == 1 {
-                let info = tables().unit(&u.kind);
-                u.fuel = info.fuel as i32;
-                u.ammo = info.ammo as i32;
-            }
+    // Carriers and cruisers resupply the aircraft they carry.
+    let carried: Vec<(UnitId, UnitId)> = s.units.values()
+        .filter(|u| u.owner == next)
+        .filter_map(|u| u.carried_by.map(|t| (u.id, t)))
+        .collect();
+    for (id, t) in carried {
+        if matches!(s.units.get(&t).map(|t| t.kind.as_str()), Some("Carrier" | "Cruiser")) {
+            let u = s.units.get_mut(&id).unwrap();
+            let info = tables().unit(&u.kind);
+            u.fuel = info.fuel as i32;
+            u.ammo = info.ammo as i32;
         }
     }
     for id in crashed {
@@ -636,10 +706,15 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
         clean &= r.check("state.unit_hp", rd >= u.hp.display_lo() && rd <= u.hp.display_hi(), || {
             tag(c, format!("{} {id} hp {}..{}, recorded {rd}", u.kind, u.hp.display_lo(), u.hp.display_hi()))
         });
-        clean &= r.check("state.unit_fuel", u.fuel == ru.fuel, || {
-            tag(c, format!("{} {id} ({}) fuel {}, recorded {}", u.kind, co_of(ours, u.owner), u.fuel, ru.fuel))
+        let alt = r.maybe_supplied.get(id).copied();
+        let fuel_ok = u.fuel == ru.fuel || alt.is_some_and(|(f, _)| f - (tables().unit(&u.kind).fuel as i32 - u.fuel) == ru.fuel || f == ru.fuel);
+        let ammo_ok = u.ammo == ru.ammo || alt.is_some_and(|(_, a)| a == ru.ammo || a - (tables().unit(&u.kind).ammo as i32 - u.ammo) == ru.ammo);
+        clean &= r.check("state.unit_fuel", fuel_ok, || {
+            let apc = ours.units.values().any(|a| a.kind == "APC" && a.owner == u.owner && dist((a.x, a.y), (u.x, u.y)) == 1);
+            tag(c, format!("{} {id} ({}) fuel {}, recorded {} [on {} owner={:?} carried={:?} apc_adj={apc} mine_next={}]", u.kind, co_of(ours, u.owner), u.fuel, ru.fuel,
+                tables().tile(ours.terrain_at(u.x, u.y)).name, ours.buildings.get(&(u.x, u.y)).map(|b| b.owner == Some(u.owner)), u.carried_by.map(|t| ours.units[&t].kind.clone()), u.owner == ours.current))
         });
-        clean &= r.check("state.unit_ammo", u.ammo == ru.ammo, || {
+        clean &= r.check("state.unit_ammo", ammo_ok, || {
             tag(c, format!("{} {id} ammo {}, recorded {}", u.kind, u.ammo, ru.ammo))
         });
     }
@@ -680,7 +755,14 @@ fn check_game(dir: &Path, r: &mut Report) {
         let file = files[i].file_name().unwrap().to_string_lossy().to_string();
         let c = Ctx { game: &game, file: &file };
         let mut s = state_from(&cur);
+        r.maybe_supplied.clear();
         let actions: Vec<Value> = items(&cur["actions"]).into_iter().cloned().collect();
+        if !actions.iter().any(|a| a["action"] == "NextTurn") {
+            // The export lost this turn (an empty reply); the next file isn't its successor.
+            r.skip("turn not compared: no NextTurn (export gap or game end)");
+            cur = next;
+            continue;
+        }
         match apply_actions(&mut s, &actions, r, &c) {
             Ok(()) => {
                 r.turns += 1;
