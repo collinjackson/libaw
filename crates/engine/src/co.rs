@@ -82,3 +82,8 @@ pub fn property_fund_increase(co: &str) -> i64 {
 pub fn air_fuel_decrease(co: &str) -> i32 {
     d2d(co).and_then(|d| d["AirFuelUsageDecrease"].as_i64()).unwrap_or(0) as i32
 }
+
+/// Counterattack damage multiplier (Sonja 1.5).
+pub fn counter_multiplier(co: &str) -> f64 {
+    d2d(co).and_then(|d| d["CounterAttackPower"].as_f64()).unwrap_or(1.0)
+}

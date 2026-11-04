@@ -135,13 +135,15 @@ pub struct AttackParams {
     pub def_hp: u8,
     pub luck_min: i32,
     pub luck_max: i32,
+    /// Final multiplier (Sonja's counterattacks: 1.5).
+    pub scale: f64,
 }
 
 pub fn damage_range(p: &AttackParams) -> (u32, u32) {
     let f = |luck: i32| -> f64 {
         let a = p.base as f64 * p.att_value as f64 / 100.0 + luck as f64;
         let d = (200.0 - (p.def_value as f64 + p.def_terrain as f64 * p.def_hp as f64)) / 100.0;
-        (a * p.att_hp as f64 / 10.0 * d).max(0.0)
+        (a * p.att_hp as f64 / 10.0 * d * p.scale).max(0.0)
     };
     // Floor with a small epsilon, the way AWBW avoids float artefacts like 54.9999.
     let fl = |v: f64| (v + 1e-6).floor() as u32;

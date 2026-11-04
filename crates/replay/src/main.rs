@@ -29,6 +29,9 @@ struct Report {
     /// Units an APC may have supplied this turn (AWBW's Supply command leaves no record):
     /// their fuel/ammo without that supply. Either value is accepted at compare time.
     maybe_supplied: BTreeMap<UnitId, (i32, i32)>,
+    /// Unit ids alive in the next turn file. Used only to settle a hidden-HP unit's fate
+    /// (Sonja) when the damage range includes both death and survival.
+    next_alive: std::collections::HashSet<UnitId>,
 }
 
 impl Report {
@@ -128,9 +131,35 @@ fn stars(s: &State, u: &Unit, terrain: u16) -> u32 {
     if co_of(s, u.owner) == "Lash" && pw(s, u.owner) == "S" { st * 2 } else { st }
 }
 
+/// Is the unit alive after action `i`? Yes if it's in the next turn file or a later action
+/// this turn mentions it.
+fn alive_after(r: &Report, actions: &[Value], i: usize, id: UnitId) -> bool {
+    let needle = id.to_string();
+    r.next_alive.contains(&id) || actions[i + 1..].iter().any(|a| a.to_string().contains(&needle))
+}
+
+/// A hidden result ("?", Sonja): every HP the formula allows, with death settled by
+/// whether the unit is in the next turn file. None if nothing fits.
+fn hidden_range(s: &State, alive: bool, att: &Unit, def: &Unit, base: u8, counter: bool) -> Option<Hp> {
+    let mut out: Option<Hp> = None;
+    for d in 0..=10u8 {
+        if (d > 0) != alive {
+            continue;
+        }
+        if let Some(h) = attack_feasible(s, att, def, d, base, counter) {
+            out = Some(match out { None => h, Some(o) => Hp { lo: o.lo.min(h.lo), hi: o.hi.max(h.hi) } });
+        }
+    }
+    // Nothing fits but the unit is known to live on: its HP is simply unknown.
+    if out.is_none() && alive {
+        return Some(Hp { lo: 1, hi: def.hp.hi.max(1) });
+    }
+    out
+}
+
 /// Does an attack from `att` on `def` leave `def` with the recorded displayed HP?
 /// Returns the defender's new HP range consistent with the record, or None.
-fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8) -> Option<Hp> {
+fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8, counter: bool) -> Option<Hp> {
     let at = s.terrain_at(att.x, att.y);
     let dt = s.terrain_at(def.x, def.y);
     let mut out: Option<Hp> = None;
@@ -145,6 +174,7 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8) ->
                 def_hp: dhp,
                 luck_min: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
                 luck_max: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).1,
+                scale: if counter { awbw_engine::co::counter_multiplier(&co_of(s, att.owner)) } else { 1.0 },
             };
             let (dlo, dhi) = damage_range(&p);
             let cand = def.hp.intersect(Hp::from_display(dhp))?;
@@ -165,7 +195,7 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8) ->
 
 /// Apply one turn's actions. Returns false if the turn hit something unsupported.
 fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> Result<(), String> {
-    for a in actions {
+    for (i, a) in actions.iter().enumerate() {
         let kind = a["action"].as_str().unwrap_or("?");
         match kind {
             "Move" => {
@@ -388,11 +418,17 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     }
                     continue;
                 }
-                let new_def = attack_feasible(s, &att, &def, def_rec, base);
+                // Sonja hides her units' HP from opponents: the record says "?".
+                let def_hidden = rd["units_hit_points"].as_str() == Some("?");
+                let att_hidden = ra["units_hit_points"].as_str() == Some("?");
+                let new_def = if def_hidden { hidden_range(s, alive_after(r, actions, i, def.id), &att, &def, base, false) } else { attack_feasible(s, &att, &def, def_rec, base, false) };
+                let def_rec = if def_hidden { new_def.map(|h| h.display_hi()).unwrap_or(0) } else { def_rec };
                 r.check("fire.damage", new_def.is_some(), || {
                     tag(c, format!("{} {}hp ({}) -> {} {}hp ({}) on {}: recorded {}hp",
                         att.kind, att.hp.display_hi(), co_of(s, att.owner), def.kind, def.hp.display_hi(),
                         co_of(s, def.owner), tables().tile(s.terrain_at(def.x, def.y)).name, def_rec))
+                        + &format!(" [att {} on {} def {} hp {:?}->{:?}]", att_value(s, &att, s.terrain_at(att.x, att.y)),
+                            tables().tile(s.terrain_at(att.x, att.y)).name, def_value(s, &def, &att.kind), att.hp, def.hp)
                 });
                 let new_def_hp = new_def.unwrap_or(Hp::from_display(def_rec));
                 // Counterattack.
@@ -406,7 +442,8 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         let mut d2 = def.clone();
                         d2.hp = new_def_hp;
                         let b2 = tables().base_damage(&def.kind, &att.kind).unwrap();
-                        let cf = attack_feasible(s, &d2, &att, att_rec, b2);
+                        let cf = if att_hidden { hidden_range(s, alive_after(r, actions, i, att.id), &d2, &att, b2, true) } else { attack_feasible(s, &d2, &att, att_rec, b2, true) };
+                        let att_rec = if att_hidden { cf.map(|h| h.display_hi()).unwrap_or(0) } else { att_rec };
                         r.check("fire.counter_damage", cf.is_some(), || {
                             tag(c, format!("counter {} {}hp ({}) -> {} {}hp: recorded {}hp",
                                 def.kind, def_rec, co_of(s, def.owner), att.kind, att.hp.display_hi(), att_rec))
@@ -423,6 +460,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         });
                     }
                 }
+                let att_rec = if att_hidden { new_att_hp.display_hi() } else { att_rec };
                 if let Some(m) = s.units.get_mut(&aid) {
                     m.hp = if att_rec == 0 { Hp::exact(0) } else { new_att_hp };
                     m.ammo = ammo_after;
@@ -656,7 +694,12 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
 
 /// NextTurn lists the units it repaired (with new HP) and the units APCs supplied.
 fn check_repairs(s: &State, before: &BTreeMap<UnitId, Unit>, a: &Value, r: &mut Report, c: &Ctx) {
+    // Sonja's units are listed with HP "?" whether or not they were repaired: no information.
+    let hidden: std::collections::HashSet<UnitId> = items(&a["repaired"]).iter()
+        .filter(|x| x["units_hit_points"].as_str() == Some("?"))
+        .map(|x| num(&x["units_id"]) as u32).collect();
     let rec: BTreeMap<UnitId, u8> = items(&a["repaired"]).iter()
+        .filter(|x| x["units_hit_points"].as_str() != Some("?"))
         .map(|x| (num(&x["units_id"]) as u32, hp_display(&x["units_hit_points"]))).collect();
     let next = s.current;
     for (id, u) in &s.units {
@@ -664,6 +707,10 @@ fn check_repairs(s: &State, before: &BTreeMap<UnitId, Unit>, a: &Value, r: &mut 
             continue;
         }
         let Some(b) = before.get(id) else { continue };
+        if hidden.contains(id) {
+            r.skip("repair: hidden HP (Sonja)");
+            continue;
+        }
         let ours = u.hp != b.hp;
         let theirs = rec.get(id);
         r.check("turn.repaired_set", ours == theirs.is_some_and(|&h| Some(h) != b.hp.display()) || theirs.is_some() == ours, || {
@@ -767,7 +814,7 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
             let f = |v: u8| (v as i32 + n).clamp(1, 100) as u8; // a power never kills
             u.hp = Hp { lo: f(u.hp.lo), hi: f(u.hp.hi) };
             if fuel != 1.0 {
-                u.fuel = (u.fuel as f64 * fuel).floor() as i32;
+                u.fuel = (u.fuel as f64 * fuel).ceil() as i32; // Drake: 47 -> 24
             }
         }
     }
@@ -966,6 +1013,7 @@ fn check_game(dir: &Path, r: &mut Report) {
         let file = files[i].file_name().unwrap().to_string_lossy().to_string();
         let c = Ctx { game: &game, file: &file };
         let mut s = state_from(&cur);
+        r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as u32).collect();
         r.maybe_supplied.clear();
         let actions: Vec<Value> = items(&cur["actions"]).into_iter().cloned().collect();
         if !actions.iter().any(|a| a["action"] == "NextTurn") {
