@@ -12,6 +12,40 @@ pub fn move_cost(terrain: u16, move_type: &str) -> Option<u8> {
     tables().tile(terrain).r#move.get(move_type).copied()
 }
 
+/// The weather a CO's units feel: Olaf ignores snow and treats rain as snow; Drake ignores rain.
+pub fn felt_weather(weather: char, co: &str) -> char {
+    match (co, weather) {
+        ("Olaf", 'S') => 'C',
+        ("Olaf", 'R') => 'S',
+        ("Drake", 'R') => 'C',
+        _ => weather,
+    }
+}
+
+/// Movement cost in weather, from AWBW's terrain chart (terrain.php). Impassable stays
+/// impassable; only listed cells change.
+pub fn move_cost_in(terrain: u16, move_type: &str, weather: char) -> Option<u8> {
+    let clear = move_cost(terrain, move_type)?;
+    let t = tables().tile(terrain);
+    // An emptied missile silo is listed as plain but moves like a building in weather.
+    let class = if t.name == "Reef" { "Reef" } else if t.name.starts_with("Missile Silo") { "Building" } else if t.building.as_deref() == Some("Port") || t.name.ends_with("Port") { "Port" } else { t.kind.as_str() };
+    let c = match (weather, move_type, class) {
+        ('S', "F", "Plain" | "Forest" | "River") => 2,
+        ('S', "F", "Mountain") => 4,
+        ('S', "B", "Mountain") => 2,
+        ('S', "T", "Plain" | "Forest") => 2,
+        ('S', "W", "Plain" | "Forest") => 3,
+        ('S', "A", _) => 2,
+        ('S', "S" | "L", "Sea" | "Reef" | "Port") => 2,
+        ('R', "T", "Plain") => 2,
+        ('R', "T", "Forest") => 3,
+        ('R', "W", "Plain") => 3,
+        ('R', "W", "Forest") => 4,
+        _ => clear,
+    };
+    Some(c)
+}
+
 /// Cost of walking `path` (which starts at the unit's tile). Checks adjacency, bounds,
 /// passability, movement range and enemy blocking. Returns the movement cost spent.
 pub fn path_cost(s: &State, u: &Unit, path: &[(u16, u16)]) -> Result<u32, String> {
@@ -24,7 +58,8 @@ pub fn path_cost(s: &State, u: &Unit, path: &[(u16, u16)]) -> Result<u32, String
             return Err(format!("path step {a:?}->{b:?} not adjacent"));
         }
         let t = s.terrain_at(b.0, b.1);
-        let c = move_cost(t, &info.move_type)
+        let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
+        let c = move_cost_in(t, &info.move_type, felt_weather(s.weather, co))
             .ok_or_else(|| format!("{} can't enter {} at {b:?}", u.kind, tables().tile(t).name))?;
         cost += c as u32;
         if let Some(o) = s.unit_at(b.0, b.1) {

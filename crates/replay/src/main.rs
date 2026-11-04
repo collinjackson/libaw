@@ -166,7 +166,13 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         let want = u.fuel - cost as i32;
                         let alt = r.maybe_supplied.get(&u.id).map(|&(f, _)| f - cost as i32);
                         r.check("move.fuel_after", rec.fuel == want || alt == Some(rec.fuel), || {
-                            tag(c, format!("{} fuel {} -{cost} = {want}, recorded {}", u.kind, u.fuel, rec.fuel))
+                            {
+                            let tiles: Vec<String> = path[1..].iter().map(|&(x, y)| {
+                                let t = s.terrain_at(x, y);
+                                format!("{}:{}", tables().tile(t).name, awbw_engine::rules::move_cost_in(t, &tables().unit(&u.kind).move_type, s.weather).unwrap_or(99))
+                            }).collect();
+                            tag(c, format!("{} fuel {} -{cost} = {want}, recorded {} [{}] {:?}", u.kind, u.fuel, rec.fuel, s.weather, tiles))
+                        }
                         });
                     }
                     Err(e) => {
@@ -177,6 +183,15 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 r.check("move.end_matches_record", end == (rec.x, rec.y), || {
                     tag(c, format!("path ends {end:?}, unit recorded at {:?}", (rec.x, rec.y)))
                 });
+                // Rubble from a broken seam keeps the seam's last HP in its capture field
+                // until a unit stops on it (passing over doesn't count).
+                if (u.x, u.y) != (rec.x, rec.y) {
+                    if let Some(b) = s.buildings.get_mut(&(rec.x, rec.y)) {
+                        if matches!(b.terrain, 115 | 116) {
+                            b.capture = CAPTURE_POINTS;
+                        }
+                    }
+                }
                 // Leaving a building mid-capture resets it.
                 if (u.x, u.y) != (rec.x, rec.y) {
                     if let Some(b) = s.buildings.get_mut(&(u.x, u.y)) {
@@ -563,10 +578,10 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     m.moved = true;
                 }
                 if hp <= 0 {
-                    // A broken seam stays in the building list as rubble, capture reset to 20.
+                    // A broken seam stays in the building list as rubble; its capture field
+                    // keeps the HP the seam had before the breaking hit.
                     if let Some(b) = s.buildings.get_mut(&(x, y)) {
                         b.terrain = if b.terrain == 113 { 115 } else { 116 };
-                        b.capture = CAPTURE_POINTS;
                     }
                 } else if let Some(b) = s.buildings.get_mut(&(x, y)) {
                     b.capture = hp;

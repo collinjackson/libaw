@@ -95,6 +95,8 @@ pub struct State {
     pub day: u32,
     /// Funds per income property (AWBW default 1000; a per-game setting).
     pub funds_per_property: i64,
+    /// Weather for this turn: 'C' clear, 'R' rain, 'S' snow.
+    pub weather: char,
 }
 
 impl State {
