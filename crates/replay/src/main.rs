@@ -308,6 +308,10 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let ra = &a["attacker"];
                 let rd = &a["defender"];
                 let (aid, did) = (num(&ra["units_id"]) as u32, num(&rd["units_id"]) as u32);
+                if aid == 0 || did == 0 {
+                    r.skip("fire: a side is hidden from this view (id 0)");
+                    continue;
+                }
                 let (Some(att), Some(def)) = (s.units.get(&aid).cloned(), s.units.get(&did).cloned()) else {
                     r.check("fire.units_known", false, || tag(c, format!("{aid} or {did} missing")));
                     continue;
@@ -505,6 +509,23 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 });
                 if let Some(p) = s.player_mut(next) {
                     p.funds = next_funds;
+                }
+            }
+            "Unhide" | "Hide" => {
+                let rec = unit_from(&a["unit"]);
+                match s.units.get_mut(&rec.id) {
+                    Some(m) => {
+                        m.dived = kind == "Hide";
+                        m.fuel = rec.fuel;
+                        m.moved = true;
+                    }
+                    None => {
+                        // It was hidden from this view until now.
+                        let mut u = rec;
+                        u.dived = false;
+                        u.moved = true;
+                        s.units.insert(u.id, u);
+                    }
                 }
             }
             "Resign" => return Err("resign".into()),
@@ -719,6 +740,12 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
         });
     }
     for (id, u) in &ours.units {
+        if !rec.units.contains_key(id) && matches!(u.kind.as_str(), "Sub" | "Stealth") && u.owner != rec.current {
+            // Replays show the game from the next player's side: dived subs and hidden
+            // stealths of other players aren't in the record.
+            r.skip("compare: possibly dived/hidden unit absent from record");
+            continue;
+        }
         if !rec.units.contains_key(id) {
             clean &= r.check("state.unit_extra", false, || tag(c, format!("engine has {} {id}, record doesn't", u.kind)));
         }
