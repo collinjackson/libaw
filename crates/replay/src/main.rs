@@ -449,7 +449,8 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 if let Some(p) = s.player_mut(mover.owner) {
                     p.funds = new_funds;
                 }
-                remove_unit(s, jid);
+                // The merged unit keeps any capture in progress on this tile.
+                s.units.remove(&jid);
                 let t = s.units.get_mut(&ju.id).unwrap();
                 t.hp = Hp::from_display(want_hp);
                 t.fuel = ju.fuel;
@@ -562,13 +563,26 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     m.moved = true;
                 }
                 if hp <= 0 {
-                    if let Some(b) = s.buildings.remove(&(x, y)) {
-                        let rubble = if b.terrain == 113 { 115 } else { 116 };
-                        let w = s.width as usize;
-                        s.terrain[y as usize * w + x as usize] = rubble;
+                    // A broken seam stays in the building list as rubble, capture reset to 20.
+                    if let Some(b) = s.buildings.get_mut(&(x, y)) {
+                        b.terrain = if b.terrain == 113 { 115 } else { 116 };
+                        b.capture = CAPTURE_POINTS;
                     }
                 } else if let Some(b) = s.buildings.get_mut(&(x, y)) {
                     b.capture = hp;
+                }
+            }
+            "Supply" => {
+                // Newer replays record the APC's Supply command explicitly.
+                for x in items(&a["suppliedIds"]) {
+                    let id = num(x) as u32;
+                    if let Some(u) = s.units.get_mut(&id) {
+                        let info = tables().unit(&u.kind);
+                        u.fuel = info.fuel as i32;
+                        u.ammo = info.ammo as i32;
+                    } else {
+                        r.check("supply.unit_known", false, || tag(c, format!("supplied {id} unknown")));
+                    }
                 }
             }
             "Resign" => return Err("resign".into()),
