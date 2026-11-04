@@ -97,6 +97,8 @@ pub struct State {
     pub funds_per_property: i64,
     /// Weather for this turn: 'C' clear, 'R' rain, 'S' snow.
     pub weather: char,
+    /// Movement points set by a CO power this turn (AWBW records them on the Power action).
+    pub move_override: BTreeMap<UnitId, u32>,
 }
 
 impl State {

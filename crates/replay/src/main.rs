@@ -77,6 +77,11 @@ fn is_indirect(kind: &str) -> bool {
     tables().unit(kind).range[1] > 1
 }
 
+/// The owner's active power: "N", "Y" (CO power) or "S" (super power).
+fn pw(s: &State, p: PlayerId) -> String {
+    s.player(p).map(|p| p.power.clone()).unwrap_or_else(|| "N".into())
+}
+
 fn is_foot(kind: &str) -> bool {
     matches!(kind, "Infantry" | "Mech")
 }
@@ -85,22 +90,42 @@ fn is_foot(kind: &str) -> bool {
 fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
     let co = co_of(s, att.owner);
     let t = tables().tile(att_terrain);
-    let stars = terrain_stars(att_terrain, &att.kind);
-    let v = 100 + 10 * towers(s, att.owner) as i32
-        + awbw_engine::co::attack_bonus(&co, &att.kind, &t.kind, stars);
+    let stars = stars(s, att, att_terrain);
+    let v = 100 + 10 * towers(s, att.owner) as i32 * tower_multiplier(s, att.owner)
+        + awbw_engine::co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &t.kind, stars);
     v.max(0) as u32
 }
 
 fn def_value(s: &State, def: &Unit, attacker_kind: &str) -> u32 {
     let co = co_of(s, def.owner);
-    let mut v: i32 = 100 + awbw_engine::co::defense_bonus(&co, &def.kind);
+    let mut v: i32 = 100 + awbw_engine::co::defense_bonus(&co, &pw(s, def.owner), &def.kind);
     if co == "Javier" {
-        v += 10 * towers(s, def.owner) as i32;
+        let m = tower_multiplier(s, def.owner);
+        v += 10 * towers(s, def.owner) as i32 * m;
         if is_indirect(attacker_kind) {
-            v += 20;
+            v += 20 * m;
         }
     }
     v as u32
+}
+
+/// Javier's Tower Shield doubles his com tower (and indirect-defence) bonuses; Tower of
+/// Power triples them. Everyone else: 1.
+fn tower_multiplier(s: &State, p: PlayerId) -> i32 {
+    if co_of(s, p) != "Javier" {
+        return 1;
+    }
+    match pw(s, p).as_str() {
+        "Y" => 2,
+        "S" => 3,
+        _ => 1,
+    }
+}
+
+/// Terrain stars a unit gets; Lash's Prime Tactics doubles them.
+fn stars(s: &State, u: &Unit, terrain: u16) -> u32 {
+    let st = terrain_stars(terrain, &u.kind);
+    if co_of(s, u.owner) == "Lash" && pw(s, u.owner) == "S" { st * 2 } else { st }
 }
 
 /// Does an attack from `att` on `def` leave `def` with the recorded displayed HP?
@@ -116,10 +141,10 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8) ->
                 att_value: att_value(s, att, at),
                 att_hp: ahp,
                 def_value: def_value(s, def, &att.kind),
-                def_terrain: terrain_stars(dt, &def.kind),
+                def_terrain: stars(s, def, dt),
                 def_hp: dhp,
-                luck_min: awbw_engine::co::luck(&co_of(s, att.owner)).0,
-                luck_max: awbw_engine::co::luck(&co_of(s, att.owner)).1,
+                luck_min: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
+                luck_max: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).1,
             };
             let (dlo, dhi) = damage_range(&p);
             let cand = def.hp.intersect(Hp::from_display(dhp))?;
@@ -286,10 +311,25 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 bm.capture = left;
                 if flips || (left == CAPTURE_POINTS && b.capture != CAPTURE_POINTS) {
                     bm.owner = Some(u.owner);
-                    // HQ capture eliminates its owner (units go too) — handled at compare time.
                 }
                 if let Some(m) = s.units.get_mut(&u.id) {
                     m.moved = true;
+                }
+                // A capture can eliminate a player (their HQ, or their last lab): their
+                // buildings go to the capturer and their units are removed.
+                if a["eliminated"].is_object() {
+                    let gone = num(&a["eliminated"]["playerId"]) as u32;
+                    let by = num(&a["eliminated"]["eliminatedByPId"]) as u32;
+                    for b in s.buildings.values_mut().filter(|b| b.owner == Some(gone)) {
+                        b.owner = Some(by);
+                    }
+                    let ids: Vec<UnitId> = s.units.values().filter(|u| u.owner == gone).map(|u| u.id).collect();
+                    for id in ids {
+                        remove_unit(s, id);
+                    }
+                    if let Some(p) = s.player_mut(gone) {
+                        p.eliminated = true;
+                    }
                 }
             }
             "Fire" => {
@@ -319,7 +359,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let ai = tables().unit(&att.kind);
                 let mut maxr = ai.range[1] as u32;
                 if maxr > 1 {
-                    maxr = (maxr as i32 + awbw_engine::co::range_bonus(&co_of(s, att.owner), &att.kind)).max(2) as u32;
+                    maxr = (maxr as i32 + awbw_engine::co::range_bonus(&co_of(s, att.owner), &pw(s, att.owner), &att.kind)).max(2) as u32;
                 }
                 r.check("fire.range", d >= ai.range[0] as u32 && d <= maxr, || {
                     tag(c, format!("{} -> {} at distance {d}, range {}..{maxr}", att.kind, def.kind, ai.range[0]))
@@ -339,9 +379,8 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 r.check("fire.attacker_ammo", ammo_after == want_ammo || att_rec == 0, || {
                     tag(c, format!("{} ammo {} -> {ammo_after} vs {} (primary={primary})", att.kind, att.ammo, def.kind))
                 });
-                let powered = |p: PlayerId| s.player(p).map(|p| p.power != "N").unwrap_or(false);
-                if powered(att.owner) || powered(def.owner) {
-                    r.skip("fire: a CO power is active (not modelled yet)");
+                if std::env::var("SKIP_POWERED").is_ok() && (pw(s, att.owner) != "N" || pw(s, def.owner) != "N") {
+                    r.skip("fire: SKIP_POWERED set");
                     if let Some(m) = s.units.get_mut(&aid) { m.hp = Hp::from_display(att_rec); m.ammo = ammo_after; }
                     if let Some(m) = s.units.get_mut(&did) { m.hp = Hp::from_display(def_rec); m.ammo = num(&rd["units_ammo"]) as i32; }
                     for id in [aid, did] {
@@ -601,7 +640,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 }
             }
             "Resign" => return Err("resign".into()),
-            "Power" => return Err("co power".into()),
+            "Power" => apply_power(s, a, r, c),
             other => return Err(format!("unsupported action {other}")),
         }
     }
@@ -675,6 +714,66 @@ fn can_carry(t: &str, l: &str) -> bool {
         "Cruiser" => matches!(l, "B-Copter" | "T-Copter"),
         "Carrier" => mt == "A",
         _ => false,
+    }
+}
+
+/// A CO power or super power. AWBW records most of its effects on the action itself:
+/// changed units (`unitReplace`), across-the-board HP changes (`hpChange`), weather, funds.
+fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
+    let pid = num(&a["playerId"]) as u32;
+    let kind = a["coPower"].as_str().unwrap_or("Y").to_string();
+    r.check("power.player_is_current", pid == s.current, || tag(c, format!("power by {pid}")));
+    if let Some(p) = s.player_mut(pid) {
+        p.power = kind;
+    }
+    // Older records: a movement change for all the player's units ("global").
+    if let Some(d) = opt_num(&a["global"]["units_movement_points"]) {
+        let ids: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
+        for id in ids {
+            let m = movement_range(s, &s.units[&id]) as i64 + d;
+            s.move_override.insert(id, m.max(0) as u32);
+        }
+    }
+    for u in items(&a["unitReplace"]["units"]) {
+        let id = num(&u["units_id"]) as u32;
+        if let Some(m) = opt_num(&u["units_movement_points"]) {
+            s.move_override.insert(id, m as u32);
+        }
+        let Some(su) = s.units.get_mut(&id) else { continue };
+        if !u["units_hit_points"].is_null() {
+            su.hp = Hp::from_display(hp_display(&u["units_hit_points"]));
+        }
+        if let Some(v) = opt_num(&u["units_fuel"]) { su.fuel = v as i32; }
+        if let Some(v) = opt_num(&u["units_ammo"]) { su.ammo = v as i32; }
+        if let Some(v) = opt_num(&u["units_moved"]) { su.moved = v != 0; }
+    }
+    for (key, sign) in [("hpGain", 1i32), ("hpLoss", -1)] {
+        let h = &a["hpChange"][key];
+        if !h.is_object() {
+            continue;
+        }
+        let players: Vec<u32> = items(&h["players"]).into_iter().map(|p| num(p) as u32).collect();
+        let n = (num(&h["hp"]).abs() as i32 * 10) * sign;
+        let fuel = h["units_fuel"].as_f64().unwrap_or(1.0);
+        // Units inside transports are untouched.
+        for u in s.units.values_mut().filter(|u| players.contains(&u.owner) && u.carried_by.is_none()) {
+            let f = |v: u8| (v as i32 + n).clamp(1, 100) as u8; // a power never kills
+            u.hp = Hp { lo: f(u.hp.lo), hi: f(u.hp.hi) };
+            if fuel != 1.0 {
+                u.fuel = (u.fuel as f64 * fuel).floor() as i32;
+            }
+        }
+    }
+    if let Some(w) = a["weatherReplace"]["weatherCode"].as_str().and_then(|w| w.chars().next()) {
+        s.weather = w;
+    }
+    if let Some(m) = a["playerReplace"].as_object() {
+        for (id, v) in m {
+            let id: u32 = id.parse().unwrap_or(0);
+            if let (Some(f), Some(p)) = (opt_num(&v["players_funds"]), s.player_mut(id)) {
+                p.funds = f;
+            }
+        }
     }
 }
 

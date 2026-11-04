@@ -12,10 +12,23 @@ fn affects(entry: &Value, kind: &str) -> bool {
     entry["AffectedUnits"].as_array().is_some_and(|a| a.iter().any(|u| u == "all" || u == kind))
 }
 
-fn sum_field(co: &str, kind: &str, terrain_kind: Option<&str>, field: &str) -> f64 {
-    let Some(d) = d2d(co) else { return 0.0 };
-    let Some(list) = d["PowerIncreases"].as_array() else { return 0.0 };
-    list.iter()
+/// The CO's active tables: day-to-day, plus the CO power ("Y") or super power ("S") on top.
+fn active(co: &str, power: &str) -> Vec<&'static Value> {
+    let Some(c) = tables().cos.get(co) else { return vec![] };
+    let mut v = vec![&c["d2d"]];
+    match power {
+        "Y" => v.push(&c["cop"]),
+        "S" => v.push(&c["scop"]),
+        _ => {}
+    }
+    v
+}
+
+fn sum_field(co: &str, power: &str, kind: &str, terrain_kind: Option<&str>, field: &str) -> f64 {
+    active(co, power)
+        .into_iter()
+        .filter_map(|d| d["PowerIncreases"].as_array())
+        .flatten()
         .filter(|e| affects(e, kind))
         .filter(|e| match e["ConditionalTerrain"].as_str() {
             None => true,
@@ -27,27 +40,34 @@ fn sum_field(co: &str, kind: &str, terrain_kind: Option<&str>, field: &str) -> f
 
 /// Attack bonus in percent points (e.g. +20 for Max's tanks). `terrain_kind` is the
 /// attacker's tile kind ("Plain", "Road", "Building", ...).
-pub fn attack_bonus(co: &str, kind: &str, terrain_kind: &str, terrain_stars: u32) -> i32 {
-    let mut v = (sum_field(co, kind, Some(terrain_kind), "PowerIncrease") * 100.0).round() as i32;
+/// Any active power also gives every unit +10% attack and +10% defence.
+pub fn attack_bonus(co: &str, power: &str, kind: &str, terrain_kind: &str, terrain_stars: u32) -> i32 {
+    let mut v = (sum_field(co, power, kind, Some(terrain_kind), "PowerIncrease") * 100.0).round() as i32;
+    if power != "N" {
+        v += 10;
+    }
     if co == "Lash" {
         v += 10 * terrain_stars as i32;
     }
     v
 }
 
-pub fn defense_bonus(co: &str, kind: &str) -> i32 {
-    (sum_field(co, kind, None, "DefenseIncrease") * 100.0).round() as i32
+pub fn defense_bonus(co: &str, power: &str, kind: &str) -> i32 {
+    let v = (sum_field(co, power, kind, None, "DefenseIncrease") * 100.0).round() as i32;
+    v + if power != "N" { 10 } else { 0 }
 }
 
-pub fn range_bonus(co: &str, kind: &str) -> i32 {
-    sum_field(co, kind, None, "RangeIncrease").round() as i32
+pub fn range_bonus(co: &str, power: &str, kind: &str) -> i32 {
+    sum_field(co, power, kind, None, "RangeIncrease").round() as i32
 }
 
 /// Luck roll range in percent points, inclusive. AWBW default 0..=9.
-pub fn luck(co: &str) -> (i32, i32) {
-    match d2d(co).map(|d| &d["LuckRange"]) {
-        Some(l) if l.is_object() => (l["x"].as_i64().unwrap_or(0) as i32, l["y"].as_i64().unwrap_or(9) as i32),
-        _ => (0, 9),
+/// The power's LuckRange, if it has one, replaces the day-to-day one.
+pub fn luck(co: &str, power: &str) -> (i32, i32) {
+    let l = active(co, power).into_iter().rev().map(|d| &d["LuckRange"]).find(|l| l.is_object());
+    match l {
+        Some(l) => (l["x"].as_i64().unwrap_or(0) as i32, l["y"].as_i64().unwrap_or(9) as i32),
+        None => (0, 9),
     }
 }
 

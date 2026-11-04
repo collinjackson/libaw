@@ -59,8 +59,14 @@ pub fn path_cost(s: &State, u: &Unit, path: &[(u16, u16)]) -> Result<u32, String
         }
         let t = s.terrain_at(b.0, b.1);
         let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
-        let c = move_cost_in(t, &info.move_type, felt_weather(s.weather, co))
+        let w = felt_weather(s.weather, co);
+        let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
+        let mut c = move_cost_in(t, &info.move_type, w)
             .ok_or_else(|| format!("{} can't enter {} at {b:?}", u.kind, tables().tile(t).name))?;
+        // Lash's powers: every passable tile costs 1, except in snow.
+        if co == "Lash" && pw != "N" && w != 'S' {
+            c = 1;
+        }
         cost += c as u32;
         if let Some(o) = s.unit_at(b.0, b.1) {
             if !s.allied(o.owner, u.owner) {
@@ -72,6 +78,9 @@ pub fn path_cost(s: &State, u: &Unit, path: &[(u16, u16)]) -> Result<u32, String
 }
 
 pub fn movement_range(s: &State, u: &Unit) -> u32 {
+    if let Some(&m) = s.move_override.get(&u.id) {
+        return m;
+    }
     let mut m = tables().unit(&u.kind).r#move as u32;
     let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
     // Day-to-day movement changes.
@@ -85,7 +94,10 @@ pub fn movement_range(s: &State, u: &Unit) -> u32 {
 pub fn capture_amount(s: &State, u: &Unit, display_hp: u8) -> i32 {
     let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
     let hp = display_hp as i32;
-    if co == "Sami" {
+    let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
+    if co == "Sami" && pw == "S" {
+        20 // Victory March: captures complete in one action.
+    } else if co == "Sami" {
         hp * 3 / 2
     } else {
         hp
