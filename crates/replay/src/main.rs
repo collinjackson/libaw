@@ -639,6 +639,13 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     }
                 }
             }
+            "Delete" => {
+                // A player scrapping one of their own units.
+                let id = num(&a["deletedId"]) as u32;
+                let mine = s.units.get(&id).map(|u| u.owner == s.current);
+                r.check("delete.own_unit", mine == Some(true), || tag(c, format!("delete {id}: {mine:?}")));
+                remove_unit(s, id);
+            }
             "Resign" => return Err("resign".into()),
             "Power" => apply_power(s, a, r, c),
             other => return Err(format!("unsupported action {other}")),
