@@ -1,0 +1,9 @@
+[package]
+name = "awbw-replay"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+awbw-engine = { path = "../engine" }
+serde_json = "1"

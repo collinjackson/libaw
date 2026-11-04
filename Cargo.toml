@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = ["crates/engine", "crates/replay"]
+
+[profile.release]
+debug = 1
