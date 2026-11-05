@@ -14,6 +14,8 @@ use awbw::*;
 use awbw_engine::data::tables;
 use awbw_engine::rules::*;
 use awbw_engine::*;
+use awbw_engine::combat::*;
+use awbw_engine::sim::*;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -71,78 +73,15 @@ fn path_of(a: &Value) -> Vec<(u16, u16)> {
     items(&a["path"]).iter().map(|p| (num(&p["x"]) as u16, num(&p["y"]) as u16)).collect()
 }
 
-fn co_of(s: &State, p: PlayerId) -> String {
-    s.player(p).map(|p| p.co.clone()).unwrap_or_default()
-}
-
-fn towers(s: &State, p: PlayerId) -> u32 {
-    s.buildings.values()
-        .filter(|b| b.owner == Some(p) && tables().tile(b.terrain).building.as_deref() == Some("ComTower"))
-        .count() as u32
-}
 
 
-/// The owner's active power: "N", "Y" (CO power) or "S" (super power).
-fn pw(s: &State, p: PlayerId) -> String {
-    s.player(p).map(|p| p.power.clone()).unwrap_or_else(|| "N".into())
-}
 
 
-/// Attack and defence values (100 = neutral) from COs' day-to-day abilities and com towers.
-fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
-    let co = co_of(s, att.owner);
-    let t = tables().tile(att_terrain);
-    let stars = stars(s, att, att_terrain);
-    let v = 100 + 10 * towers(s, att.owner) as i32 * tower_multiplier(s, att.owner)
-        + awbw_engine::co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars);
-    v.max(0) as u32
-}
 
-fn def_value(s: &State, def: &Unit, attacker_kind: &str) -> u32 {
-    let co = co_of(s, def.owner);
-    let mut v: i32 = 100 + awbw_engine::co::defense_bonus(&co, &pw(s, def.owner), &def.kind);
-    if co == "Javier" {
-        let m = tower_multiplier(s, def.owner);
-        v += 10 * towers(s, def.owner) as i32 * m;
-        if is_indirect(attacker_kind) {
-            v += 20 * m;
-        }
-    }
-    v as u32
-}
 
-/// Javier's Tower Shield doubles his com tower (and indirect-defence) bonuses; Tower of
-/// Power triples them. Everyone else: 1.
-fn tower_multiplier(s: &State, p: PlayerId) -> i32 {
-    if co_of(s, p) != "Javier" {
-        return 1;
-    }
-    match pw(s, p).as_str() {
-        "Y" => 2,
-        "S" => 3,
-        _ => 1,
-    }
-}
 
-/// The terrain kind a CO's terrain-conditional bonus sees (Koal roads, Jake plains,
-/// Kindle buildings). A bridge isn't a road here, and an emptied missile silo isn't plain.
-fn bonus_terrain(u: &Unit, terrain: u16, kind: &str) -> String {
-    let _ = u;
-    let name = &tables().tile(terrain).name;
-    if name.ends_with("Bridge") {
-        return "Bridge".into();
-    }
-    if name.starts_with("Missile Silo") {
-        return "Silo".into();
-    }
-    kind.to_string()
-}
 
-/// Terrain stars a unit gets; Lash's Prime Tactics doubles them.
-fn stars(s: &State, u: &Unit, terrain: u16) -> u32 {
-    let st = terrain_stars(terrain, &u.kind);
-    if co_of(s, u.owner) == "Lash" && pw(s, u.owner) == "S" { st * 2 } else { st }
-}
+
 
 /// Is the unit alive after action `i`? Yes if it's in the next turn file or a later action
 /// this turn mentions it.
@@ -624,7 +563,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let day = num(&a["day"]) as u32;
                 let next_funds = num(&a["nextFunds"]);
                 let before: BTreeMap<UnitId, Unit> = s.units.clone();
-                start_turn(s, next, day, r, c);
+                start_turn(s, next, day);
                 let supplied = apc_supply(s, next);
                 let rec_sup: std::collections::BTreeSet<UnitId> = items(&a["supplied"]).iter().map(|x| num(x) as u32).collect();
                 r.check("turn.supplied_set", supplied == rec_sup, || {
@@ -767,25 +706,6 @@ fn check_repairs(s: &State, before: &BTreeMap<UnitId, Unit>, a: &Value, r: &mut 
     }
 }
 
-/// End of turn: APCs resupply adjacent own units. Returns the units that needed it.
-fn apc_supply(s: &mut State, p: PlayerId) -> std::collections::BTreeSet<UnitId> {
-    let apcs: Vec<(UnitId, u16, u16)> = s.units.values()
-        .filter(|u| u.owner == p && u.kind == "APC" && u.carried_by.is_none())
-        .map(|u| (u.id, u.x, u.y)).collect();
-    let mut out = std::collections::BTreeSet::new();
-    for (aid, x, y) in apcs {
-        for u in s.units.values_mut() {
-            if u.id != aid && u.owner == p && u.carried_by.is_none() && dist((x, y), (u.x, u.y)) == 1 {
-                let info = tables().unit(&u.kind);
-                out.insert(u.id); // AWBW lists every adjacent unit, needed or not
-
-                u.fuel = info.fuel as i32;
-                u.ammo = info.ammo as i32;
-            }
-        }
-    }
-    out
-}
 
 fn moved_this_action(_u: &Unit) -> bool {
     false // Move and Fire are separate records; the move check covers indirect move-and-fire later.
@@ -853,117 +773,7 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     }
 }
 
-fn remove_unit(s: &mut State, id: UnitId) {
-    if let Some(u) = s.units.remove(&id) {
-        // A capture in progress is lost with the unit.
-        if u.carried_by.is_none() {
-            if let Some(b) = s.buildings.get_mut(&(u.x, u.y)) {
-                b.capture = CAPTURE_POINTS;
-            }
-        }
-        for c in u.cargo {
-            s.units.remove(&c);
-        }
-        if let Some(t) = u.carried_by.and_then(|t| s.units.get_mut(&t)) {
-            t.cargo.retain(|&x| x != id);
-        }
-    }
-}
 
-/// Start of `next`'s turn: income, then repairs/resupply on owned properties, fuel burn.
-fn start_turn(s: &mut State, next: PlayerId, day: u32, _r: &mut Report, _c: &Ctx) {
-    s.current = next;
-    s.day = day;
-    for u in s.units.values_mut() {
-        u.moved = false;
-    }
-    let props = s.buildings.values()
-        .filter(|b| b.owner == Some(next) && is_income_property(b.terrain))
-        .count() as i64;
-    let fpp = s.funds_per_property + awbw_engine::co::property_fund_increase(&co_of(s, next));
-    if let Some(p) = s.player_mut(next) {
-        p.funds += props * fpp;
-    }
-    // Fuel burn (air and sea units, per their daily rate; dived subs and hidden stealths more).
-    let co = co_of(s, next);
-    let ids: Vec<UnitId> = s.units.values().filter(|u| u.owner == next).map(|u| u.id).collect();
-    let mut crashed = vec![];
-    for id in &ids {
-        let u = s.units.get_mut(id).unwrap();
-        let info = tables().unit(&u.kind);
-        let mut burn = info.fuel_per_turn as i32;
-        if u.dived {
-            burn = if u.kind == "Sub" { 5 } else { 8 };
-        }
-        if info.move_type == "A" {
-            burn = (burn - awbw_engine::co::air_fuel_decrease(&co)).max(0);
-        }
-        if burn > 0 && u.carried_by.is_none() && day > 1 {
-            u.fuel = (u.fuel - burn).max(0);
-            if u.fuel == 0 && matches!(info.move_type.as_str(), "A" | "S" | "L") {
-                crashed.push(*id);
-            }
-        }
-    }
-    // Repairs, in unit order (AWBW's order is an open question; affects who gets repaired
-    // when funds run short).
-    for id in &ids {
-        let Some(u) = s.units.get(id).cloned() else { continue };
-        if u.carried_by.is_some() {
-            continue;
-        }
-        let Some(b) = s.buildings.get(&(u.x, u.y)) else { continue };
-        if b.owner != Some(next) || !services(b.terrain, &u.kind) {
-            continue;
-        }
-        let info = tables().unit(&u.kind);
-        let step = if co == "Rachel" { 30 } else { 20 };
-        let cur_disp = u.hp.display_hi();
-        let funds = s.player(next).map(|p| p.funds).unwrap_or(0);
-        let per_hp = info.cost as i64 / 10;
-        let mut add_disp = 0u8;
-        for k in (1..=(step / 10)).rev() {
-            let k = k as u8;
-            if cur_disp + k <= 10 && per_hp * k as i64 <= funds {
-                add_disp = k;
-                break;
-            }
-        }
-        if cur_disp < 10 && add_disp == 0 && cur_disp + 1 > 10 {
-            add_disp = 0;
-        }
-        let new_disp = (cur_disp + add_disp).min(10);
-        let m = s.units.get_mut(id).unwrap();
-        if add_disp > 0 {
-            m.hp = Hp::from_display(new_disp);
-        } else if cur_disp == 10 {
-            // Topping off a 9.x unit is free in AWBW only to a whole display point; leave as is.
-        }
-        m.fuel = info.fuel as i32;
-        m.ammo = info.ammo as i32;
-        if add_disp > 0 {
-            if let Some(p) = s.player_mut(next) {
-                p.funds -= per_hp * add_disp as i64;
-            }
-        }
-    }
-    // Carriers and cruisers resupply the aircraft they carry.
-    let carried: Vec<(UnitId, UnitId)> = s.units.values()
-        .filter(|u| u.owner == next)
-        .filter_map(|u| u.carried_by.map(|t| (u.id, t)))
-        .collect();
-    for (id, t) in carried {
-        if matches!(s.units.get(&t).map(|t| t.kind.as_str()), Some("Carrier" | "Cruiser")) {
-            let u = s.units.get_mut(&id).unwrap();
-            let info = tables().unit(&u.kind);
-            u.fuel = info.fuel as i32;
-            u.ammo = info.ammo as i32;
-        }
-    }
-    for id in crashed {
-        remove_unit(s, id);
-    }
-}
 
 /// Compare engine state after a turn with the recorded state at the start of the next turn.
 fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
@@ -1063,7 +873,58 @@ fn check_game(dir: &Path, r: &mut Report) {
     }
 }
 
+/// Random legal play from a turn file until someone wins or `max_days` pass, checking
+/// invariants after every action. A smoke test for the simulator.
+fn selfplay(file: &Path, seed: u64, max_days: u32) {
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+    let mut s = state_from(&v);
+    for u in s.units.values_mut() {
+        u.hp = Hp::exact(u.hp.hi);
+    }
+    let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as u32 };
+    let (mut actions, mut errors, mut violations) = (0u64, 0u64, 0u64);
+    let mut legal_total = 0u64;
+    let t0 = std::time::Instant::now();
+    while s.day <= max_days && awbw_engine::sim::winner(&s).is_none() {
+        let legal = awbw_engine::actions::legal_actions(&s);
+        legal_total += legal.len() as u64;
+        // Prefer acting over ending the turn, so games progress.
+        let a = if legal.len() > 1 && next() % 20 != 0 { &legal[next() as usize % (legal.len() - 1)] } else { legal.last().unwrap() };
+        let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
+        if let Err(e) = awbw_engine::sim::step(&mut s, a, &mut roll) {
+            errors += 1;
+            if errors <= 5 { eprintln!("step error: {e} on {a:?}"); }
+            let _ = awbw_engine::sim::end_turn(&mut s);
+        }
+        actions += 1;
+        // Invariants.
+        let mut seen = std::collections::HashSet::new();
+        for u in s.units.values() {
+            let bad = (u.carried_by.is_none() && !seen.insert((u.x, u.y))) || u.fuel < 0 || u.ammo < 0
+                || u.hp.hi == 0 || u.carried_by.is_some_and(|t| !s.units.get(&t).is_some_and(|t| t.cargo.contains(&u.id)));
+            if bad {
+                violations += 1;
+                if violations <= 5 { eprintln!("invariant broken by {a:?}: {u:?}"); }
+            }
+        }
+        if s.players.iter().any(|p| p.funds < 0) {
+            violations += 1;
+        }
+    }
+    println!("selfplay seed {seed}: {actions} actions, day {}, winner {:?}, {:.1} legal/position, {errors} step errors, {violations} invariant violations, {:.0} actions/s",
+        s.day, awbw_engine::sim::winner(&s), legal_total as f64 / actions.max(1) as f64,
+        actions as f64 / t0.elapsed().as_secs_f64());
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--selfplay") {
+        for seed in 1..=args.get(3).and_then(|n| n.parse().ok()).unwrap_or(3u64) {
+            selfplay(Path::new(&args[2]), seed, 60);
+        }
+        return;
+    }
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut r = Report { max_examples: 3, ..Default::default() };
     let mut only: Option<String> = None;
