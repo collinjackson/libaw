@@ -401,8 +401,13 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                                 .into_iter().filter_map(|(x, y)| s.unit_at(x, y).map(|u| u.id)).collect();
                             for id in cands {
                                 r.hidden_hp.insert(id);
-                                if !r.next_alive.is_empty() && !r.next_alive.contains(&id) {
+                                // Gone from the next record and not acted on later this turn
+                                // (game-1750218: a Tank finishes that Infantry 5 actions on).
+                                if !r.next_alive.is_empty() && !alive_after(r, actions, i, id) {
                                     remove_unit(s, id);
+                                } else if let Some(u) = s.units.get_mut(&id) {
+                                    // It may have been hit: anything from 1 HP up to what it had.
+                                    u.hp = Hp { lo: 1, hi: u.hp.hi };
                                 }
                             }
                         }
@@ -1061,13 +1066,15 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     }
     // Fog: the power record lists only units its viewer could see; for the rest take the
     // engine's result (the next turn's compare checks it).
-    if r.fog {
+    // A hidden (dived) unit is left out of the list too, fog or not (game-1692796: Von
+    // Bolt's missile on a hidden Stealth; 7 HP next turn, as the engine has it).
+    {
         let listed: std::collections::HashSet<UnitId> = items(&a["unitReplace"]["units"]).iter().map(|u| num(&u["units_id"]) as u32).collect();
-        let unlisted: Vec<UnitId> = s.units.keys().filter(|id| !listed.contains(id)).copied().collect();
+        let unlisted: Vec<UnitId> = s.units.values().filter(|u| r.fog || u.dived).map(|u| u.id).filter(|id| !listed.contains(id)).collect();
         for id in unlisted {
             if let (Some(p), Some(u)) = (pred.units.get(&id), s.units.get_mut(&id)) {
                 if p.hp != u.hp || p.stunned != u.stunned {
-                    r.skip("power: unit unlisted in a fog game, engine's result taken");
+                    r.skip("power: unit unlisted (fog or hidden), engine's result taken");
                     u.hp = p.hp;
                     u.stunned = p.stunned;
                 }
