@@ -7,7 +7,8 @@
 //!   AGENT: random | greedy | http://host:port#bot-b
 //!
 //! Games alternate seats. One JSON line per game goes to stdout; with SELFPLAY_LOG_DIR set,
-//! a viewer log per game too.
+//! a viewer log per game too; with POSITIONS_LOG=FILE.jsonl, value-model training rows (each
+//! turn start's army by kind, funds, properties, meter per side, plus the game's winner).
 
 use awbw_engine::actions::Action;
 use awbw_engine::awbw::*;
@@ -80,6 +81,31 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     let mut frames = vec![awbw_engine::view::frame(&s, "start")];
     let mut this_turn = 0u32;
     let mut first_error = None;
+    // Training positions for the value model (POSITIONS_LOG=FILE.jsonl): one per turn start.
+    let pos_log = std::env::var("POSITIONS_LOG").ok();
+    let mut positions: Vec<Value> = vec![];
+    let snap = |s: &State| -> Value {
+        let side = |seat: usize| {
+            let ids: Vec<PlayerId> = order.iter().copied().filter(|&p| seat_of(p) == seat).collect();
+            let mut army = serde_json::Map::new();
+            for u in s.units.values().filter(|u| ids.contains(&u.owner)) {
+                let v = data::tables().unit(&u.kind).cost as f64 * u.hp.hi as f64 / 100.0;
+                let e = army.entry(u.kind.clone()).or_insert(json!(0.0));
+                *e = json!(e.as_f64().unwrap_or(0.0) + v);
+            }
+            let p = s.players.iter().find(|p| ids.contains(&p.id));
+            json!({
+                "army": army,
+                "units": s.units.values().filter(|u| ids.contains(&u.owner)).count(),
+                "funds": p.map_or(0, |p| p.funds),
+                "props": s.buildings.values().filter(|b| b.owner.is_some_and(|o| ids.contains(&o))).count(),
+                "meter": p.map_or(0.0, |p| p.meter as f64 / (p.scop_cost.max(1)) as f64),
+                "co": p.map_or(String::new(), |p| p.co.clone()),
+            })
+        };
+        json!({"day": s.day, "to_move": seat_of(s.current), "sides": [side(0), side(1)]})
+    };
+    if pos_log.is_some() { positions.push(snap(&s)); }
     while s.day <= max_days && sim::winner(&s).is_none() {
         let i = seat_of(s.current);
         let req_seed = seed ^ (st[0].actions + st[1].actions).wrapping_mul(0x9E3779B97F4A7C15);
@@ -107,7 +133,8 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         };
         this_turn += 1;
         let a = if this_turn > 300 { st[i].forced_ends += 1; Action::EndTurn } else { a };
-        if a == Action::EndTurn { this_turn = 0; }
+        let ended = a == Action::EndTurn;
+        if ended { this_turn = 0; }
         let label = awbw_engine::view::describe(&s, &a);
         let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
         if let Err(e) = sim::step(&mut s, &a, &mut roll) {
@@ -117,6 +144,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
             this_turn = 0;
         }
         st[i].actions += 1;
+        if pos_log.is_some() && ended && sim::winner(&s).is_none() { positions.push(snap(&s)); }
         if log_dir.is_some() { frames.push(awbw_engine::view::frame(&s, &label)); }
     }
     let win_team = sim::winner(&s);
@@ -136,6 +164,21 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         log["winner"] = json!(win_team);
         std::fs::create_dir_all(dir).unwrap();
         std::fs::write(Path::new(dir).join(format!("{name}.json")), log.to_string()).unwrap();
+    }
+    if let Some(f) = &pos_log {
+        // Label: who won outright, else the day-limit tiebreak by worth (marked).
+        let (w0, w1) = (worth(0), worth(1));
+        let label = winner_seat.or(if w0 != w1 { Some(if w0 > w1 { 0 } else { 1 }) } else { None });
+        if let Some(l) = label {
+            use std::io::Write;
+            let mut out = std::fs::OpenOptions::new().create(true).append(true).open(f).expect("positions log");
+            for mut p in positions {
+                p["game"] = json!(name);
+                p["winner"] = json!(l);
+                p["decisive"] = json!(winner_seat.is_some());
+                writeln!(out, "{p}").unwrap();
+            }
+        }
     }
     json!({
         "game": name, "seats": [seats[0].name(), seats[1].name()], "seed": seed,
