@@ -163,6 +163,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     r.check("move.unit_known", false, || tag(c, format!("unit {} not in state", rec.id)));
                     continue;
                 };
+                let seen_before = if r.fog { Some(awbw_engine::fog::vision(s, u.owner)) } else { None };
                 let path = path_of(a);
                 r.check("move.path_starts_at_unit", path.first() == Some(&(u.x, u.y)), || {
                     tag(c, format!("{} at {:?}, path starts {:?}", u.kind, (u.x, u.y), path.first()))
@@ -250,6 +251,9 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         cu.x = rec.x;
                         cu.y = rec.y;
                     }
+                }
+                if let Some(v0) = seen_before {
+                    check_discovered(s, u.owner, &v0, &a["discovered"], r, c);
                 }
             }
             "Build" => {
@@ -1144,6 +1148,30 @@ fn restore_cargo(s: &mut State, prev: &State) {
         cu.y = y;
         s.units.insert(cu.id, cu);
     }
+}
+
+/// Fog: a move's `discovered` lists the enemy units and the buildings on tiles that just
+/// came into view. Ours: vision before vs after; dived Subs / hidden Stealths count only
+/// from next door.
+fn check_discovered(s: &State, pid: PlayerId, before: &[u8], disc: &Value, r: &mut Report, c: &Ctx) {
+    let after = awbw_engine::fog::vision(s, pid);
+    let w = s.width as usize;
+    let new = |x: u16, y: u16| { let i = y as usize * w + x as usize; after[i] > 0 && before[i] == 0 };
+    let adjacent = |x: u16, y: u16| s.units.values().any(|o| s.allied(o.owner, pid) && o.carried_by.is_none() && dist((o.x, o.y), (x, y)) <= 1);
+    let ours_u: std::collections::BTreeSet<UnitId> = s.units.values()
+        .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none() && new(u.x, u.y) && (!u.dived || adjacent(u.x, u.y)))
+        .map(|u| u.id).collect();
+    let rec_u: std::collections::BTreeSet<UnitId> = items(&disc["units"]).iter().map(|u| num(&u["units_id"]) as u32).collect();
+    r.check("fog.discovered_units", ours_u == rec_u, || {
+        let show = |ids: Vec<&UnitId>| ids.iter().map(|id| s.units.get(id).map(|u| format!("{} {:?}{}", u.kind, (u.x, u.y), if u.dived { " dived" } else { "" })).unwrap_or(format!("{id}?"))).collect::<Vec<_>>();
+        tag(c, format!("engine also {:?}; record also {:?}", show(ours_u.difference(&rec_u).collect()), show(rec_u.difference(&ours_u).collect())))
+    });
+    let ours_b: std::collections::BTreeSet<(u16, u16)> = s.buildings.keys().filter(|&&(x, y)| new(x, y)).copied().collect();
+    let rec_b: std::collections::BTreeSet<(u16, u16)> = items(&disc["buildings"]).iter()
+        .map(|b| (num(&b["buildings_x"]) as u16, num(&b["buildings_y"]) as u16)).collect();
+    r.check("fog.discovered_buildings", ours_b == rec_b, || {
+        tag(c, format!("engine also {:?}; record also {:?}", ours_b.difference(&rec_b).collect::<Vec<_>>(), rec_b.difference(&ours_b).collect::<Vec<_>>()))
+    });
 }
 
 /// `fog_array[x][y]`: PHP arrays come out as JSON arrays, or as objects keyed "0", "1", ...
