@@ -1,4 +1,7 @@
-# Opponent bot API contract (v0)
+# Opponent bot API contract (v1)
+
+v1 adds several bots behind one API (`bots` in `/health`, `bot` in `/act`). A v0 client
+that sends no `bot` still gets `bot-a`.
 
 Written by the clean side (the awbw-engine author) without seeing the opponent's code. The
 wrapper on the evaluation VM implements this; the clean side talks to it only through this
@@ -13,11 +16,15 @@ arrive within 10 seconds.
 ## `GET /health`
 
 ```json
-{"ok": true, "commit": "<opponent repo commit sha>", "bot_label": "<opaque short label>"}
+{"ok": true, "commit": "<opponent repo commit sha>", "bot_label": "bot-a",
+ "bots": ["bot-a", "bot-b", "bot-c"]}
 ```
 
-`bot_label` names which of the opponent's bots answers (so results can be tracked per
-bot). Keep it opaque, e.g. `bot-a`: no description of how it works.
+`bots` lists every bot the opponent ships that can choose actions for a given state, one
+opaque label each (`bot-a`, `bot-b`, ...): no names, descriptions or hints of strength or
+method, and the order says nothing either. A label must keep meaning the same bot across
+rebuilds of the same commit; if a rebuild changes which bots exist, add new letters rather
+than reusing old ones. `bot_label` is the default bot (v0 clients).
 
 ## `POST /act`
 
@@ -30,9 +37,12 @@ Request:
 {
   "player_id": 4204600,
   "seed": 12345,
+  "bot": "bot-b",
   "state": { "gameState": { ... }, "day": 5, "players": [ ... ] }
 }
 ```
+
+- `bot` (optional, default `bot_label`): which bot answers. An unknown label is HTTP 400.
 
 - `state` has the shape of an AWBW replay turn file (`load_replay.php`): see
   `test-states/`. `gameState` holds `terrain`, `buildings`, `units`, `players`,
@@ -77,9 +87,11 @@ Errors: HTTP 400 with `{"error": "<short reason>"}` only for a malformed request
 At `/opt/eval/STATUS.json` on the VM, the only file the clean side reads:
 
 ```json
-{"built": true, "commit": "<sha>", "bot_label": "bot-a",
- "contract_tests_passed": 3, "contract_tests_total": 3, "updated": "<ISO time>"}
+{"built": true, "commit": "<sha>", "bot_label": "bot-a", "bots": ["bot-a", "bot-b"],
+ "contract_tests_passed": 6, "contract_tests_total": 6, "updated": "<ISO time>"}
 ```
+
+The contract test runs every test state against every bot, so the totals are states x bots.
 
 No logs, no prose, no excerpts of the opponent's code or docs, here or anywhere the clean
 side can see.

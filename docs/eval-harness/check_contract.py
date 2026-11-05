@@ -5,7 +5,7 @@
 
 Prints one line per test state and a final `passed N/M`. Exit status 0 when all pass.
 """
-import json, sys, urllib.request
+import json, sys, urllib.error, urllib.request
 from pathlib import Path
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8080"
@@ -70,21 +70,34 @@ def check(state, reply):
 
 def main():
     h = call("GET", "/health")
-    print("health:", {k: h.get(k) for k in ("ok", "commit", "bot_label")})
+    print("health:", {k: h.get(k) for k in ("ok", "commit", "bot_label", "bots")})
+    bots = h.get("bots") or [h.get("bot_label")]
     files = sorted((HERE / "test-states").glob("*.json"))
-    ok = 0
-    for f in files:
-        state = json.loads(f.read_text())
-        me = int(state["gameState"]["currentTurnPId"])
-        try:
-            reply = call("POST", "/act", {"player_id": me, "seed": 1, "state": state})
-            err = check(state, reply)
-        except Exception as e:  # network error, timeout, bad JSON
-            err = f"request failed: {type(e).__name__}"
-        print(f.name, "ok" if err is None else f"FAIL: {err}")
-        ok += err is None
-    print(f"passed {ok}/{len(files)}")
-    sys.exit(0 if ok == len(files) else 1)
+    ok = total = 0
+    for bot in bots:
+        for f in files:
+            state = json.loads(f.read_text())
+            me = int(state["gameState"]["currentTurnPId"])
+            try:
+                reply = call("POST", "/act", {"player_id": me, "seed": 1, "bot": bot, "state": state})
+                err = check(state, reply)
+            except Exception as e:  # network error, timeout, bad JSON
+                err = f"request failed: {type(e).__name__}"
+            print(bot, f.name, "ok" if err is None else f"FAIL: {err}")
+            ok += err is None
+            total += 1
+    # An unknown bot label must be refused.
+    try:
+        call("POST", "/act", {"player_id": 0, "seed": 1, "bot": "bot-zz", "state": {}})
+        print("unknown bot: FAIL (accepted)")
+    except urllib.error.HTTPError as e:
+        print("unknown bot:", "ok" if e.code == 400 else f"FAIL (HTTP {e.code})")
+        ok += e.code == 400
+    except Exception as e:
+        print(f"unknown bot: FAIL ({type(e).__name__})")
+    total += 1
+    print(f"passed {ok}/{total}")
+    sys.exit(0 if ok == total else 1)
 
 
 if __name__ == "__main__":
