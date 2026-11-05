@@ -28,6 +28,8 @@ pub enum Then {
 pub enum Action {
     Move { unit: UnitId, path: Vec<Pos>, then: Then },
     Build { at: Pos, kind: String },
+    /// Activate the CO power ("Y") or super power ("S"). Only generated when `State::powers`.
+    Power { kind: String },
     EndTurn,
 }
 
@@ -221,6 +223,9 @@ pub fn legal_actions(s: &State) -> Vec<Action> {
     }
     for (at, kind) in builds(s) {
         out.push(Action::Build { at, kind });
+    }
+    for kind in crate::co::powers_ready(s, s.current) {
+        out.push(Action::Power { kind: kind.into() });
     }
     out.push(Action::EndTurn);
     out

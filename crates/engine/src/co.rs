@@ -87,3 +87,36 @@ pub fn air_fuel_decrease(co: &str) -> i32 {
 pub fn counter_multiplier(co: &str) -> f64 {
     d2d(co).and_then(|d| d["CounterAttackPower"].as_f64()).unwrap_or(1.0)
 }
+
+/// Base power costs (CO power, super power) in meter units (funds of damage x 10), before
+/// growth from use. Read from day-1 states of 165 recorded games; the last six are from
+/// AWBW's published star counts (9000 funds a star) and not yet seen in a replay.
+/// A CO with no regular power (Von Bolt) has both equal to the super's cost.
+pub fn power_base(co: &str) -> Option<(i64, i64)> {
+    const STAR: i64 = 90_000;
+    Some(match co {
+        "Adder" => (2, 5), "Andy" | "Grimm" | "Grit" | "Jake" | "Javier" | "Jess" | "Kindle"
+        | "Max" | "Nell" | "Rachel" => (3, 6), "Drake" | "Lash" => (4, 7), "Eagle" => (3, 9),
+        "Hawke" => (5, 9), "Koal" | "Sonja" => (3, 5), "Olaf" => (3, 7), "Sami" => (3, 8),
+        "Sasha" => (2, 6), "Von Bolt" => (10, 10),
+        "Colin" | "Sensei" => (2, 6), "Flak" => (3, 6), "Hachi" => (3, 5), "Kanbei" => (4, 7),
+        "Sturm" => (6, 10),
+        _ => return None,
+    }).map(|(a, b)| (a * STAR, b * STAR))
+}
+
+/// Powers the player could activate now: none while one is on or when powers are off.
+pub fn powers_ready(s: &crate::state::State, pid: u32) -> Vec<&'static str> {
+    let Some(p) = s.player(pid) else { return vec![] };
+    if !s.powers || p.power != "N" || p.scop_cost == 0 {
+        return vec![];
+    }
+    let mut out = vec![];
+    if p.cop_cost < p.scop_cost && p.meter >= p.cop_cost {
+        out.push("Y");
+    }
+    if p.meter >= p.scop_cost {
+        out.push("S");
+    }
+    out
+}

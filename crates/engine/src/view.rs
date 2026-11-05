@@ -31,6 +31,7 @@ pub fn describe(s: &State, a: &crate::actions::Action) -> String {
     use crate::actions::{Action, Then};
     match a {
         Action::EndTurn => "end turn".into(),
+        Action::Power { kind } => if kind == "S" { "super power".into() } else { "CO power".into() },
         Action::Build { at, kind } => format!("build {kind} at {at:?}"),
         Action::Move { unit, path, then } => {
             let k = s.units.get(unit).map(|u| u.kind.clone()).unwrap_or_default();

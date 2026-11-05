@@ -108,6 +108,10 @@ pub struct State {
     pub weather: char,
     /// Movement points set by a CO power this turn (AWBW records them on the Power action).
     pub move_override: BTreeMap<UnitId, u32>,
+    /// Whether players may activate CO powers. Off by default ("No CO" play: Carson's bots
+    /// don't use powers yet); the replay checker applies recorded powers regardless.
+    #[serde(default)]
+    pub powers: bool,
 }
 
 impl State {

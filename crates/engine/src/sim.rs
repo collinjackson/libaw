@@ -201,6 +201,11 @@ pub fn spend_power(s: &mut State, pid: PlayerId, kind: &str) {
         let cost = if kind == "S" { p.scop_cost } else { p.cop_cost };
         p.meter = (p.meter - cost).max(0);
         p.power = kind.to_string();
+        // Each use raises both costs by a fifth of the base (seen in the replays).
+        if let Some((c, sc)) = co::power_base(&p.co) {
+            p.cop_cost += c / 5;
+            p.scop_cost += sc / 5;
+        }
     }
 }
 
@@ -258,6 +263,13 @@ fn eliminate(s: &mut State, gone: PlayerId, by: PlayerId) {
 pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
     match a {
         Action::EndTurn => end_turn(s),
+        Action::Power { kind } => {
+            if !co::powers_ready(s, s.current).contains(&kind.as_str()) {
+                return Err(format!("power {kind} not ready"));
+            }
+            spend_power(s, s.current, kind);
+            Ok(())
+        }
         Action::Build { at, kind } => {
             let me = s.current;
             let p = s.player(me).ok_or("no player")?;

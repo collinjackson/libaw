@@ -832,6 +832,15 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
 /// Compare engine state after a turn with the recorded state at the start of the next turn.
 fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
     let mut clean = true;
+    for rp in &rec.players {
+        let Some(p) = ours.player(rp.id) else { continue };
+        r.check("state.power_costs", (p.cop_cost, p.scop_cost) == (rp.cop_cost, rp.scop_cost), || {
+            tag(c, format!("{} costs {}/{}, recorded {}/{}", p.co, p.cop_cost, p.scop_cost, rp.cop_cost, rp.scop_cost))
+        });
+        r.check("state.power_meter", p.meter == rp.meter, || {
+            tag(c, format!("{} meter {}, recorded {}", p.co, p.meter, rp.meter))
+        });
+    }
     for (id, ru) in &rec.units {
         let Some(u) = ours.units.get(id) else {
             clean &= r.check("state.unit_exists", false, || tag(c, format!("recorded {} {id} missing", ru.kind)));

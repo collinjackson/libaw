@@ -141,6 +141,7 @@ pub fn state_from(turn: &Value) -> State {
     players.sort_by_key(|p| p.order);
     let current = num(&gs["currentTurnPId"]) as u32;
     let mut s = State {
+        powers: false,
         width: w,
         height: h,
         terrain,
@@ -345,6 +346,8 @@ fn xy(v: &Value) -> Option<(u16, u16)> {
 pub fn action_to_contract(a: &Action) -> Value {
     match a {
         Action::EndTurn => json!({"type": "end_turn"}),
+        // Not in contract v1 (No CO play); a v2 addition if Carson's bots gain powers.
+        Action::Power { kind } => json!({"type": "power", "power": kind}),
         Action::Build { at, kind } => json!({"type": "build", "at": [at.0, at.1], "unit": kind}),
         Action::Move { unit, path, then } => {
             let then = match then {
@@ -371,6 +374,10 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
     let legal = crate::actions::legal_actions(s);
     match v["type"].as_str() {
         Some("end_turn") => Ok(Action::EndTurn),
+        Some("power") => {
+            let a = Action::Power { kind: v["power"].as_str().unwrap_or("").to_string() };
+            legal.contains(&a).then_some(a).ok_or_else(|| "power: not ready".into())
+        }
         Some("build") => {
             let at = xy(&v["at"]).ok_or("build: bad at")?;
             let kind = v["unit"].as_str().ok_or("build: no unit")?.to_string();
