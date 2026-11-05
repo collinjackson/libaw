@@ -140,7 +140,8 @@ pub struct Instant {
     /// Which of the user's units get `moves`: "all", "foot", "vehicle" (ground, not foot)
     /// or "direct" (non-foot units that fire at range 1).
     pub moves_for: &'static str,
-    /// Refill fuel and ammo of the user's units that aren't being carried (Jess).
+    /// Refill fuel and ammo of all the user's units, carried ones included (Jess; the next
+    /// turn's record shows carried units full).
     pub resupply: bool,
     /// The user's non-foot units that already acted can act again (Eagle's super).
     pub act_again: bool,

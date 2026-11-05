@@ -100,6 +100,8 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
         }
         m.fuel = info.fuel as i32;
         m.ammo = info.ammo as i32;
+        // Its cargo is not resupplied there (53 recorded cases of carried units on ports
+        // and airports keeping their fuel), unlike cargo of a unit an APC supplies.
         if add_disp > 0 {
             if let Some(p) = s.player_mut(next) {
                 p.funds -= per_hp * add_disp as i64;
@@ -144,6 +146,18 @@ pub fn apc_supply(s: &mut State, p: PlayerId) -> std::collections::BTreeSet<Unit
                 u.ammo = info.ammo as i32;
             }
         }
+    }
+    // A supplied transport's cargo is supplied too, and listed (a Black Boat beside an APC,
+    // game-1752274; an APC beside an APC, game-1578803).
+    let cargo: Vec<UnitId> = s.units.values()
+        .filter(|u| u.carried_by.is_some_and(|t| out.contains(&t)))
+        .map(|u| u.id).collect();
+    for id in cargo {
+        let u = s.units.get_mut(&id).unwrap();
+        let info = tables().unit(&u.kind);
+        u.fuel = info.fuel as i32;
+        u.ammo = info.ammo as i32;
+        out.insert(id);
     }
     out
 }
@@ -348,7 +362,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
             let foot = crate::rules::is_foot(&s.units[&id].kind);
             let info = crate::data::tables().unit(&s.units[&id].kind);
             let u = s.units.get_mut(&id).unwrap();
-            if e.resupply && u.carried_by.is_none() {
+            if e.resupply {
                 u.fuel = info.fuel as i32;
                 u.ammo = info.ammo as i32;
             }

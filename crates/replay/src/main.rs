@@ -873,6 +873,15 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         return;
     }
     let co = co_of(s, pid);
+    // Carried units aren't in the record's unit list; take the engine's fuel and ammo for
+    // them (Jess's resupply reaches them: the next turn shows them full).
+    let carried: Vec<UnitId> = s.units.values().filter(|u| u.carried_by.is_some()).map(|u| u.id).collect();
+    for id in carried {
+        if let (Some(p), Some(u)) = (pred.units.get(&id), s.units.get_mut(&id)) {
+            u.fuel = p.fuel;
+            u.ammo = p.ammo;
+        }
+    }
     let mut bad = vec![];
     for (id, u) in &s.units {
         let Some(p) = pred.units.get(id) else { continue };
@@ -881,7 +890,10 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         if p.stunned != u.stunned {
             bad.push(format!("{} {id}: engine stunned {}, record {}", u.kind, p.stunned, u.stunned));
         }
-        if (shown(p.hp), p.fuel) != (shown(u.hp), u.fuel) {
+        // The record's unit list leaves out carried units, though Jess's resupply reaches
+        // them (the next turn shows them full): don't compare their fuel here.
+        let fuel_ok = p.fuel == u.fuel || u.carried_by.is_some();
+        if shown(p.hp) != shown(u.hp) || !fuel_ok {
             bad.push(format!("{} {id}: engine hp {:?} fuel {}, record hp {:?} fuel {}", u.kind, p.hp, p.fuel, u.hp, u.fuel));
         }
         let (mp, mr) = (movement_range(&pred, p), movement_range(s, u));
