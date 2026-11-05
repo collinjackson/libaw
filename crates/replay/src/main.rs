@@ -673,8 +673,9 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 start_turn(s, next, day);
                 let supplied = apc_supply(s, next);
                 let rec_sup: std::collections::BTreeSet<UnitId> = items(&a["supplied"]).iter().map(|x| num(x) as u32).collect();
-                if r.fog && rec_sup.is_empty() && !supplied.is_empty() {
-                    r.skip("turn.supplied_set: fog game, list empty");
+                if r.fog && rec_sup.is_subset(&supplied) && rec_sup != supplied {
+                    // Fog games list only some of the supplied units (those in view).
+                    r.skip("turn.supplied_set: fog game, partial list");
                 } else {
                 r.check("turn.supplied_set", supplied == rec_sup, || {
                     tag(c, format!("engine supplied {supplied:?}, recorded {rec_sup:?}"))

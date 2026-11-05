@@ -64,7 +64,11 @@ fn goal_distance(s: &State, u: &Unit) -> u32 {
         None
     };
     d.or_else(|| s.units.values().filter(|o| !s.allied(o.owner, u.owner) && o.carried_by.is_none())
-        .map(|o| dist(here, (o.x, o.y))).min()).unwrap_or(0)
+        .map(|o| dist(here, (o.x, o.y))).min())
+        // Fog: no enemy unit in sight; head for the enemy's properties instead.
+        .or_else(|| s.buildings.iter().filter(|(_, b)| b.owner.is_some_and(|o| !s.allied(o, u.owner)))
+            .map(|(&p, _)| dist(here, p)).min())
+        .unwrap_or(0)
 }
 
 pub fn choose(s: &State) -> Action {

@@ -105,6 +105,7 @@ pub fn player_view(s: &State, pid: PlayerId) -> State {
     if !s.fog {
         return v;
     }
+    v.partial = true;
     let seen = vision(s, pid);
     let w = s.width as usize;
     let near = |x: u16, y: u16| s.units.values().any(|o| s.allied(o.owner, pid) && o.carried_by.is_none()

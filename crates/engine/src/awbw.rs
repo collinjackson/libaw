@@ -145,6 +145,7 @@ pub fn state_from(turn: &Value) -> State {
     let mut s = State {
         powers: false,
         fog: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
+        partial: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
         width: w,
         height: h,
         terrain,
@@ -289,6 +290,14 @@ pub fn to_turn_json(s: &State, template: &Value) -> Value {
         cols.into_iter().map(|(x, m)| (x.to_string(), Value::Object(m))).collect()));
     gs.insert("players".into(), Value::Object(gplayers));
     gs.insert("currentTurnPId".into(), json!(s.current));
+    // Fog: AWBW's grid of the player to move's vision ([x][y] counts); "" without fog.
+    let fog = if s.fog {
+        let v = crate::fog::vision(s, s.current);
+        json!((0..s.width as usize).map(|x| (0..s.height as usize).map(|y| v[y * s.width as usize + x]).collect::<Vec<u8>>()).collect::<Vec<_>>())
+    } else {
+        json!("")
+    };
+    gs.insert("fog_array".into(), fog);
     let mut weather = tgs["gameWeather"].clone();
     if !weather.is_object() {
         weather = json!({});

@@ -124,6 +124,10 @@ pub struct State {
     /// enemy unit stops short (a trap).
     #[serde(default)]
     pub fog: bool,
+    /// One player's view of a fog game (`fog::player_view`, or a fog turn file as a bot
+    /// receives it): enemy units may be missing, so "no units left" doesn't end the game.
+    #[serde(default)]
+    pub partial: bool,
 }
 
 impl State {

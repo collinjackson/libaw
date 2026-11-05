@@ -650,7 +650,7 @@ pub fn end_turn(s: &mut State) -> Result<(), String> {
 pub fn winner(s: &State) -> Option<String> {
     let alive: Vec<&Player> = s.players.iter()
         .filter(|p| !p.eliminated)
-        .filter(|p| s.day <= 1 || s.units.values().any(|u| u.owner == p.id))
+        .filter(|p| s.day <= 1 || s.partial || s.units.values().any(|u| u.owner == p.id))
         .collect();
     let teams: std::collections::BTreeSet<&str> = alive.iter().map(|p| p.team.as_str()).collect();
     (teams.len() == 1).then(|| teams.into_iter().next().unwrap().to_string())
