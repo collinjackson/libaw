@@ -11,6 +11,7 @@
 
 
 use awbw_engine::awbw::*;
+mod matchrun;
 use awbw_engine::data::tables;
 use awbw_engine::rules::*;
 use awbw_engine::*;
@@ -1034,6 +1035,10 @@ fn roundtrip(dirs: &[String]) -> u64 {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--match") {
+        matchrun::run(&args[2..]);
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--roundtrip") {
         std::process::exit((roundtrip(&args[2..]) > 0) as i32);
     }
