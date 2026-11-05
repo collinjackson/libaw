@@ -32,14 +32,14 @@ def done_dirs(ids):
 
 
 def corpora():
-    b1 = [x["id"] for x in json.loads((DATA / "league_std_page1.json").read_text())]
-    b2 = [x["id"] for x in json.loads((DATA / "batch2.json").read_text()) if x["id"] not in b1]
+    frozen = json.loads((ROOT / "metrics/corpora.json").read_text())
+    b1, b2 = frozen["league"], frozen["league_batch2"]
     seen = set(b1) | set(b2)
     b3 = [x["id"] for x in json.loads((DATA / "league_std_pages1-5.json").read_text()) if x["id"] not in seen]
     out = {
         "league": done_dirs(b1),
         "league_batch2": done_dirs(b2),
-        # The rest of Global League standard pages 1-5 (fetched 2026-11-04).
+        # Every other Global League standard game on pages 1-5 (fetched 2026-11-04 on).
         "league_more": done_dirs(b3),
         "team": sorted(str(p) for p in TEAM.glob("game-*") if p.is_dir()),
     }
