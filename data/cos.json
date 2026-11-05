@@ -386,7 +386,7 @@
       "Lander",
       "Sub"
      ],
-     "DefenseIncrease": 0.25
+     "DefenseIncrease": 0.1
     },
     {
      "AffectedUnits": [
