@@ -837,7 +837,7 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         }
         if let Some(v) = opt_num(&u["units_fuel"]) { su.fuel = v as i32; }
         if let Some(v) = opt_num(&u["units_ammo"]) { su.ammo = v as i32; }
-        if let Some(v) = opt_num(&u["units_moved"]) { su.moved = v != 0; }
+        if let Some(v) = opt_num(&u["units_moved"]) { su.moved = v != 0; su.stunned = v == -1; }
     }
     for (key, sign) in [("hpGain", 1i32), ("hpLoss", -1)] {
         let h = &a["hpChange"][key];
@@ -878,6 +878,9 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         let Some(p) = pred.units.get(id) else { continue };
         // The record shows displayed HP (1-10): compare that, not our internal estimate.
         let shown = |h: Hp| ((h.lo as i32 + 9) / 10, (h.hi as i32 + 9) / 10);
+        if p.stunned != u.stunned {
+            bad.push(format!("{} {id}: engine stunned {}, record {}", u.kind, p.stunned, u.stunned));
+        }
         if (shown(p.hp), p.fuel) != (shown(u.hp), u.fuel) {
             bad.push(format!("{} {id}: engine hp {:?} fuel {}, record hp {:?} fuel {}", u.kind, p.hp, p.fuel, u.hp, u.fuel));
         }

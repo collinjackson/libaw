@@ -29,7 +29,12 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
     s.current = next;
     s.day = day;
     for u in s.units.values_mut() {
-        u.moved = false;
+        if u.stunned && u.owner == next {
+            u.moved = true; // sits this turn out
+            u.stunned = false;
+        } else {
+            u.moved = false;
+        }
     }
     let props = s.buildings.values()
         .filter(|b| b.owner == Some(next) && is_income_property(b.terrain))
@@ -217,7 +222,7 @@ pub fn power_effects(s: &mut State, pid: PlayerId, kind: &str) -> bool {
 
 /// Missile damage within 2 tiles of `at`: 3 displayed HP off each enemy unit there, never
 /// killing (a unit pushed to the floor shows 1 HP).
-fn missile(s: &mut State, pid: PlayerId, at: (u16, u16)) {
+fn missile(s: &mut State, pid: PlayerId, at: (u16, u16), stun: bool) {
     let hit: Vec<UnitId> = s.units.values()
         .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()
             && (u.x as i32 - at.0 as i32).abs() + (u.y as i32 - at.1 as i32).abs() <= 2)
@@ -226,6 +231,10 @@ fn missile(s: &mut State, pid: PlayerId, at: (u16, u16)) {
         let u = s.units.get_mut(&id).unwrap();
         let floor_hi = u.hp.hi.min(10);
         u.hp = crate::state::Hp { lo: (u.hp.lo as i32 - 30).max(1) as u8, hi: ((u.hp.hi as i32 - 30).max(1) as u8).max(floor_hi) };
+        if stun {
+            u.stunned = true;
+            u.moved = true;
+        }
     }
 }
 
@@ -254,7 +263,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
     let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
     for k in 0..e.missiles as usize {
         let at = match targets { Some(t) => match t.get(k) { Some(&p) => p, None => break }, None => aim_missile(s, pid) };
-        missile(s, pid, at);
+        missile(s, pid, at, e.stun);
     }
     let mine: Vec<UnitId> = s.units.values().filter(|u| s.allied(u.owner, pid)).map(|u| u.id).collect();
     let theirs: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).map(|u| u.id).collect();
@@ -402,7 +411,7 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
             let info = tables().unit(kind);
             s.units.insert(id, Unit {
                 id, owner: me, kind: kind.clone(), x: at.0, y: at.1, hp: Hp::exact(100),
-                fuel: info.fuel as i32, ammo: info.ammo as i32, moved: true,
+                fuel: info.fuel as i32, ammo: info.ammo as i32, moved: true, stunned: false,
                 carried_by: None, cargo: vec![], dived: false,
             });
             Ok(())

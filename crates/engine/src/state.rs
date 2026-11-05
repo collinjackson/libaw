@@ -56,6 +56,10 @@ pub struct Unit {
     pub fuel: i32,
     pub ammo: i32,
     pub moved: bool,
+    /// Stunned by Von Bolt's Ex Machina: can't act in its owner's next turn (AWBW records
+    /// units_moved = -1).
+    #[serde(default)]
+    pub stunned: bool,
     /// The transport carrying this unit, if any.
     pub carried_by: Option<UnitId>,
     pub cargo: Vec<UnitId>,

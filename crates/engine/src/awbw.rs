@@ -50,6 +50,7 @@ pub fn unit_from(v: &Value) -> Unit {
         fuel: num(&v["units_fuel"]) as i32,
         ammo: num(&v["units_ammo"]) as i32,
         moved: num(&v["units_moved"]) != 0,
+        stunned: num(&v["units_moved"]) == -1,
         carried_by: None,
         cargo: [&v["units_cargo1_units_id"], &v["units_cargo2_units_id"]]
             .iter()
@@ -212,7 +213,7 @@ pub fn to_turn_json(s: &State, template: &Value) -> Value {
             "units_short_range": info.range[0], "units_long_range": info.range[1],
             "units_second_weapon": if info.second_weapon { "Y" } else { "N" },
             "units_cost": info.cost, "units_movement_type": info.move_type,
-            "units_x": x, "units_y": y, "units_moved": u.moved as u8,
+            "units_x": x, "units_y": y, "units_moved": if u.stunned { -1 } else { u.moved as i32 },
             "units_hit_points": u.hp.display_hi(),
             "units_cargo1_units_id": cargo(0), "units_cargo2_units_id": cargo(1),
             "units_carried": if u.carried_by.is_some() { "Y" } else { "N" },
