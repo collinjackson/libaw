@@ -1,5 +1,6 @@
 //! Game state. Coordinates are (x, y) with x across, y down, as AWBW uses them.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub type PlayerId = u32;
@@ -7,7 +8,7 @@ pub type UnitId = u32;
 
 /// Hit points on AWBW's internal 0..=100 scale. Replays only show the displayed value
 /// (ceil(hp / 10)), so the engine carries a range that the true value is known to lie in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hp {
     pub lo: u8,
     pub hi: u8,
@@ -44,7 +45,7 @@ impl Hp {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Unit {
     pub id: UnitId,
     pub owner: PlayerId,
@@ -61,7 +62,7 @@ pub struct Unit {
     pub dived: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Building {
     pub terrain: u16,
     pub owner: Option<PlayerId>,
@@ -69,7 +70,7 @@ pub struct Building {
     pub capture: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Player {
     pub id: PlayerId,
     pub team: String,
@@ -81,12 +82,13 @@ pub struct Player {
     pub power: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct State {
     pub width: u16,
     pub height: u16,
     /// Terrain id per tile, row-major (y * width + x). Buildings carry their own id here too.
     pub terrain: Vec<u16>,
+    #[serde(with = "pos_map")]
     pub buildings: BTreeMap<(u16, u16), Building>,
     pub units: BTreeMap<UnitId, Unit>,
     /// In turn order.
@@ -126,5 +128,18 @@ impl State {
     }
     pub fn allied(&self, a: PlayerId, b: PlayerId) -> bool {
         a == b || self.team_of(a) == self.team_of(b)
+    }
+}
+
+/// JSON maps need string keys: buildings travel as a list of [x, y, building].
+mod pos_map {
+    use super::Building;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::collections::BTreeMap;
+    pub fn serialize<S: Serializer>(m: &BTreeMap<(u16, u16), Building>, s: S) -> Result<S::Ok, S::Error> {
+        m.iter().map(|(&(x, y), b)| (x, y, b)).collect::<Vec<_>>().serialize(s)
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<BTreeMap<(u16, u16), Building>, D::Error> {
+        Ok(Vec::<(u16, u16, Building)>::deserialize(d)?.into_iter().map(|(x, y, b)| ((x, y), b)).collect())
     }
 }

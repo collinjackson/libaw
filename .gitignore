@@ -1,3 +1,5 @@
 .vercel/
 site/public/
 target/
+site/api/maps/
+site/api/pkg/

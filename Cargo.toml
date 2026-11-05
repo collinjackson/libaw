@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/engine", "crates/replay"]
+members = ["crates/engine", "crates/replay", "crates/wasm"]
 
 [profile.release]
 debug = 1

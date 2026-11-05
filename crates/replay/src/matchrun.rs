@@ -9,7 +9,7 @@
 //! Games alternate seats. One JSON line per game goes to stdout; with SELFPLAY_LOG_DIR set,
 //! a viewer log per game too.
 
-use awbw_engine::actions::{legal_actions, Action};
+use awbw_engine::actions::Action;
 use awbw_engine::awbw::*;
 use awbw_engine::sim;
 use awbw_engine::*;
@@ -46,13 +46,8 @@ impl Agent {
     /// One action for the player to move, in contract JSON.
     fn act(&self, s: &State, template: &Value, seed: u64, rng: &mut impl FnMut() -> u32) -> Result<Value, String> {
         match self {
-            Agent::Random => {
-                let legal = legal_actions(s);
-                // Prefer acting over ending the turn, so games progress.
-                let a = if legal.len() > 1 && rng() % 20 != 0 { &legal[rng() as usize % (legal.len() - 1)] } else { legal.last().unwrap() };
-                Ok(action_to_contract(a))
-            }
-            Agent::Greedy => Ok(action_to_contract(&crate::greedy::choose(s))),
+            Agent::Random => Ok(action_to_contract(&awbw_engine::baseline::random(s, rng))),
+            Agent::Greedy => Ok(action_to_contract(&awbw_engine::baseline::choose(s))),
             Agent::Http { url, bot, agent } => {
                 let body = json!({"player_id": s.current, "seed": seed, "bot": bot, "state": to_turn_json(s, template)});
                 let mut r = agent.post(format!("{url}/act")).send_json(&body).map_err(|e| format!("http: {e}"))?;
@@ -82,7 +77,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as u32 };
     let mut st = [Stats::default(), Stats::default()];
-    let mut frames = vec![crate::frame(&s, "start")];
+    let mut frames = vec![awbw_engine::view::frame(&s, "start")];
     let mut this_turn = 0u32;
     let mut first_error = None;
     while s.day <= max_days && sim::winner(&s).is_none() {
@@ -113,7 +108,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         this_turn += 1;
         let a = if this_turn > 300 { st[i].forced_ends += 1; Action::EndTurn } else { a };
         if a == Action::EndTurn { this_turn = 0; }
-        let label = crate::describe(&s, &a);
+        let label = awbw_engine::view::describe(&s, &a);
         let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
         if let Err(e) = sim::step(&mut s, &a, &mut roll) {
             st[i].errors += 1;
@@ -122,7 +117,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
             this_turn = 0;
         }
         st[i].actions += 1;
-        if log_dir.is_some() { frames.push(crate::frame(&s, &label)); }
+        if log_dir.is_some() { frames.push(awbw_engine::view::frame(&s, &label)); }
     }
     let win_team = sim::winner(&s);
     let winner_seat = win_team.as_ref().and_then(|t| s.players.iter().find(|p| &p.team == t)).map(|p| seat_of(p.id));
@@ -136,7 +131,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         army + funds + props * 1000
     };
     if let Some(dir) = log_dir {
-        let mut log = crate::log_header(&s, &format!("{} vs {}, {name}", seats[0].name(), seats[1].name()));
+        let mut log = awbw_engine::view::log_header(&s, &format!("{} vs {}, {name}", seats[0].name(), seats[1].name()));
         log["frames"] = Value::Array(frames);
         log["winner"] = json!(win_team);
         std::fs::create_dir_all(dir).unwrap();
