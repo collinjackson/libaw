@@ -235,6 +235,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 m.x = rec.x;
                 m.y = rec.y;
                 m.fuel = rec.fuel;
+                // The move record carries the unit's ammo too: it settles whether an APC that
+                // moved next to it earlier (unrecorded Supply, assumed above) really supplied it.
+                if a["unit"]["units_ammo"].is_number() || a["unit"]["units_ammo"].is_string() {
+                    m.ammo = rec.ammo;
+                }
                 m.moved = true;
                 // Cargo rides along.
                 for cid in m.cargo.clone() {
