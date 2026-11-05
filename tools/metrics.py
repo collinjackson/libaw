@@ -17,7 +17,8 @@ Metrics (one JSON object per run):
   selfplay: random-vs-random games from the test states: actions/s, step errors, broken
     invariants (simulator health).
   powers: recorded CO power activations whose instant effects we reproduce ("match"), get
-    wrong ("differ"), or don't model yet ("missing", by CO and power). Tracked apart from
+    wrong ("differ"), or don't model yet ("missing", by CO and power); "sonja_turns": turns
+    whose HP we can't compare because Sonja hides it (her day-to-day, not yet modelled). Tracked apart from
     rules fidelity because it grows as powers are implemented.
   spend_today: Claude spend so far today (tools/spend.py).
 """
@@ -68,10 +69,11 @@ def run_checker(dirs):
     for mm in re.finditer(r"skipped: power effects not modelled: (.+?) ([YS]) x(\d+)", out):
         k = f"{mm.group(1)} {'COP' if mm.group(2) == 'Y' else 'SCOP'}"
         missing[k] = missing.get(k, 0) + int(mm.group(3))
+    sonja = re.search(r"skipped: compare: HP hidden by Sonja this turn x(\d+)", out)
     pe = checks.get("power.effects", (0, 0))
     return {"turns": int(m.group(1)), "clean": int(m.group(2)), "checks_ok": ok, "checks_total": ok + bad,
             "legal": {k: v for k, v in checks.items() if k.startswith("legal.")},
-            "powers": {"match": pe[0], "differ": pe[1], "missing": missing}}
+            "powers": {"match": pe[0], "differ": pe[1], "missing": missing, "sonja_turns": int(sonja.group(1)) if sonja else 0}}
 
 
 def run_selfplay():
@@ -102,6 +104,7 @@ def main():
         pw = r.pop("powers")
         P = row.setdefault("powers", {"match": 0, "differ": 0, "missing": {}})
         P["match"] += pw["match"]; P["differ"] += pw["differ"]
+        P["sonja_turns"] = P.get("sonja_turns", 0) + pw["sonja_turns"]
         for k, v in pw["missing"].items():
             P["missing"][k] = P["missing"].get(k, 0) + v
         row["replay"][name] = r
