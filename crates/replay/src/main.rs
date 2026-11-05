@@ -32,6 +32,9 @@ struct Report {
     /// Unit ids alive in the next turn file. Used only to settle a hidden-HP unit's fate
     /// (Sonja) when the damage range includes both death and survival.
     next_alive: std::collections::HashSet<UnitId>,
+    /// Units in a hidden-HP (Sonja) exchange this turn: their HP isn't knowable from the
+    /// records, so their HP isn't compared.
+    hidden_hp: std::collections::HashSet<UnitId>,
 }
 
 impl Report {
@@ -435,6 +438,10 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 // Sonja hides her units' HP from opponents: the record says "?".
                 let def_hidden = rd["units_hit_points"].as_str() == Some("?");
                 let att_hidden = ra["units_hit_points"].as_str() == Some("?");
+                if def_hidden || att_hidden {
+                    r.hidden_hp.insert(aid);
+                    r.hidden_hp.insert(did);
+                }
                 let new_def = if def_hidden { hidden_range(s, alive_after(r, actions, i, def.id), &att, &def, base, false) } else { attack_feasible(s, &att, &def, def_rec, base, false) };
                 let def_rec = if def_hidden { new_def.map(|h| h.display_hi()).unwrap_or(0) } else { def_rec };
                 r.check("fire.damage", new_def.is_some(), || {
@@ -969,9 +976,12 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
             tag(c, format!("{} {id} at {:?}, recorded {:?}", u.kind, (u.x, u.y), (ru.x, ru.y)))
         });
         let rd = ru.hp.display_hi();
-        clean &= r.check("state.unit_hp", rd >= u.hp.display_lo() && rd <= u.hp.display_hi(), || {
+        if r.hidden_hp.contains(id) {
+            r.skip("compare: HP hidden by Sonja this turn");
+        } else
+        { clean &= r.check("state.unit_hp", rd >= u.hp.display_lo() && rd <= u.hp.display_hi(), || {
             tag(c, format!("{} {id} hp {}..{}, recorded {rd}", u.kind, u.hp.display_lo(), u.hp.display_hi()))
-        });
+        }); }
         let alt = r.maybe_supplied.get(id).copied();
         let fuel_ok = u.fuel == ru.fuel || alt.is_some_and(|(f, _)| f - (tables().unit(&u.kind).fuel as i32 - u.fuel) == ru.fuel || f == ru.fuel);
         let ammo_ok = u.ammo == ru.ammo || alt.is_some_and(|(_, a)| a == ru.ammo || a - (tables().unit(&u.kind).ammo as i32 - u.ammo) == ru.ammo);
@@ -1029,6 +1039,7 @@ fn check_game(dir: &Path, r: &mut Report) {
         let mut s = state_from(&cur);
         r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as u32).collect();
         r.maybe_supplied.clear();
+        r.hidden_hp.clear();
         let actions: Vec<Value> = items(&cur["actions"]).into_iter().cloned().collect();
         if !actions.iter().any(|a| a["action"] == "NextTurn") {
             // The export lost this turn (an empty reply); the next file isn't its successor.
