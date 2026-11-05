@@ -25,6 +25,9 @@ use std::path::{Path, PathBuf};
 #[derive(Default)]
 struct Report {
     checks: BTreeMap<String, (u64, u64)>,
+    /// This game has fog of war (its turn files carry a `fog_array` grid): cargo shows as
+    /// "?" and the next player's funds in NextTurn as 0.
+    fog: bool,
     examples: BTreeMap<String, Vec<String>>,
     max_examples: usize,
     turns: u64,
@@ -668,7 +671,9 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     .filter(|x| x["units_hit_points"].as_str() == Some("?"))
                     .filter_map(|x| s.units.get(&(num(&x["units_id"]) as u32)))
                     .map(|u| tables().unit(&u.kind).cost as i64 / 10).collect();
-                if ours != next_funds && !hidden_steps.is_empty() {
+                if r.fog && next_funds == 0 && ours != 0 {
+                    r.skip("turn.next_funds: hidden by fog");
+                } else if ours != next_funds && !hidden_steps.is_empty() {
                     let mut gaps = std::collections::BTreeSet::from([0i64]);
                     for st in &hidden_steps {
                         gaps = gaps.iter().flat_map(|g| (-2..=2).map(move |k| g + k * st)).collect();
@@ -681,8 +686,10 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         tag(c, format!("next player {next} ({}): engine funds {ours}, recorded {next_funds}", co_of(s, next)))
                     });
                 }
-                if let Some(p) = s.player_mut(next) {
-                    p.funds = next_funds;
+                if !(r.fog && next_funds == 0) {
+                    if let Some(p) = s.player_mut(next) {
+                        p.funds = next_funds;
+                    }
                 }
             }
             "Unhide" | "Hide" => {
@@ -798,6 +805,12 @@ fn check_repairs(s: &State, before: &BTreeMap<UnitId, Unit>, a: &Value, r: &mut 
         }
         let ours = u.hp != b.hp;
         let theirs = rec.get(id);
+        if r.fog && ours && theirs.is_none() {
+            // Fog games' repair lists are incomplete (and repeat entries); the next turn's
+            // HP compare still checks the repair.
+            r.skip("repair: unlisted in a fog game");
+            continue;
+        }
         r.check("turn.repaired_set", ours == theirs.is_some_and(|&h| Some(h) != b.hp.display()) || theirs.is_some() == ours, || {
             tag(c, format!("{} {id} ({}) hp {:?}: engine repaired={ours}, recorded {:?}", u.kind, co_of(s, next), b.hp.display(), theirs))
         });
@@ -976,6 +989,21 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
             u.ammo = p.ammo;
         }
     }
+    // Fog: the power record lists only units its viewer could see; for the rest take the
+    // engine's result (the next turn's compare checks it).
+    if r.fog {
+        let listed: std::collections::HashSet<UnitId> = items(&a["unitReplace"]["units"]).iter().map(|u| num(&u["units_id"]) as u32).collect();
+        let unlisted: Vec<UnitId> = s.units.keys().filter(|id| !listed.contains(id)).copied().collect();
+        for id in unlisted {
+            if let (Some(p), Some(u)) = (pred.units.get(&id), s.units.get_mut(&id)) {
+                if p.hp != u.hp || p.stunned != u.stunned {
+                    r.skip("power: unit unlisted in a fog game, engine's result taken");
+                    u.hp = p.hp;
+                    u.stunned = p.stunned;
+                }
+            }
+        }
+    }
     let mut bad = vec![];
     for (id, u) in &s.units {
         let Some(p) = pred.units.get(id) else { continue };
@@ -1052,6 +1080,10 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
             r.skip("compare: possibly dived/hidden unit absent from record");
             continue;
         }
+        if !rec.units.contains_key(id) && r.fog && u.carried_by.is_some() {
+            r.skip("compare: fog hides cargo");
+            continue;
+        }
         if !rec.units.contains_key(id) {
             clean &= r.check("state.unit_extra", false, || tag(c, format!("engine has {} {id}, record doesn't", u.kind)));
         }
@@ -1074,6 +1106,27 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
     clean
 }
 
+/// Fog hides cargo ("?" in the transport's cargo slots, carried units left out of the list):
+/// put back the cargo our own state from the previous turn had, where the transport is still
+/// there and the record doesn't show the unit.
+fn restore_cargo(s: &mut State, prev: &State) {
+    for u in prev.units.values() {
+        let Some(t) = u.carried_by else { continue };
+        if s.units.contains_key(&u.id) || !s.units.contains_key(&t) {
+            continue;
+        }
+        let tr = s.units.get_mut(&t).unwrap();
+        if !tr.cargo.contains(&u.id) {
+            tr.cargo.push(u.id);
+        }
+        let (x, y) = (tr.x, tr.y);
+        let mut cu = u.clone();
+        cu.x = x;
+        cu.y = y;
+        s.units.insert(cu.id, cu);
+    }
+}
+
 fn check_game(dir: &Path, r: &mut Report) {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir).unwrap()
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -1086,11 +1139,16 @@ fn check_game(dir: &Path, r: &mut Report) {
         serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
     };
     let mut cur = load(&files[0]);
+    r.fog = cur["gameState"]["fog_array"].is_array();
+    let mut prev: Option<State> = None;
     for i in 0..files.len().saturating_sub(1) {
         let next = load(&files[i + 1]);
         let file = files[i].file_name().unwrap().to_string_lossy().to_string();
         let c = Ctx { game: &game, file: &file };
         let mut s = state_from(&cur);
+        if r.fog {
+            if let Some(p) = &prev { restore_cargo(&mut s, p); }
+        }
         r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as u32).collect();
         r.maybe_supplied.clear();
         r.hidden_hp.clear();
@@ -1109,8 +1167,9 @@ fn check_game(dir: &Path, r: &mut Report) {
                 if compare(&s, &rec, r, &c) {
                     r.turns_clean += 1;
                 }
+                prev = Some(s);
             }
-            Err(why) => r.skip(&format!("turn not compared: {why}")),
+            Err(why) => { r.skip(&format!("turn not compared: {why}")); prev = None; }
         }
         cur = next;
     }

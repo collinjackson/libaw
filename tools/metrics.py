@@ -47,6 +47,11 @@ def corpora():
         "league_more": done_dirs(b3),
         "team": sorted(str(p) for p in TEAM.glob("game-*") if p.is_dir()),
     }
+    # Batch 3 (2026-11-05): later GL STD pages, and the fog league.
+    seen |= set(b3)
+    for name, f in (("league_batch3", "league_std_all.json"), ("fog", "league_fog_all.json")):
+        if (DATA / f).exists():
+            out[name] = done_dirs([x["id"] for x in json.loads((DATA / f).read_text()) if x["id"] not in seen])
     return {k: v for k, v in out.items() if v}
 
 
