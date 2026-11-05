@@ -40,6 +40,36 @@ pub fn start(turn_file: &str) -> String {
     done(&s, json!({"header": log_header(&s, "")}))
 }
 
+/// A new game with chosen COs: `opts` is {"cos": [first player's, second's], "powers": bool}.
+/// "No CO" (or an unknown name) plays without a CO; powers need `powers` and a CO.
+#[wasm_bindgen]
+pub fn start_with(turn_file: &str, opts: &str) -> String {
+    let v: Value = match serde_json::from_str(turn_file) { Ok(v) => v, Err(e) => return err(e) };
+    let o: Value = serde_json::from_str(opts).unwrap_or(json!({}));
+    let mut s = state_from(&v);
+    for u in s.units.values_mut() {
+        u.hp = Hp::exact(u.hp.hi);
+    }
+    for (i, p) in s.players.iter_mut().enumerate() {
+        if let Some(co) = o["cos"][i].as_str() {
+            let (c, sc) = awbw_engine::co::power_base(co).unwrap_or((0, 0));
+            p.co = if c == 0 { "No CO".into() } else { co.to_string() };
+            p.cop_cost = c;
+            p.scop_cost = sc;
+            p.meter = 0;
+            p.power = "N".into();
+        }
+    }
+    s.powers = o["powers"].as_bool().unwrap_or(true);
+    done(&s, json!({"header": log_header(&s, "")}))
+}
+
+/// The COs a game can use, "No CO" first: [{name, powers: "full" | "partial" | "none"}].
+#[wasm_bindgen]
+pub fn cos() -> String {
+    json!(awbw_engine::co::roster().into_iter().map(|(n, st)| json!({"name": n, "powers": st})).collect::<Vec<_>>()).to_string()
+}
+
 /// Legal actions for the player to move, in the contract's format, with labels.
 #[wasm_bindgen]
 pub fn legal(state: &str) -> String {

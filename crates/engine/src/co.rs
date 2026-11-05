@@ -155,3 +155,16 @@ pub fn instant(co: &str, power: &str) -> Option<Instant> {
         _ => None,
     }
 }
+
+/// Every CO in the data, "No CO" first, with how much of their powers the engine models:
+/// "full" (ongoing and instant effects), "partial" (ongoing only; unit-specific or missile
+/// effects not yet), or "none" (No CO).
+pub fn roster() -> Vec<(String, &'static str)> {
+    let mut v: Vec<(String, &'static str)> = tables().cos.keys().cloned().collect::<Vec<_>>()
+        .into_iter().filter(|c: &String| c != "No CO" && power_base(c).is_some())
+        .map(|c| { let st = if instant(&c, "Y").is_some() && instant(&c, "S").is_some() { "full" } else { "partial" }; (c, st) })
+        .collect();
+    v.sort();
+    v.insert(0, ("No CO".to_string(), "none"));
+    v
+}
