@@ -1,0 +1,268 @@
+<meta name="dash-one-writer">
+<style>
+#dash-root .pp { font-family: var(--font-anthropic-sans); color: var(--color-fg); max-width: 72rem; margin-inline: auto; }
+#dash-root .pp h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0 0 var(--cds-gap-xs); }
+#dash-root .pp .lede { font-size: var(--cds-font-size-body); color: var(--color-fg); margin: 0 0 var(--cds-gap-lg); max-width: 48rem; }
+#dash-root .pp .lede b, #dash-root .pp .tile b { font-weight: 600; font-variant-numeric: tabular-nums; }
+#dash-root .pp .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: var(--cds-gap-md); margin-bottom: var(--cds-gap-lg); }
+#dash-root .pp .card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; }
+#dash-root .pp .tile .big { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; display: block; margin: var(--cds-gap-xs) 0; min-height: 1.3em; }
+#dash-root .pp .label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; }
+#dash-root .pp h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0 0 var(--cds-gap-xs); }
+#dash-root .pp .note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0 0 var(--cds-gap-md); max-width: 48rem; }
+#dash-root .pp .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: var(--cds-gap-md); margin-bottom: var(--cds-gap-lg); }
+#dash-root .pp .wide { margin-bottom: var(--cds-gap-lg); }
+#dash-root .pp .chart { position: relative; min-height: 300px; }
+#dash-root .pp .tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); max-width: 18rem; }
+#dash-root .pp .tip .when { color: var(--cds-text-secondary); }
+#dash-root .pp .tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+#dash-root .pp .scroll { max-height: 26rem; overflow: auto; }
+#dash-root .pp table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+#dash-root .pp th { position: sticky; top: 0; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); }
+#dash-root .pp td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); }
+#dash-root .pp .num { text-align: right; }
+#dash-root .pp .bar { display: inline-block; height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+#dash-root .pp .hide-narrow { }
+@media (max-width: 560px) { #dash-root .pp .hide-narrow { display: none; } }
+#dash-root .pp .fail { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: inherit; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+#dash-root .pp .fail i { width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+#dash-root [data-dash-source-state=empty] { color: transparent; }
+#dash-root [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+</style>
+
+<div class="pp">
+  <h1 id="top">AWBW parity</h1>
+  <p class="lede">Our engine reproduces <b data-draw="exact" data-source="summary" data-field="exact">—</b> of
+    <b data-draw="turns" data-source="summary" data-field="turns">—</b> recorded AWBW turns exactly, across
+    <b data-draw="games_n" data-source="summary" data-field="games">—</b> real games.</p>
+
+  <div class="tiles">
+    <div class="card tile"><p class="label">Turns matching AWBW exactly</p>
+      <span class="big" data-draw="exact" data-source="summary" data-field="exact">—</span>
+      <p class="label">Board after the turn equals AWBW's record</p></div>
+    <div class="card tile"><p class="label">Rule checks passed</p>
+      <span class="big" data-draw="checks_rate" data-source="summary" data-field="checks_rate">—</span>
+      <p class="label"><b data-draw="misses_n" data-source="summary" data-field="misses">—</b> misses in
+        <b data-draw="checks_total" data-source="summary" data-field="checks_total">—</b> checks</p></div>
+    <div class="card tile"><p class="label">Recorded moves our engine allows</p>
+      <span class="big" data-draw="legal_rate" data-source="summary" data-field="legal_rate">—</span>
+      <p class="label">Of <b data-draw="legal_total" data-source="summary" data-field="legal_total">—</b> moves, attacks, captures and builds</p></div>
+    <div class="card tile"><p class="label">Games tested</p>
+      <span class="big" data-draw="games_n" data-source="summary" data-field="games">—</span>
+      <p class="label">Public AWBW replays, no fog</p></div>
+  </div>
+
+  <div class="card wide" id="progress">
+    <h2>Exact-match rate by commit</h2>
+    <p class="note">Every commit re-scored on today's fixed set of games. A turn an older engine couldn't compare counts as a miss.</p>
+    <div class="chart" data-draw="progress" data-source="progress"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card" id="misses">
+      <h2>Where it still misses</h2>
+      <p class="note">Rule checks with at least one mismatch, most misses first.</p>
+      <div class="scroll">
+        <table data-source="misses" data-row-key="check">
+          <thead><tr><th data-field="area">Area</th><th data-field="check">Check</th><th class="num" data-field="misses">Misses</th><th class="num hide-narrow" data-field="total">Checked</th></tr></thead>
+          <tbody data-draw="misses"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" id="games">
+      <h2>By game</h2>
+      <p class="note">Share of each game's turns that match exactly, lowest first.</p>
+      <div class="scroll">
+        <table data-source="game_table" data-row-key="game">
+          <thead><tr><th data-field="game">Game</th><th class="hide-narrow" data-field="cos">COs</th><th class="hide-narrow" data-field="set">Set</th><th class="num" data-field="turns">Turns</th><th data-field="rate">Exact</th></tr></thead>
+          <tbody data-draw="games"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card wide" id="method">
+    <h2>How it's measured</h2>
+    <p class="note">For each recorded turn, the engine starts from AWBW's state, replays the turn's actions with its own rules, and compares the result with AWBW's state at the start of the next turn: every unit's position, HP, fuel and ammo; every building's owner and capture points; each player's funds. Damage luck is taken from the record. Replays show HP as 1 to 10, so HP matches at that resolution. The games are cached copies of public AWBW replays, fetched once, so these checks put no load on AWBW. Sets: League is Global League standard 1v1 games; League, batch 2 is a second sample of them; Team games are multi-player team matches.</p>
+  </div>
+</div>
+
+<script>
+const SET_NAME = {league: 'League', league_batch2: 'League, batch 2', team: 'Team games'};
+window.ppSetName = SET_NAME;
+
+dash.calc('summary', {
+  inputs: ['games', 'checks'],
+  title: 'Headline figures',
+  description: 'Totals over every game and every rule check.',
+  fn: (games, checks) => {
+    const sum = (rows, k) => rows.reduce((a, r) => a + Number(r[k]), 0);
+    const legal = checks.filter((c) => c.area === 'Legal moves');
+    const turns = sum(games, 'turns'), clean = sum(games, 'clean');
+    const ok = sum(checks, 'ok'), total = sum(checks, 'total');
+    return [{games: games.length, turns, clean, exact: clean / turns, checks_total: total, misses: total - ok,
+      checks_rate: ok / total, legal_total: sum(legal, 'total'), legal_rate: sum(legal, 'ok') / sum(legal, 'total')}];
+  },
+});
+
+dash.calc('progress', {
+  inputs: ['history'],
+  title: 'Exact-match rate by commit',
+  description: "Clean turns over each set's largest turn count; uncompared turns count as misses.",
+  fn: (history) => {
+    const den = {};
+    history.forEach((h) => { den[h.corpus] = Math.max(den[h.corpus] || 0, Number(h.turns)); });
+    return history.map((h) => ({commit: h.commit, time: h.time, subject: h.subject, corpus: h.corpus,
+      rate: Number(h.clean) / den[h.corpus]}));
+  },
+});
+
+dash.calc('misses', {
+  inputs: ['checks'],
+  title: 'Checks with misses',
+  description: 'Rule checks where at least one comparison failed.',
+  fn: (checks) => checks
+    .map((c) => ({check: c.check, area: c.area, misses: Number(c.total) - Number(c.ok), total: Number(c.total)}))
+    .filter((c) => c.misses > 0)
+    .sort((a, b) => b.misses - a.misses),
+});
+
+dash.calc('game_table', {
+  inputs: ['games'],
+  title: 'Exact turns by game',
+  description: "Each game's clean turns over its compared turns.",
+  fn: (games) => games
+    .map((g) => ({game: g.game, set: g.corpus, cos: g.cos, turns: Number(g.turns), clean: Number(g.clean),
+      rate: Number(g.turns) ? Number(g.clean) / Number(g.turns) : 0}))
+    .sort((a, b) => a.rate - b.rate || b.turns - a.turns),
+});
+</script>
+
+<script>
+const pct = (v) => (v >= 0.9995 && v < 1 ? d3.format('.2%')(v) : d3.format('.1%')(v));
+const cnt = d3.format(',');
+const failLine = (el) => {
+  const d = document.createElement('div'); d.className = 'fail';
+  const i = document.createElement('i'); const s = document.createElement('span'); s.textContent = 'Failed to load';
+  d.append(i, s); el.replaceChildren(d);
+};
+const figure = (name, field, fmt) => dash.draw(name, (el) => {
+  const r = dash.data('summary');
+  el.classList.toggle('dash-skeleton', r.status === 'loading');
+  el.textContent = r.status === 'ok' && r.data[0] ? fmt(r.data[0][field]) : '—';
+});
+figure('exact', 'exact', pct);
+figure('turns', 'turns', cnt);
+figure('games_n', 'games', cnt);
+figure('checks_rate', 'checks_rate', pct);
+figure('misses_n', 'misses', cnt);
+figure('checks_total', 'checks_total', cnt);
+figure('legal_rate', 'legal_rate', pct);
+figure('legal_total', 'legal_total', cnt);
+
+dash.draw('misses', (tb) => {
+  const r = dash.data('misses');
+  tb.replaceChildren();
+  if (r.status !== 'ok') return;
+  for (const m of r.data) {
+    const tr = document.createElement('tr');
+    for (const [v, cls] of [[m.area, ''], [m.check, ''], [cnt(m.misses), 'num'], [cnt(m.total), 'num hide-narrow']]) {
+      const td = document.createElement('td'); td.textContent = v; if (cls) td.className = cls; tr.append(td);
+    }
+    tb.append(tr);
+  }
+});
+
+dash.draw('games', (tb) => {
+  const r = dash.data('game_table');
+  tb.replaceChildren();
+  if (r.status !== 'ok') return;
+  for (const g of r.data) {
+    const tr = document.createElement('tr');
+    const cells = [[g.game, ''], [g.cos, 'hide-narrow'], [window.ppSetName[g.set] || g.set, 'hide-narrow'], [cnt(g.turns), 'num']];
+    for (const [v, cls] of cells) { const td = document.createElement('td'); td.textContent = v; if (cls) td.className = cls; tr.append(td); }
+    const td = document.createElement('td');
+    const bar = document.createElement('span'); bar.className = 'bar';
+    bar.style.width = `${Math.max(2, g.rate * 60)}px`;
+    bar.style.background = g.rate < 1 ? 'var(--cds-chart-status-critical)' : 'var(--cds-chart-muted)';
+    const t = document.createElement('span'); t.textContent = pct(g.rate);
+    td.append(bar, t); tr.append(td); tb.append(tr);
+  }
+});
+
+dash.draw('progress', (el) => {
+  const r = dash.data('progress');
+  el.classList.toggle('dash-skeleton', r.status === 'loading');
+  el.replaceChildren();
+  if (r.status === 'error') { failLine(el); return; }
+  if (r.status !== 'ok' || !r.data.length) return;
+  const rows = r.data.map((d) => ({...d, t: new Date(d.time)}));
+  const sets = [...new Set(rows.map((d) => d.corpus))];
+  const color = (c) => dash.colors[sets.indexOf(c) % dash.colors.length];
+  const W = Math.max(280, el.clientWidth), H = 300;
+  const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`)
+    .style('font-family', 'var(--font-anthropic-sans)').style('overflow', 'visible');
+  const lo = Math.min(0.9, Math.floor(d3.min(rows, (d) => d.rate) * 20) / 20);
+  const y = d3.scaleLinear([lo, 1], [H - 28, 10]);
+  // Margins from the widest labels as drawn.
+  const probe = svg.append('text').attr('font-size', 12);
+  const widest = (ss) => d3.max(ss, (s) => { probe.text(s); return probe.node().getComputedTextLength(); });
+  const yTicks = y.ticks(5);
+  const ml = widest(yTicks.map(d3.format('.0%'))) + 10;
+  const last = sets.map((c) => rows.filter((d) => d.corpus === c).at(-1));
+  const endLabels = last.map((d) => `${window.ppSetName[d.corpus] || d.corpus} ${pct(d.rate)}`);
+  const mr = Math.min(W * 0.4, widest(endLabels) + 12);
+  probe.remove();
+  const x = d3.scaleTime(d3.extent(rows, (d) => d.t), [ml, W - mr]);
+  const g = svg.append('g');
+  g.selectAll('line.grid').data(yTicks).join('line').attr('x1', ml).attr('x2', W - mr)
+    .attr('y1', y).attr('y2', y).attr('stroke', 'var(--cds-chart-grid)');
+  g.selectAll('text.yt').data(yTicks).join('text').attr('x', ml - 8).attr('y', (d) => y(d) + 4)
+    .attr('text-anchor', 'end').attr('font-size', 12).attr('fill', 'var(--color-fg-muted)').text(d3.format('.0%'));
+  const xa = svg.append('g').attr('transform', `translate(0,${H - 28})`)
+    .call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - ml - mr) / 110))).tickSizeOuter(0));
+  xa.attr('font-size', null).attr('font-family', null);
+  xa.selectAll('text').attr('font-size', 12).attr('fill', 'var(--color-fg-muted)');
+  xa.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)');
+  const line = d3.line().x((d) => x(d.t)).y((d) => y(d.rate));
+  for (const c of sets) {
+    svg.append('path').datum(rows.filter((d) => d.corpus === c)).attr('d', line).attr('fill', 'none')
+      .attr('stroke', color(c)).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
+  }
+  // End labels, nudged apart.
+  const ends = last.map((d, i) => ({y: y(d.rate) + 4, text: endLabels[i], c: d.corpus})).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 15);
+  svg.selectAll('text.end').data(ends).join('text').attr('x', W - mr + 6).attr('y', (d) => d.y)
+    .attr('font-size', 12).attr('fill', (d) => color(d.c)).text((d) => d.text);
+  // Tooltip on the nearest commit.
+  const commits = [...d3.group(rows, (d) => d.commit).values()].map((v) => v).sort((a, b) => a[0].t - b[0].t);
+  const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; el.append(tip);
+  const rule = svg.append('line').attr('y1', 10).attr('y2', H - 28).attr('stroke', 'var(--cds-chart-reference)').attr('visibility', 'hidden');
+  const dots = svg.append('g');
+  const fmtT = d3.timeFormat('%b %-d, %-I:%M %p');
+  svg.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml - mr).attr('height', H - 28).attr('fill', 'transparent')
+    .on('pointermove', (ev) => {
+      const [px] = d3.pointer(ev);
+      const t = x.invert(px);
+      const v = commits.reduce((b, c) => (Math.abs(c[0].t - t) < Math.abs(b[0].t - t) ? c : b));
+      const cx = x(v[0].t);
+      rule.attr('x1', cx).attr('x2', cx).attr('visibility', 'visible');
+      dots.selectAll('circle').data(v).join('circle').attr('cx', cx).attr('cy', (d) => y(d.rate)).attr('r', 3.5)
+        .attr('fill', (d) => color(d.corpus));
+      tip.replaceChildren();
+      const w = document.createElement('div'); w.className = 'when'; w.textContent = `${fmtT(v[0].t)} · ${v[0].commit}`; tip.append(w);
+      const s = document.createElement('div'); s.textContent = v[0].subject; s.style.marginBottom = '4px'; tip.append(s);
+      for (const d of v) {
+        const row = document.createElement('div'); const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = color(d.corpus);
+        const tx = document.createElement('span'); tx.textContent = `${window.ppSetName[d.corpus] || d.corpus}: ${pct(d.rate)}`;
+        row.append(sw, tx); tip.append(row);
+      }
+      tip.hidden = false;
+      const scale = el.clientWidth / W;
+      const left = cx * scale + 12, tw = tip.offsetWidth;
+      tip.style.left = `${left + tw > el.clientWidth ? cx * scale - tw - 12 : left}px`;
+      tip.style.top = '8px';
+    })
+    .on('pointerleave', () => { tip.hidden = true; rule.attr('visibility', 'hidden'); dots.selectAll('circle').remove(); });
+});
+</script>

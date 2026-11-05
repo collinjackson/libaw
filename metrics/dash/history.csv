@@ -1,0 +1,88 @@
+commit,time,subject,corpus,turns,clean
+ae40aae,2026-11-04T12:51:55-08:00,"Engine skeleton, data tables and replay checker",league,588,489
+ae40aae,2026-11-04T12:51:55-08:00,"Engine skeleton, data tables and replay checker",league_batch2,745,635
+ae40aae,2026-11-04T12:51:55-08:00,"Engine skeleton, data tables and replay checker",team,404,339
+1bce399,2026-11-04T12:52:28-08:00,Add work notes and next steps,league,588,489
+1bce399,2026-11-04T12:52:28-08:00,Add work notes and next steps,league_batch2,745,635
+1bce399,2026-11-04T12:52:28-08:00,Add work notes and next steps,team,404,339
+d46b137,2026-11-04T13:14:40-08:00,"Checker: skip export gaps, fix weapon ammo, model supply rules",league,588,508
+d46b137,2026-11-04T13:14:40-08:00,"Checker: skip export gaps, fix weapon ammo, model supply rules",league_batch2,745,650
+d46b137,2026-11-04T13:14:40-08:00,"Checker: skip export gaps, fix weapon ammo, model supply rules",team,403,368
+2099fb7,2026-11-04T13:15:23-08:00,"Checker: hidden dived subs, Unhide, hidden-side attacks",league,588,508
+2099fb7,2026-11-04T13:15:23-08:00,"Checker: hidden dived subs, Unhide, hidden-side attacks",league_batch2,745,650
+2099fb7,2026-11-04T13:15:23-08:00,"Checker: hidden dived subs, Unhide, hidden-side attacks",team,406,383
+7dbf90b,2026-11-04T13:16:22-08:00,"Checker: skip powered attacks, reset capture on death; 98% clean",league,588,559
+7dbf90b,2026-11-04T13:16:22-08:00,"Checker: skip powered attacks, reset capture on death; 98% clean",league_batch2,745,710
+7dbf90b,2026-11-04T13:16:22-08:00,"Checker: skip powered attacks, reset capture on death; 98% clean",team,406,398
+4ed9272,2026-11-04T13:32:05-08:00,"Checker: hidden-side attacks, Black Boat repair funds; 99% clean",league,588,559
+4ed9272,2026-11-04T13:32:05-08:00,"Checker: hidden-side attacks, Black Boat repair funds; 99% clean",league_batch2,745,710
+4ed9272,2026-11-04T13:32:05-08:00,"Checker: hidden-side attacks, Black Boat repair funds; 99% clean",team,406,402
+1301311,2026-11-04T13:51:04-08:00,Checker: missile silo launches and pipe-seam attacks,league,730,677
+1301311,2026-11-04T13:51:04-08:00,Checker: missile silo launches and pipe-seam attacks,league_batch2,847,787
+1301311,2026-11-04T13:51:04-08:00,Checker: missile silo launches and pipe-seam attacks,team,417,413
+68ad92c,2026-11-04T13:51:54-08:00,Add a polite replay fetcher for Global League games,league,730,677
+68ad92c,2026-11-04T13:51:54-08:00,Add a polite replay fetcher for Global League games,league_batch2,847,787
+68ad92c,2026-11-04T13:51:54-08:00,Add a polite replay fetcher for Global League games,team,417,413
+149d23f,2026-11-04T14:12:01-08:00,Data-driven CO day-to-day abilities,league,730,677
+149d23f,2026-11-04T14:12:01-08:00,Data-driven CO day-to-day abilities,league_batch2,847,787
+149d23f,2026-11-04T14:12:01-08:00,Data-driven CO day-to-day abilities,team,417,413
+b5fed49,2026-11-04T14:14:12-08:00,"Seam rubble, Join keeps capture, explicit Supply; GL corpus 97.7%",league,749,715
+b5fed49,2026-11-04T14:14:12-08:00,"Seam rubble, Join keeps capture, explicit Supply; GL corpus 97.7%",league_batch2,876,847
+b5fed49,2026-11-04T14:14:12-08:00,"Seam rubble, Join keeps capture, explicit Supply; GL corpus 97.7%",team,417,414
+3caa0ad,2026-11-04T14:21:57-08:00,"Scoreboard: all 25 league games, 97.4%",league,749,715
+3caa0ad,2026-11-04T14:21:57-08:00,"Scoreboard: all 25 league games, 97.4%",league_batch2,876,847
+3caa0ad,2026-11-04T14:21:57-08:00,"Scoreboard: all 25 league games, 97.4%",team,417,414
+f2e6aec,2026-11-04T14:35:35-08:00,Weather movement costs; seam rubble capture; league corpus 100%,league,749,736
+f2e6aec,2026-11-04T14:35:35-08:00,Weather movement costs; seam rubble capture; league corpus 100%,league_batch2,876,873
+f2e6aec,2026-11-04T14:35:35-08:00,Weather movement costs; seam rubble capture; league corpus 100%,team,417,414
+5932f1d,2026-11-04T14:54:09-08:00,"CO powers: Power action effects, power attack/defence, Javier/Lash/Sami specials, elimination by capture",league,821,807
+5932f1d,2026-11-04T14:54:09-08:00,"CO powers: Power action effects, power attack/defence, Javier/Lash/Sami specials, elimination by capture",league_batch2,1017,1009
+5932f1d,2026-11-04T14:54:09-08:00,"CO powers: Power action effects, power attack/defence, Javier/Lash/Sami specials, elimination by capture",team,453,448
+cf67aed,2026-11-04T15:11:47-08:00,Games-page parser with COs; Delete action; batch 2 selection,league,822,808
+cf67aed,2026-11-04T15:11:47-08:00,Games-page parser with COs; Delete action; batch 2 selection,league_batch2,1017,1009
+cf67aed,2026-11-04T15:11:47-08:00,Games-page parser with COs; Delete action; batch 2 selection,team,453,448
+8d5cd6a,2026-11-04T15:34:11-08:00,"Sonja hidden HP and counters, Drake fuel rounding; batch 2 partial 98.8%",league,822,816
+8d5cd6a,2026-11-04T15:34:11-08:00,"Sonja hidden HP and counters, Drake fuel rounding; batch 2 partial 98.8%",league_batch2,1017,1016
+8d5cd6a,2026-11-04T15:34:11-08:00,"Sonja hidden HP and counters, Drake fuel rounding; batch 2 partial 98.8%",team,453,448
+0f4cfcf,2026-11-04T15:51:26-08:00,"Terrain bonus kinds: bridge isn't road, empty silo isn't plain; batch 2 99.3%",league,822,816
+0f4cfcf,2026-11-04T15:51:26-08:00,"Terrain bonus kinds: bridge isn't road, empty silo isn't plain; batch 2 99.3%",league_batch2,1017,1016
+0f4cfcf,2026-11-04T15:51:26-08:00,"Terrain bonus kinds: bridge isn't road, empty silo isn't plain; batch 2 99.3%",team,453,448
+393772d,2026-11-04T15:53:56-08:00,Batch 2 complete: 99.4% of 1129 turns,league,822,816
+393772d,2026-11-04T15:53:56-08:00,Batch 2 complete: 99.4% of 1129 turns,league_batch2,1017,1016
+393772d,2026-11-04T15:53:56-08:00,Batch 2 complete: 99.4% of 1129 turns,team,453,448
+155f4a4,2026-11-04T16:11:12-08:00,Skip HP compare after Sonja hidden exchanges; reorder Next toward simulator and bot,league,822,817
+155f4a4,2026-11-04T16:11:12-08:00,Skip HP compare after Sonja hidden exchanges; reorder Next toward simulator and bot,league_batch2,1017,1016
+155f4a4,2026-11-04T16:11:12-08:00,Skip HP compare after Sonja hidden exchanges; reorder Next toward simulator and bot,team,453,448
+640083d,2026-11-04T16:22:13-08:00,Next: observability and demo after the first bot,league,822,817
+640083d,2026-11-04T16:22:13-08:00,Next: observability and demo after the first bot,league_batch2,1017,1016
+640083d,2026-11-04T16:22:13-08:00,Next: observability and demo after the first bot,team,453,448
+b180640,2026-11-04T17:02:44-08:00,"Eval harness: opponent API contract, contract test, VM prompt",league,822,817
+b180640,2026-11-04T17:02:44-08:00,"Eval harness: opponent API contract, contract test, VM prompt",league_batch2,1017,1016
+b180640,2026-11-04T17:02:44-08:00,"Eval harness: opponent API contract, contract test, VM prompt",team,453,448
+5588ad7,2026-11-04T17:05:20-08:00,Legal-action generator; replay check that every recorded move/attack/capture/build is generated,league,822,817
+5588ad7,2026-11-04T17:05:20-08:00,Legal-action generator; replay check that every recorded move/attack/capture/build is generated,league_batch2,1017,1016
+5588ad7,2026-11-04T17:05:20-08:00,Legal-action generator; replay check that every recorded move/attack/capture/build is generated,team,453,448
+5d56cad,2026-11-04T17:12:55-08:00,"Simulator in the engine: step, attack, end_turn, winner; random self-play smoke test",league,822,817
+5d56cad,2026-11-04T17:12:55-08:00,"Simulator in the engine: step, attack, end_turn, winner; random self-play smoke test",league_batch2,1017,1016
+5d56cad,2026-11-04T17:12:55-08:00,"Simulator in the engine: step, attack, end_turn, winner; random self-play smoke test",team,453,448
+aef8465,2026-11-04T17:20:32-08:00,Private GitHub remote approved: push to origin only,league,822,817
+aef8465,2026-11-04T17:20:32-08:00,Private GitHub remote approved: push to origin only,league_batch2,1017,1016
+aef8465,2026-11-04T17:20:32-08:00,Private GitHub remote approved: push to origin only,team,453,448
+705c52b,2026-11-04T17:23:27-08:00,"Game logs, HTML game viewer, CI with self-play smoke test, metrics history",league,822,817
+705c52b,2026-11-04T17:23:27-08:00,"Game logs, HTML game viewer, CI with self-play smoke test, metrics history",league_batch2,1017,1016
+705c52b,2026-11-04T17:23:27-08:00,"Game logs, HTML game viewer, CI with self-play smoke test, metrics history",team,453,448
+31b051a,2026-11-04T17:33:05-08:00,Replay fidelity in CI from the private data repo; regression baseline,league,822,817
+31b051a,2026-11-04T17:33:05-08:00,Replay fidelity in CI from the private data repo; regression baseline,league_batch2,1017,1016
+31b051a,2026-11-04T17:33:05-08:00,Replay fidelity in CI from the private data repo; regression baseline,team,453,448
+d7cae80,2026-11-04T17:33:23-08:00,CI: quote step name,league,822,817
+d7cae80,2026-11-04T17:33:23-08:00,CI: quote step name,league_batch2,1017,1016
+d7cae80,2026-11-04T17:33:23-08:00,CI: quote step name,team,453,448
+74a91c6,2026-11-04T17:37:21-08:00,metrics: fail loudly when the checker gives no summary; CI step uses pipefail,league,822,817
+74a91c6,2026-11-04T17:37:21-08:00,metrics: fail loudly when the checker gives no summary; CI step uses pipefail,league_batch2,1017,1016
+74a91c6,2026-11-04T17:37:21-08:00,metrics: fail loudly when the checker gives no summary; CI step uses pipefail,team,453,448
+93f41c2,2026-11-04T17:39:45-08:00,Checker skips hidden files and names the file it can't parse,league,822,817
+93f41c2,2026-11-04T17:39:45-08:00,Checker skips hidden files and names the file it can't parse,league_batch2,1017,1016
+93f41c2,2026-11-04T17:39:45-08:00,Checker skips hidden files and names the file it can't parse,team,453,448
+ecb9bed,2026-11-04T17:42:04-08:00,Move the AWBW turn-file parser into the engine crate (for the serializer),league,822,817
+ecb9bed,2026-11-04T17:42:04-08:00,Move the AWBW turn-file parser into the engine crate (for the serializer),league_batch2,1017,1016
+ecb9bed,2026-11-04T17:42:04-08:00,Move the AWBW turn-file parser into the engine crate (for the serializer),team,453,448

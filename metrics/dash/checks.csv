@@ -1,0 +1,54 @@
+check,area,ok,total
+build.affordable,Builds,6520,6520
+build.fresh_stats,Builds,6520,6520
+build.owns_site,Builds,6520,6520
+build.site,Builds,6520,6520
+build.tile_free,Builds,6520,6520
+capt.foot_unit,Capture,6338,6338
+capt.points,Capture,6338,6338
+delete.own_unit,Delete,1,1
+fire.attacker_ammo,Combat,7571,7572
+fire.counter_ammo,Combat,3684,3684
+fire.counter_damage,Combat,3680,3684
+fire.damage,Combat,7571,7572
+fire.indirect_didnt_move,Combat,486,486
+fire.no_counter,Combat,728,728
+fire.range,Combat,7572,7572
+join.hp,Join,155,155
+join.refund,Join,155,155
+join.same_kind,Join,155,155
+launch.foot_on_silo,launch,10,10
+launch.loaded_silo,launch,10,10
+legal.attack_target,Legal moves,7572,7572
+legal.build,Legal moves,6520,6520
+legal.capture,Legal moves,6338,6338
+legal.move_reachable,Legal moves,30311,30311
+load.capacity,Load/unload,646,646
+load.cargo_type,Load/unload,646,646
+load.same_tile,Load/unload,646,646
+move.end_matches_record,Movement,30315,30315
+move.fuel_after,Movement,30315,30315
+move.path_starts_at_unit,Movement,30315,30315
+move.within_fuel,Movement,30315,30315
+move.within_range,Movement,30315,30315
+power.player_is_current,CO powers,250,250
+repair.adjacent,Repair,243,243
+repair.funds,Repair,242,243
+repair.hp,Repair,243,243
+seam.range,Pipe seams,376,376
+state.building_capture,Board state,205083,205083
+state.building_owner,Board state,205083,205083
+state.funds,Board state,7747,7750
+state.unit_ammo,Board state,122580,122580
+state.unit_exists,Board state,0,2
+state.unit_fuel,Board state,122579,122580
+state.unit_hp,Board state,122513,122520
+state.unit_pos,Board state,122580,122580
+turn.next_funds,Start of turn,2290,2292
+turn.repaired_hp,Start of turn,11576,11576
+turn.repaired_set,Start of turn,38913,38913
+turn.supplied_known,Start of turn,316,316
+turn.supplied_set,Start of turn,2291,2292
+unload.adjacent,Load/unload,589,589
+unload.passable,Load/unload,589,589
+unload.was_cargo,Load/unload,589,589

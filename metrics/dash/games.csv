@@ -1,0 +1,59 @@
+game,corpus,cos,days,turns,clean
+1754328,league,Sami vs Olaf,13,24,24
+1757129,league,Koal vs Hawke,11,20,20
+1752194,league,Hawke vs Sasha,16,30,30
+1755397,league,Von Bolt vs Sasha,15,28,28
+1757067,league,Hawke vs Von Bolt,20,39,39
+1756126,league,Von Bolt vs Hawke,15,29,29
+1755282,league,Grit vs Sami,15,28,28
+1739814,league,Max vs Eagle,17,32,32
+1747374,league,Kindle vs Olaf,30,58,58
+1750584,league,Hawke vs Hawke,13,25,25
+1754243,league,Hawke vs Javier,17,33,33
+1754060,league,Max vs Lash,17,32,32
+1752172,league,Kindle vs Olaf,12,23,23
+1754832,league,Sami vs Olaf,21,40,40
+1755654,league,Grimm vs Jake,21,41,41
+1751732,league,Kindle vs Sami,12,22,22
+1753866,league,Kindle vs Sami,9,17,17
+1753821,league,Max vs Kindle,15,28,28
+1756061,league,Eagle vs Olaf,12,23,23
+1747924,league,Hawke vs Sasha,16,30,30
+1754979,league,Hawke vs Von Bolt,13,24,24
+1752818,league,Adder vs Andy,18,34,34
+1755214,league,Sasha vs Von Bolt,16,31,31
+1738861,league,Eagle vs Kindle,11,20,20
+1746729,league,Sonja vs Koal,19,37,32
+1740433,league,Olaf vs Olaf,12,23,23
+1740486,league,Max vs Olaf,13,25,25
+1741466,league,Eagle vs Kindle,14,26,26
+1751683,league_batch2,Drake vs Von Bolt,17,33,33
+1751924,league_batch2,Drake vs Lash,22,43,43
+1748399,league_batch2,Rachel vs Rachel,29,56,56
+1756155,league_batch2,Rachel vs Rachel,25,49,49
+1742737,league_batch2,Jess vs Adder,25,49,49
+1746087,league_batch2,Jess vs Koal,21,41,41
+1729758,league_batch2,Grimm vs Grimm,34,66,66
+1750237,league_batch2,Max vs Sonja,14,27,27
+1754087,league_batch2,Andy vs Kindle,18,34,34
+1755513,league_batch2,Andy vs Olaf,15,28,28
+1755106,league_batch2,Andy vs Adder,20,38,38
+1754325,league_batch2,Jake vs Jake,22,42,42
+1749971,league_batch2,Koal vs Jake,21,40,40
+1755362,league_batch2,Hawke vs Koal,12,23,22
+1753883,league_batch2,Andy vs Koal,17,32,32
+1729081,league_batch2,Von Bolt vs Sasha,31,61,61
+1754769,league_batch2,Sasha vs Von Bolt,21,41,41
+1751718,league_batch2,Kindle vs Sasha,20,39,39
+1754142,league_batch2,Eagle vs Kindle,25,49,49
+1757343,league_batch2,Sasha vs Sasha,26,50,50
+1748347,league_batch2,Sasha vs Sasha,20,39,39
+1747151,league_batch2,Olaf vs Max,19,37,37
+1736346,league_batch2,Olaf vs Kindle,19,37,37
+1750477,league_batch2,Lash vs Javier,17,33,33
+1747354,league_batch2,Javier vs Hawke,16,30,30
+1548776,team,12 players,13,119,116
+1556853,team,6 players,7,38,38
+1563482,team,6 players,19,109,108
+1578803,team,10 players,18,169,168
+1672400,team,4 players,5,18,18
