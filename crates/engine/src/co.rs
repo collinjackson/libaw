@@ -136,11 +136,48 @@ pub struct Instant {
     /// Movement points added to the user's units for the rest of the turn.
     pub moves: i32,
     pub weather: Option<char>,
+    /// Which of the user's units get `moves`: "all", "foot", "vehicle" (ground, not foot)
+    /// or "direct" (non-foot units that fire at range 1).
+    pub moves_for: &'static str,
+    /// Refill fuel and ammo of the user's units that aren't being carried (Jess).
+    pub resupply: bool,
+    /// The user's non-foot units that already acted can act again (Eagle's super).
+    pub act_again: bool,
+    /// Displayed HP removed from enemy units standing on properties (Kindle's COP).
+    pub urban_loss: i32,
+    /// Drain other players' meters by their super cost x the user's funds / 50000 (Sasha's COP).
+    pub drain: bool,
+}
+
+/// Does a unit of this kind get a power's movement bonus?
+pub fn moves_apply(kind: &str, moves_for: &str) -> bool {
+    let u = tables().unit(kind);
+    let foot = crate::rules::is_foot(kind);
+    let ground = !matches!(u.move_type.as_str(), "A" | "S" | "L");
+    match moves_for {
+        "foot" => foot,
+        "vehicle" => ground && !foot,
+        "direct" => !foot && u.range[0] <= 1 && u.range[1] == 1,
+        _ => true,
+    }
 }
 
 pub fn instant(co: &str, power: &str) -> Option<Instant> {
-    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather });
+    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false });
+    let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel: 1.0, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false });
     match (co, power) {
+        ("Sami", "Y") => only(1, "foot", false),
+        ("Sami", "S") => only(2, "foot", false),
+        ("Jess", "Y") => only(1, "vehicle", true),
+        ("Jess", "S") => only(2, "vehicle", true),
+        ("Max", "Y") => only(1, "direct", false),
+        ("Max", "S") => only(2, "direct", false),
+        ("Jake", "Y") => only(0, "vehicle", false),
+        ("Jake", "S") => only(2, "vehicle", false),
+        ("Eagle", "S") => Some(Instant { act_again: true, ..only(0, "all", false).unwrap() }),
+        ("Nell", "S") => i(0, 0, 1.0, 0, None),
+        ("Kindle", "Y") => Some(Instant { urban_loss: 3, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Sasha", "Y") => Some(Instant { drain: true, ..i(0, 0, 1.0, 0, None).unwrap() }),
         ("Andy", "Y") => i(2, 0, 1.0, 0, None),
         ("Andy", "S") => i(5, 0, 1.0, 1, None),
         ("Hawke", "Y") => i(1, 1, 1.0, 0, None),

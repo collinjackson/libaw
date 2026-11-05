@@ -232,10 +232,50 @@ pub fn power_effects(s: &mut State, pid: PlayerId, kind: &str) -> bool {
         }
     }
     if e.moves != 0 {
-        let own: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
+        let own: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid && co::moves_apply(&u.kind, e.moves_for)
+            // Recorded games: class-specific bonuses (Sami, Jess, Max, Jake) skip carried
+            // units; whole-army ones (Koal, Adder, Andy) include them.
+            && (e.moves_for == "all" || u.carried_by.is_none())).map(|u| u.id).collect();
         for id in own {
             let m = crate::rules::movement_range(s, &s.units[&id]) as i32 + e.moves;
             s.move_override.insert(id, m.max(0) as u32);
+        }
+    }
+    if e.urban_loss != 0 {
+        let hit: Vec<UnitId> = s.units.values()
+            .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none() && s.buildings.get(&(u.x, u.y)).is_some_and(|b| {
+                // Properties only: not silos, pipe seams or their rubble.
+                crate::data::tables().tile(b.terrain).building.as_deref().is_some_and(|k| !matches!(k, "Missile" | "PipeSeam"))
+            }))
+            .map(|u| u.id).collect();
+        for id in hit {
+            let u = s.units.get_mut(&id).unwrap();
+            // Can't kill: a unit pushed to the floor shows 1 HP, internal 1-10 as far as we know.
+            let floor_hi = u.hp.hi.min(10);
+            u.hp = crate::state::Hp { lo: bump(u.hp.lo, -e.urban_loss * 10), hi: bump(u.hp.hi, -e.urban_loss * 10).max(floor_hi) };
+        }
+    }
+    if e.drain {
+        let funds = s.player(pid).map(|p| p.funds).unwrap_or(0);
+        let others: Vec<PlayerId> = s.players.iter().filter(|p| !s.allied(p.id, pid)).map(|p| p.id).collect();
+        for id in others {
+            let p = s.player_mut(id).unwrap();
+            p.meter = (p.meter - p.scop_cost * funds / 50000).max(0);
+        }
+    }
+    if e.resupply || e.act_again {
+        let own: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
+        for id in own {
+            let foot = crate::rules::is_foot(&s.units[&id].kind);
+            let info = crate::data::tables().unit(&s.units[&id].kind);
+            let u = s.units.get_mut(&id).unwrap();
+            if e.resupply && u.carried_by.is_none() {
+                u.fuel = info.fuel as i32;
+                u.ammo = info.ammo as i32;
+            }
+            if e.act_again && !foot {
+                u.moved = false;
+            }
         }
     }
     if let Some(w) = e.weather {

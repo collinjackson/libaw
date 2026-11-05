@@ -16,6 +16,9 @@ Metrics (one JSON object per run):
   legal: recorded actions the generator offers / recorded actions checked (completeness).
   selfplay: random-vs-random games from the test states: actions/s, step errors, broken
     invariants (simulator health).
+  powers: recorded CO power activations whose instant effects we reproduce ("match"), get
+    wrong ("differ"), or don't model yet ("missing", by CO and power). Tracked apart from
+    rules fidelity because it grows as powers are implemented.
   spend_today: Claude spend so far today (tools/spend.py).
 """
 import json, os, re, subprocess, sys, time
@@ -61,8 +64,14 @@ def run_checker(dirs):
             checks[c.group(1)] = (int(c.group(2)), int(c.group(3)))
     ok = sum(a for a, _ in checks.values())
     bad = sum(b for _, b in checks.values())
+    missing = {}
+    for mm in re.finditer(r"skipped: power effects not modelled: (.+?) ([YS]) x(\d+)", out):
+        k = f"{mm.group(1)} {'COP' if mm.group(2) == 'Y' else 'SCOP'}"
+        missing[k] = missing.get(k, 0) + int(mm.group(3))
+    pe = checks.get("power.effects", (0, 0))
     return {"turns": int(m.group(1)), "clean": int(m.group(2)), "checks_ok": ok, "checks_total": ok + bad,
-            "legal": {k: v for k, v in checks.items() if k.startswith("legal.")}}
+            "legal": {k: v for k, v in checks.items() if k.startswith("legal.")},
+            "powers": {"match": pe[0], "differ": pe[1], "missing": missing}}
 
 
 def run_selfplay():
@@ -90,6 +99,11 @@ def main():
             a, b = row["legal"].get(k, (0, 0))
             row["legal"][k] = (a + ok, b + ok + bad)
         r["games"] = len(dirs)
+        pw = r.pop("powers")
+        P = row.setdefault("powers", {"match": 0, "differ": 0, "missing": {}})
+        P["match"] += pw["match"]; P["differ"] += pw["differ"]
+        for k, v in pw["missing"].items():
+            P["missing"][k] = P["missing"].get(k, 0) + v
         row["replay"][name] = r
     row["legal"] = {k: {"ok": a, "total": b} for k, (a, b) in row["legal"].items()}
     row["selfplay"] = run_selfplay()

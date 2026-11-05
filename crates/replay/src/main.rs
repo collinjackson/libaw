@@ -787,7 +787,22 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
             s.player_mut(pid).unwrap().meter = want;
         }
     }
-    // Sasha's Market Crash drains other meters.
+    // Sasha's Market Crash drains other meters: predict from the state before the record's
+    // values are written, then compare.
+    let mut drained = s.clone();
+    let drain_modelled = co_of(s, pid) == "Sasha" && kind == "Y" && awbw_engine::sim::power_effects(&mut drained, pid, &kind);
+    if drain_modelled {
+        if let Value::Object(m) = &a["playerReplace"] {
+            let mut bad = vec![];
+            for (id, v) in m {
+                if let (Ok(id), Some(cp)) = (id.parse::<u32>(), opt_num(&v["players_co_power"])) {
+                    let ours = drained.player(id).map(|p| p.meter).unwrap_or(-1);
+                    if ours != cp { bad.push(format!("player {id} meter engine {ours}, record {cp}")); }
+                }
+            }
+            r.check("power.drain", bad.is_empty(), || tag(c, format!("Sasha Y: {}", bad.join("; "))));
+        }
+    }
     if let Value::Object(m) = &a["playerReplace"] {
         for (id, v) in m {
             if let (Ok(id), Some(cp)) = (id.parse::<u32>(), opt_num(&v["players_co_power"])) {
@@ -856,7 +871,9 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     let mut bad = vec![];
     for (id, u) in &s.units {
         let Some(p) = pred.units.get(id) else { continue };
-        if (p.hp, p.fuel) != (u.hp, u.fuel) {
+        // The record shows displayed HP (1-10): compare that, not our internal estimate.
+        let shown = |h: Hp| ((h.lo as i32 + 9) / 10, (h.hi as i32 + 9) / 10);
+        if (shown(p.hp), p.fuel) != (shown(u.hp), u.fuel) {
             bad.push(format!("{} {id}: engine hp {:?} fuel {}, record hp {:?} fuel {}", u.kind, p.hp, p.fuel, u.hp, u.fuel));
         }
         let (mp, mr) = (movement_range(&pred, p), movement_range(s, u));
