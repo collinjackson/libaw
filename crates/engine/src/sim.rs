@@ -212,7 +212,50 @@ pub fn spend_power(s: &mut State, pid: PlayerId, kind: &str) {
 /// Apply a power's instant effects (see `co::instant`). Returns false when the engine
 /// doesn't model this CO's power yet (it was still activated; only effects are missing).
 pub fn power_effects(s: &mut State, pid: PlayerId, kind: &str) -> bool {
+    power_effects_at(s, pid, kind, None)
+}
+
+/// Missile damage within 2 tiles of `at`: 3 displayed HP off each enemy unit there, never
+/// killing (a unit pushed to the floor shows 1 HP).
+fn missile(s: &mut State, pid: PlayerId, at: (u16, u16)) {
+    let hit: Vec<UnitId> = s.units.values()
+        .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()
+            && (u.x as i32 - at.0 as i32).abs() + (u.y as i32 - at.1 as i32).abs() <= 2)
+        .map(|u| u.id).collect();
+    for id in hit {
+        let u = s.units.get_mut(&id).unwrap();
+        let floor_hi = u.hp.hi.min(10);
+        u.hp = crate::state::Hp { lo: (u.hp.lo as i32 - 30).max(1) as u8, hi: ((u.hp.hi as i32 - 30).max(1) as u8).max(floor_hi) };
+    }
+}
+
+/// Where AWBW isn't telling us: aim each missile at the 2-tile diamond where it takes the
+/// most enemy value (cost x HP it removes). AWBW's own targeting may differ; ballpark.
+fn aim_missile(s: &State, pid: PlayerId) -> (u16, u16) {
+    let (mut best, mut at) = (-1i64, (0u16, 0u16));
+    let enemies: Vec<&crate::state::Unit> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).collect();
+    for c in &enemies {
+        for dx in -2i32..=2 {
+            for dy in -2i32..=2 {
+                if dx.abs() + dy.abs() > 2 { continue; }
+                let (x, y) = (c.x as i32 + dx, c.y as i32 + dy);
+                if x < 0 || y < 0 { continue; }
+                let v: i64 = enemies.iter().filter(|u| (u.x as i32 - x).abs() + (u.y as i32 - y).abs() <= 2)
+                    .map(|u| crate::data::tables().unit(&u.kind).cost as i64 * ((u.hp.hi as i64 - 1).min(30)) / 100).sum();
+                if v > best { best = v; at = (x as u16, y as u16); }
+            }
+        }
+    }
+    at
+}
+
+/// As `power_effects`, with missile targets given (the replay checker passes AWBW's).
+pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Option<&[(u16, u16)]>) -> bool {
     let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
+    for k in 0..e.missiles as usize {
+        let at = match targets { Some(t) => match t.get(k) { Some(&p) => p, None => break }, None => aim_missile(s, pid) };
+        missile(s, pid, at);
+    }
     let mine: Vec<UnitId> = s.units.values().filter(|u| s.allied(u.owner, pid)).map(|u| u.id).collect();
     let theirs: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).map(|u| u.id).collect();
     let bump = |h: u8, n: i32| (h as i32 + n).clamp(1, 100) as u8;

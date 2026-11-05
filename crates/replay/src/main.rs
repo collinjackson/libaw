@@ -30,6 +30,8 @@ struct Report {
     turns: u64,
     turns_clean: u64,
     skipped: BTreeMap<String, u64>,
+    /// Counts for reporting, e.g. power uses whose effects differ, by CO and power.
+    tally: BTreeMap<String, u64>,
     /// Units an APC may have supplied this turn (AWBW's Supply command leaves no record):
     /// their fuel/ammo without that supply. Either value is accepted at compare time.
     maybe_supplied: BTreeMap<UnitId, (i32, i32)>,
@@ -812,7 +814,10 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     }
     // The engine's prediction of the instant effects, compared after the record is applied.
     let mut pred = s.clone();
-    let modelled = awbw_engine::sim::power_effects(&mut pred, pid, &kind);
+    let targets: Vec<(u16, u16)> = a["missileCoords"].as_array().map(|v| v.iter().filter_map(|c| {
+        Some((opt_num(&c["x"])? as u16, opt_num(&c["y"])? as u16))
+    }).collect()).unwrap_or_default();
+    let modelled = awbw_engine::sim::power_effects_at(&mut pred, pid, &kind, if targets.is_empty() { None } else { Some(&targets) });
     // Older records: a movement change for all the player's units ("global").
     if let Some(d) = opt_num(&a["global"]["units_movement_points"]) {
         let ids: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
@@ -883,6 +888,9 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     }
     if pred.weather != s.weather {
         bad.push(format!("weather engine {} record {}", pred.weather, s.weather));
+    }
+    if !bad.is_empty() {
+        *r.tally.entry(format!("power effects differ: {co} {kind}")).or_default() += 1;
     }
     r.check("power.effects", bad.is_empty(), || tag(c, format!("{co} {kind}: {}", bad.iter().take(3).cloned().collect::<Vec<_>>().join("; "))));
 }
@@ -1163,6 +1171,9 @@ fn main() {
     println!("all checks: {:.3}% of {}", pct(tp, tf), tp + tf);
     for (k, n) in &r.skipped {
         println!("skipped: {k} x{n}");
+    }
+    for (k, n) in &r.tally {
+        println!("tally: {k} x{n}");
     }
     for (k, ex) in &r.examples {
         if only.as_deref().map(|o| k.starts_with(o)).unwrap_or(true) {

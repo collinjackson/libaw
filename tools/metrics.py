@@ -69,11 +69,15 @@ def run_checker(dirs):
     for mm in re.finditer(r"skipped: power effects not modelled: (.+?) ([YS]) x(\d+)", out):
         k = f"{mm.group(1)} {'COP' if mm.group(2) == 'Y' else 'SCOP'}"
         missing[k] = missing.get(k, 0) + int(mm.group(3))
+    wrong = {}
+    for mm in re.finditer(r"tally: power effects differ: (.+?) ([YS]) x(\d+)", out):
+        k = f"{mm.group(1)} {'COP' if mm.group(2) == 'Y' else 'SCOP'}"
+        wrong[k] = wrong.get(k, 0) + int(mm.group(3))
     sonja = re.search(r"skipped: compare: HP hidden by Sonja this turn x(\d+)", out)
     pe = checks.get("power.effects", (0, 0))
     return {"turns": int(m.group(1)), "clean": int(m.group(2)), "checks_ok": ok, "checks_total": ok + bad,
             "legal": {k: v for k, v in checks.items() if k.startswith("legal.")},
-            "powers": {"match": pe[0], "differ": pe[1], "missing": missing, "sonja_turns": int(sonja.group(1)) if sonja else 0}}
+            "powers": {"match": pe[0], "differ": pe[1], "missing": missing, "wrong": wrong, "sonja_turns": int(sonja.group(1)) if sonja else 0}}
 
 
 def run_selfplay():
@@ -105,6 +109,8 @@ def main():
         P = row.setdefault("powers", {"match": 0, "differ": 0, "missing": {}})
         P["match"] += pw["match"]; P["differ"] += pw["differ"]
         P["sonja_turns"] = P.get("sonja_turns", 0) + pw["sonja_turns"]
+        for k, v in pw["wrong"].items():
+            P.setdefault("wrong", {})[k] = P.get("wrong", {}).get(k, 0) + v
         for k, v in pw["missing"].items():
             P["missing"][k] = P["missing"].get(k, 0) + v
         row["replay"][name] = r

@@ -147,6 +147,9 @@ pub struct Instant {
     pub urban_loss: i32,
     /// Drain other players' meters by their super cost x the user's funds / 50000 (Sasha's COP).
     pub drain: bool,
+    /// Missiles: each takes 3 displayed HP (never kills) from enemy units within 2 tiles of
+    /// its target (Rachel's super: 3, Von Bolt's: 1).
+    pub missiles: u8,
 }
 
 /// Does a unit of this kind get a power's movement bonus?
@@ -163,8 +166,8 @@ pub fn moves_apply(kind: &str, moves_for: &str) -> bool {
 }
 
 pub fn instant(co: &str, power: &str) -> Option<Instant> {
-    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false });
-    let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel: 1.0, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false });
+    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false, missiles: 0 });
+    let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel: 1.0, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false, missiles: 0 });
     match (co, power) {
         ("Sami", "Y") => only(1, "foot", false),
         ("Sami", "S") => only(2, "foot", false),
@@ -178,6 +181,8 @@ pub fn instant(co: &str, power: &str) -> Option<Instant> {
         ("Nell", "S") => i(0, 0, 1.0, 0, None),
         ("Kindle", "Y") => Some(Instant { urban_loss: 3, ..i(0, 0, 1.0, 0, None).unwrap() }),
         ("Sasha", "Y") => Some(Instant { drain: true, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Rachel", "S") => Some(Instant { missiles: 3, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Von Bolt", "S") => Some(Instant { missiles: 1, ..i(0, 0, 1.0, 0, None).unwrap() }),
         ("Andy", "Y") => i(2, 0, 1.0, 0, None),
         ("Andy", "S") => i(5, 0, 1.0, 1, None),
         ("Hawke", "Y") => i(1, 1, 1.0, 0, None),
