@@ -171,13 +171,18 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         let label = winner_seat.or(if w0 != w1 { Some(if w0 > w1 { 0 } else { 1 }) } else { None });
         if let Some(l) = label {
             use std::io::Write;
-            let mut out = std::fs::OpenOptions::new().create(true).append(true).open(f).expect("positions log");
+            // One write per game: parallel ladder jobs append to the same file, and per-line
+            // writes interleaved (a corrupt row on 2026-11-05).
+            let mut buf = String::new();
             for mut p in positions {
                 p["game"] = json!(name);
                 p["winner"] = json!(l);
                 p["decisive"] = json!(winner_seat.is_some());
-                writeln!(out, "{p}").unwrap();
+                buf.push_str(&p.to_string());
+                buf.push('\n');
             }
+            let mut out = std::fs::OpenOptions::new().create(true).append(true).open(f).expect("positions log");
+            out.write_all(buf.as_bytes()).unwrap();
         }
     }
     json!({
