@@ -94,6 +94,10 @@ pub fn movement_range(s: &State, u: &Unit) -> u32 {
     if co == "Sami" && matches!(u.kind.as_str(), "APC" | "T-Copter" | "Lander" | "Black Boat") {
         m += 1;
     }
+    // Drake's naval units move one further (Landers and Black Boats in 3 league games).
+    if co == "Drake" && matches!(tables().unit(&u.kind).move_type.as_str(), "S" | "L") {
+        m += 1;
+    }
     m
 }
 
