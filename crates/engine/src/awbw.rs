@@ -144,6 +144,7 @@ pub fn state_from(turn: &Value) -> State {
     let current = num(&gs["currentTurnPId"]) as u32;
     let mut s = State {
         powers: false,
+        seams: false,
         fog: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
         partial: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
         width: w,
@@ -365,6 +366,8 @@ pub fn action_to_contract(a: &Action) -> Value {
             let then = match then {
                 Then::Wait => json!({"type": "wait"}),
                 Then::Attack { target } => json!({"type": "attack", "target": [target.0, target.1]}),
+                // Not in contract v1 (its bots treat seams as walls).
+                Then::AttackSeam { target } => json!({"type": "attack_seam", "target": [target.0, target.1]}),
                 Then::Capture => json!({"type": "capture"}),
                 Then::Load => json!({"type": "load"}),
                 Then::Join => json!({"type": "join"}),
@@ -405,6 +408,7 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
             let then = match t["type"].as_str() {
                 Some("wait") => Then::Wait,
                 Some("attack") => Then::Attack { target: xy(&t["target"]).ok_or("attack: bad target")? },
+                Some("attack_seam") => Then::AttackSeam { target: xy(&t["target"]).ok_or("attack_seam: bad target")? },
                 Some("capture") => Then::Capture,
                 Some("load") => Then::Load,
                 Some("join") => Then::Join,

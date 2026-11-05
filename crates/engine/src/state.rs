@@ -120,6 +120,10 @@ pub struct State {
     /// don't use powers yet); the replay checker applies recorded powers regardless.
     #[serde(default)]
     pub powers: bool,
+    /// Whether the generator offers attacks on pipe seams (not in contract v1, whose bots
+    /// treat seams as walls). The simulator applies them either way.
+    #[serde(default)]
+    pub seams: bool,
     /// Fog of war: players see only what `fog::vision` shows them; a move into a hidden
     /// enemy unit stops short (a trap).
     #[serde(default)]

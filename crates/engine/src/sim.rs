@@ -178,6 +178,17 @@ fn hp_now(u: &Unit) -> u8 {
 }
 
 /// Damage `att` does to `def` with a given luck roll (internal HP points).
+/// Damage to a pipe seam (99 HP, kept in its building's capture field): what the attacker
+/// would do to a Neotank, without luck or terrain: base x attack% x displayed HP / 10,
+/// rounded down. Fits 1598 of 1606 corpus hits (rounding up or to nearest: 68% / 87%);
+/// the 8 misses are damaged attackers doing 1 more (hidden HP fractions?). None: it can't.
+pub fn seam_damage(s: &State, att: &Unit) -> Option<i32> {
+    let base = base_damage_now(att, "Neotank")? as u64;
+    let av = att_value(s, att, s.terrain_at(att.x, att.y)) as u64;
+    let hp = att.hp.display_hi().max(1) as u64;
+    Some((base * av * hp / 1000) as i32)
+}
+
 pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8 {
     let Some(base) = base_damage_now(att, &def.kind) else { return 0 };
     let at = s.terrain_at(att.x, att.y);
@@ -573,6 +584,27 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
             match then {
                 Then::Wait | Then::Load | Then::Join => Ok(()),
                 Then::Attack { target } => attack(s, *unit, *target, luck),
+                Then::AttackSeam { target } => {
+                    let u = s.units[unit].clone();
+                    let d = seam_damage(s, &u).ok_or("can't hit a seam")?;
+                    if uses_primary(&u, "Neotank") {
+                        s.units.get_mut(unit).unwrap().ammo -= 1;
+                    }
+                    let b = s.buildings.get_mut(target).ok_or("no seam")?;
+                    if tables().tile(b.terrain).building.as_deref() != Some("PipeSeam") {
+                        return Err("not a seam".into());
+                    }
+                    if b.capture - d <= 0 {
+                        // Broken: rubble (passable), keeping the seam's last HP, as AWBW does.
+                        let rubble = if b.terrain == 113 { 115 } else { 116 };
+                        b.terrain = rubble;
+                        let w = s.width as usize;
+                        s.terrain[target.1 as usize * w + target.0 as usize] = rubble;
+                    } else {
+                        b.capture -= d;
+                    }
+                    Ok(())
+                }
                 Then::Capture => {
                     let u = s.units[unit].clone();
                     let amt = capture_amount(s, &u, display(hp_now(&u)));

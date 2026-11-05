@@ -788,6 +788,15 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     // Indirects get their CO's range bonus (Grit +1) against seams too.
                     let maxr = if is_indirect(&u.kind) { (ri[1] as i32 + awbw_engine::co::range_bonus(&co, &pw, &u.kind)).max(2) as u32 } else { ri[1] as u32 };
                     r.check("seam.range", d >= ri[0] as u32 && d <= maxr, || tag(c, format!("{} at {d}", u.kind)));
+                    let moved = r.last_move.is_some_and(|(id, m)| id == u.id && m);
+                    r.check("legal.seam_target", awbw_engine::actions::seam_targets(s, &u, (u.x, u.y), moved).contains(&(x, y)), || {
+                        tag(c, format!("{} ({}) -> seam {:?} at distance {d} not generated (moved={moved})", u.kind, co, (x, y)))
+                    });
+                    if let Some(before) = s.buildings.get(&(x, y)).map(|b| b.capture) {
+                        let want = awbw_engine::sim::seam_damage(s, &u).map(|d| (before - d).max(0));
+                        r.check("seam.damage", want == Some(hp.max(0)), || tag(c, format!("{} {}hp ({}) on seam {before}: engine {want:?}, recorded {hp}",
+                            u.kind, u.hp.display_hi(), co, )));
+                    }
                     let m = s.units.get_mut(&aid).unwrap();
                     m.ammo = num(&a["attacker"]["units_ammo"]) as i32;
                     m.moved = true;
@@ -1339,6 +1348,10 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     if std::env::var("SELFPLAY_FOG").is_ok() {
         s.fog = true;
     }
+    // SELFPLAY_SEAMS=1 lets the random players hit pipe seams.
+    if std::env::var("SELFPLAY_SEAMS").is_ok() {
+        s.seams = true;
+    }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }
@@ -1346,6 +1359,7 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as u32 };
     let (mut actions, mut errors, mut violations) = (0u64, 0u64, 0u64);
     let mut traps = 0u64;
+    let mut seam_hits = 0u64;
     let mut legal_total = 0u64;
     let t0 = std::time::Instant::now();
     let log_dir = std::env::var("SELFPLAY_LOG_DIR").ok();
@@ -1362,6 +1376,7 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
         if let awbw_engine::actions::Action::Move { unit, path, .. } = a {
             if let Some(u) = s.units.get(unit) {
                 if awbw_engine::fog::trap(&s, u, path).is_some() { traps += 1; }
+                if matches!(a, awbw_engine::actions::Action::Move { then: awbw_engine::actions::Then::AttackSeam { .. }, .. }) { seam_hits += 1; }
             }
         }
         // The chosen action must survive the contract format.
@@ -1412,7 +1427,7 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
         std::fs::write(Path::new(dir).join(format!("{name}.json")), log.to_string()).unwrap();
     }
     violations += rt_bad + act_bad;
-    println!("selfplay seed {seed}: {rt_bad} state round-trip and {act_bad} action round-trip failures{}", if s.fog { format!(", {traps} fog traps") } else { String::new() });
+    println!("selfplay seed {seed}: {rt_bad} state round-trip and {act_bad} action round-trip failures{}", format!("{}{}", if s.fog { format!(", {traps} fog traps") } else { String::new() }, if s.seams { format!(", {seam_hits} seam hits") } else { String::new() }));
     println!("selfplay seed {seed}: {actions} actions, day {}, winner {:?}, {:.1} legal/position, {errors} step errors, {violations} invariant violations, {:.0} actions/s",
         s.day, awbw_engine::sim::winner(&s), legal_total as f64 / actions.max(1) as f64,
         actions as f64 / (t0.elapsed() - rt_time).as_secs_f64());

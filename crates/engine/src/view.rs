@@ -39,6 +39,7 @@ pub fn describe(s: &State, a: &crate::actions::Action) -> String {
             let t = match then {
                 Then::Wait => "wait".to_string(),
                 Then::Attack { target } => format!("attack {target:?}"),
+                Then::AttackSeam { target } => format!("attack seam {target:?}"),
                 Then::Capture => "capture".into(),
                 Then::Load => "load".into(),
                 Then::Join => "join".into(),

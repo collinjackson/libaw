@@ -2,7 +2,7 @@
 //! contract (docs/eval-harness/CONTRACT.md) so bots and the harness share one vocabulary.
 //!
 //! v1 scope: no fog, no dived Subs or hidden Stealths (banned in v1 tournaments), no CO
-//! power activation yet, no silo launches or seam attacks.
+//! power activation yet, no silo launches; seam attacks only when `State::seams`.
 
 use crate::co;
 use crate::data::tables;
@@ -22,6 +22,8 @@ pub enum Then {
     Supply,
     Repair { target: Pos },
     Unload { cargo: UnitId, to: Pos },
+    /// Hit a pipe seam (only generated when `State::seams`).
+    AttackSeam { target: Pos },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -113,6 +115,26 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
         .collect()
 }
 
+/// Pipe seams `u` could hit from `from` (same range rule as units; a seam takes what a
+/// Neotank would).
+pub fn seam_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
+    let info = tables().unit(&u.kind);
+    if info.range[1] == 0 || (is_indirect(&u.kind) && moved) || base_damage_now(u, "Neotank").is_none() {
+        return vec![];
+    }
+    let mut maxr = info.range[1] as i32;
+    if is_indirect(&u.kind) {
+        let pw = s.player(u.owner).map(|p| p.power.clone()).unwrap_or_else(|| "N".into());
+        let co = s.player(u.owner).map(|p| p.co.clone()).unwrap_or_default();
+        maxr = (maxr + co::range_bonus(&co, &pw, &u.kind)).max(2);
+    }
+    s.buildings.iter()
+        .filter(|(_, b)| tables().tile(b.terrain).building.as_deref() == Some("PipeSeam") && b.capture > 0)
+        .map(|(&p, _)| p)
+        .filter(|&p| { let d = dist(from, p); d >= info.range[0] as u32 && d <= maxr as u32 })
+        .collect()
+}
+
 /// What `u` may do after moving to `to` (no move if `to` is its tile).
 pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
     let mut out = vec![];
@@ -137,6 +159,11 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
     as_there.y = to.1;
     for t in attack_targets(s, &as_there, to, moved) {
         out.push(Then::Attack { target: t });
+    }
+    if s.seams {
+        for t in seam_targets(s, &as_there, to, moved) {
+            out.push(Then::AttackSeam { target: t });
+        }
     }
     if is_foot(&u.kind) {
         if let Some(b) = s.buildings.get(&to) {
