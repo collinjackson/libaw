@@ -8,9 +8,9 @@
 //! one against the rules) and the start of the next turn, then compares the result with the
 //! next file's state.
 
-mod awbw;
 
-use awbw::*;
+
+use awbw_engine::awbw::*;
 use awbw_engine::data::tables;
 use awbw_engine::rules::*;
 use awbw_engine::*;
