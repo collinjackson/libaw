@@ -1,0 +1,2 @@
+{"note": "CI fails if a corpus has fewer clean turns than this. Raise it when fidelity improves.",
+ "clean": {"league": 817, "league_batch2": 1016, "team": 448}}

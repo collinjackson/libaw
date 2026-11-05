@@ -4,6 +4,11 @@ replay corpora live in ~/repos/awbw-engine-data (and awbw_chart's team games), n
 
   python3 -I tools/metrics.py            # print and append
   python3 -I tools/metrics.py --dry-run  # print only
+  python3 -I tools/metrics.py --check    # print, then exit 1 if any corpus has fewer
+                                         # clean turns than metrics/baseline.json (CI)
+
+AWBW_DATA and AWBW_TEAM override the corpus locations (CI unpacks the private
+awbw-engine-data repo).
 
 Metrics (one JSON object per run):
   replay.<corpus>: turns compared, clean turns, checks passed/total. Engine fidelity:
@@ -13,13 +18,13 @@ Metrics (one JSON object per run):
     invariants (simulator health).
   spend_today: Claude spend so far today (tools/spend.py).
 """
-import json, re, subprocess, sys, time
+import json, os, re, subprocess, sys, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target/release/awbw-replay"
-DATA = Path.home() / "repos/awbw-engine-data"
-TEAM = Path.home() / "repos/awbw_chart/data"
+DATA = Path(os.environ.get("AWBW_DATA", Path.home() / "repos/awbw-engine-data"))
+TEAM = Path(os.environ.get("AWBW_TEAM", Path.home() / "repos/awbw_chart/data"))
 
 
 def done_dirs(ids):
@@ -78,10 +83,18 @@ def main():
         row["replay"][name] = r
     row["legal"] = {k: {"ok": a, "total": b} for k, (a, b) in row["legal"].items()}
     row["selfplay"] = run_selfplay()
-    spend = subprocess.run([sys.executable, "-I", str(ROOT / "tools/spend.py")], capture_output=True, text=True).stdout
+    spend = "" if os.environ.get("CI") else subprocess.run(
+        [sys.executable, "-I", str(ROOT / "tools/spend.py")], capture_output=True, text=True).stdout
     m = re.search(r"spent today \$([\d.]+)", spend)
     row["spend_today"] = float(m.group(1)) if m else None
     print(json.dumps(row, indent=1))
+    if "--check" in sys.argv:
+        base = json.loads((ROOT / "metrics/baseline.json").read_text())
+        bad = [f"{k}: {row['replay'].get(k, {}).get('clean', 0)} clean turns, baseline {v}"
+               for k, v in base["clean"].items() if row["replay"].get(k, {}).get("clean", 0) < v]
+        for b in bad:
+            print("REGRESSION", b)
+        sys.exit(1 if bad else 0)
     if "--dry-run" not in sys.argv:
         (ROOT / "metrics").mkdir(exist_ok=True)
         with open(ROOT / "metrics/history.jsonl", "a") as f:

@@ -38,4 +38,8 @@ nothing from here goes into public repos.
 
 Commit at the end of each chunk, with a clear message, and push to `origin` (the private
 repo; Collin approved 2026-11-04). Never make the repo public, add other remotes, or push
-anywhere else. Replay data (~/repos/awbw-engine-data) stays out of the repo.
+anywhere else. Replay data (~/repos/awbw-engine-data) stays out of this repo: it lives in
+the private repo collinjackson/awbw-engine-data (cached public AWBW replays, other players'
+games; never public), which CI reads with a read-only deploy key. After fetching more games,
+run its `pack.sh` and push it. The bot (search, eval, training, weights) will live in a
+separate private repo, awbw-bot, so this one could be opened later without exposing it.

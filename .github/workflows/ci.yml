@@ -30,3 +30,45 @@ jobs:
             out/games
             out/selfplay.txt
           retention-days: 14
+  replay-fidelity:
+    # Engine vs recorded AWBW games (private awbw-engine-data repo, read by deploy key).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # the nightly run appends to metrics/history.jsonl
+    env:
+      HAS_DATA_KEY: ${{ secrets.DATA_DEPLOY_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip note
+        if: env.HAS_DATA_KEY != 'true'
+        run: echo "::warning::DATA_DEPLOY_KEY secret not set; replay fidelity check skipped"
+      - uses: actions/checkout@v4
+        if: env.HAS_DATA_KEY == 'true'
+        with:
+          repository: collinjackson/awbw-engine-data
+          ssh-key: ${{ secrets.DATA_DEPLOY_KEY }}
+          path: corpus
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.HAS_DATA_KEY == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: env.HAS_DATA_KEY == 'true'
+      - name: Replay check (fails on regression vs metrics/baseline.json)
+        if: env.HAS_DATA_KEY == 'true'
+        env:
+          AWBW_DATA: ${{ github.workspace }}/corpus
+          AWBW_TEAM: ${{ github.workspace }}/corpus/data
+        run: |
+          (cd corpus && tar xzf packed/replays.tgz && tar xzf packed/team.tgz)
+          python3 -I tools/metrics.py --check | tee metrics-run.txt
+      - name: Nightly: append to metrics history
+        if: env.HAS_DATA_KEY == 'true' && github.event_name == 'schedule'
+        env:
+          AWBW_DATA: ${{ github.workspace }}/corpus
+          AWBW_TEAM: ${{ github.workspace }}/corpus/data
+        run: |
+          python3 -I tools/metrics.py
+          git config user.name "awbw-engine CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add metrics/history.jsonl
+          git commit -m "Nightly metrics" && git pull --rebase && git push
