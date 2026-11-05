@@ -1147,20 +1147,26 @@ fn restore_cargo(s: &mut State, prev: &State) {
             m.dived = true;
         }
     }
-    for u in prev.units.values() {
-        let Some(t) = u.carried_by else { continue };
-        if s.units.contains_key(&u.id) || !s.units.contains_key(&t) {
-            continue;
+    // Repeat until nothing changes: cargo can ride in cargo (an APC aboard a Lander).
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for u in prev.units.values() {
+            let Some(t) = u.carried_by else { continue };
+            if s.units.contains_key(&u.id) || !s.units.contains_key(&t) {
+                continue;
+            }
+            changed = true;
+            let tr = s.units.get_mut(&t).unwrap();
+            if !tr.cargo.contains(&u.id) {
+                tr.cargo.push(u.id);
+            }
+            let (x, y) = (tr.x, tr.y);
+            let mut cu = u.clone();
+            cu.x = x;
+            cu.y = y;
+            s.units.insert(cu.id, cu);
         }
-        let tr = s.units.get_mut(&t).unwrap();
-        if !tr.cargo.contains(&u.id) {
-            tr.cargo.push(u.id);
-        }
-        let (x, y) = (tr.x, tr.y);
-        let mut cu = u.clone();
-        cu.x = x;
-        cu.y = y;
-        s.units.insert(cu.id, cu);
     }
 }
 

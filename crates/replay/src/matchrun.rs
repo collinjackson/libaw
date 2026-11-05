@@ -201,7 +201,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         }
     }
     json!({
-        "game": name, "seats": [seats[0].name(), seats[1].name()], "seed": seed,
+        "game": name, "seats": [seats[0].name(), seats[1].name()], "seed": seed, "fog": s.fog,
         "winner": winner_seat.map(|i| seats[i].name()), "days": s.day.min(max_days),
         "worth": [worth(0), worth(1)],
         "actions": [st[0].actions, st[1].actions], "illegal": [st[0].illegal, st[1].illegal],
@@ -223,7 +223,8 @@ pub fn run(args: &[String]) {
         .unwrap_or_else(|| file.file_stem().unwrap().to_string_lossy().to_string());
     for g in 0..games {
         let seats = if g % 2 == 0 { [&a, &b] } else { [&b, &a] };
-        let name = format!("{stem}-{}-vs-{}-s{}", seats[0].name(), seats[1].name(), seed0 + g);
+        let fog = if std::env::var("MATCH_FOG").is_ok() { "-fog" } else { "" };
+        let name = format!("{stem}-{}-vs-{}-s{}{fog}", seats[0].name(), seats[1].name(), seed0 + g);
         let r = play(&start, seats, seed0 + g, max_days, log_dir.as_deref(), &name);
         println!("{r}");
     }
