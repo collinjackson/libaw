@@ -48,8 +48,22 @@ pub fn move_cost_in(terrain: u16, move_type: &str, weather: char) -> Option<u8> 
 
 /// Cost of walking `path` (which starts at the unit's tile). Checks adjacency, bounds,
 /// passability, movement range and enemy blocking. Returns the movement cost spent.
-pub fn path_cost(s: &State, u: &Unit, path: &[(u16, u16)]) -> Result<u32, String> {
+/// Cost for `u` to enter a tile of terrain `t` now (weather, CO), or None if impassable.
+pub fn step_cost(s: &State, u: &Unit, t: u16) -> Option<u32> {
     let info = tables().unit(&u.kind);
+    let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
+    let w = felt_weather(s.weather, co);
+    let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
+    let c = move_cost_in(t, &info.move_type, w)?;
+    // Lash's powers: every passable tile costs 1, except in snow.
+    if co == "Lash" && pw != "N" && w != 'S' {
+        return Some(1);
+    }
+    Some(c as u32)
+}
+
+pub fn path_cost(s: &State, u: &Unit, path: &[(u16, u16)]) -> Result<u32, String> {
+    let _ = tables();
     let mut cost = 0u32;
     for w in path.windows(2) {
         let (a, b) = (w[0], w[1]);
@@ -58,16 +72,9 @@ pub fn path_cost(s: &State, u: &Unit, path: &[(u16, u16)]) -> Result<u32, String
             return Err(format!("path step {a:?}->{b:?} not adjacent"));
         }
         let t = s.terrain_at(b.0, b.1);
-        let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
-        let w = felt_weather(s.weather, co);
-        let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
-        let mut c = move_cost_in(t, &info.move_type, w)
+        let c = step_cost(s, u, t)
             .ok_or_else(|| format!("{} can't enter {} at {b:?}", u.kind, tables().tile(t).name))?;
-        // Lash's powers: every passable tile costs 1, except in snow.
-        if co == "Lash" && pw != "N" && w != 'S' {
-            c = 1;
-        }
-        cost += c as u32;
+        cost += c;
         if let Some(o) = s.unit_at(b.0, b.1) {
             if !s.allied(o.owner, u.owner) {
                 return Err(format!("path through enemy {} at {b:?}", o.kind));
@@ -172,12 +179,19 @@ pub fn uses_primary(att: &Unit, def_kind: &str) -> bool {
     if !info.second_weapon {
         return att.ammo > 0;
     }
-    // Targets for the second weapon (machine gun / anti-air gun), which costs no ammo.
-    let secondary_target = match att.kind.as_str() {
+    !secondary_target(&att.kind, def_kind) && att.ammo > 0
+}
+
+/// Targets a unit hits with its second weapon (machine gun / anti-air gun), which costs no
+/// ammo. False for units without one.
+pub fn secondary_target(att_kind: &str, def_kind: &str) -> bool {
+    if !tables().unit(att_kind).second_weapon && att_kind != "Cruiser" {
+        return false;
+    }
+    match att_kind {
         "Cruiser" => tables().unit(def_kind).move_type == "A",
         _ => matches!(def_kind, "Infantry" | "Mech" | "B-Copter" | "T-Copter"),
-    };
-    !secondary_target && att.ammo > 0
+    }
 }
 
 pub fn dist(a: (u16, u16), b: (u16, u16)) -> u32 {
@@ -186,4 +200,33 @@ pub fn dist(a: (u16, u16), b: (u16, u16)) -> u32 {
 
 pub fn display(hp: u8) -> u8 {
     hp.div_ceil(10)
+}
+
+pub fn is_foot(kind: &str) -> bool {
+    matches!(kind, "Infantry" | "Mech")
+}
+
+pub fn is_indirect(kind: &str) -> bool {
+    tables().unit(kind).range[1] > 1
+}
+
+/// Transport capacity.
+pub fn capacity(kind: &str) -> usize {
+    match kind {
+        "APC" | "T-Copter" => 1,
+        "Lander" | "Cruiser" | "Carrier" | "Black Boat" => 2,
+        _ => 0,
+    }
+}
+
+/// Can transport `t` carry unit kind `l`?
+pub fn can_carry(t: &str, l: &str) -> bool {
+    let mt = tables().unit(l).move_type.clone();
+    match t {
+        "APC" | "T-Copter" | "Black Boat" => is_foot(l),
+        "Lander" => matches!(mt.as_str(), "F" | "B" | "T" | "W"),
+        "Cruiser" => matches!(l, "B-Copter" | "T-Copter"),
+        "Carrier" => mt == "A",
+        _ => false,
+    }
 }

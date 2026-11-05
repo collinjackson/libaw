@@ -35,6 +35,8 @@ struct Report {
     /// Units in a hidden-HP (Sonja) exchange this turn: their HP isn't knowable from the
     /// records, so their HP isn't compared.
     hidden_hp: std::collections::HashSet<UnitId>,
+    /// The last Move this turn: (unit, whether it changed tiles). Fire/Capt follow their Move.
+    last_move: Option<(UnitId, bool)>,
 }
 
 impl Report {
@@ -79,18 +81,12 @@ fn towers(s: &State, p: PlayerId) -> u32 {
         .count() as u32
 }
 
-fn is_indirect(kind: &str) -> bool {
-    tables().unit(kind).range[1] > 1
-}
 
 /// The owner's active power: "N", "Y" (CO power) or "S" (super power).
 fn pw(s: &State, p: PlayerId) -> String {
     s.player(p).map(|p| p.power.clone()).unwrap_or_else(|| "N".into())
 }
 
-fn is_foot(kind: &str) -> bool {
-    matches!(kind, "Infantry" | "Mech")
-}
 
 /// Attack and defence values (100 = neutral) from COs' day-to-day abilities and com towers.
 fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
@@ -226,6 +222,15 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     tag(c, format!("{} at {:?}, path starts {:?}", u.kind, (u.x, u.y), path.first()))
                 });
                 let trapped = a["trapped"].as_bool().unwrap_or(false);
+                // Simulator check: the destination is one the generator offers.
+                if !trapped {
+                    let end = *path.last().unwrap_or(&(u.x, u.y));
+                    let reach = awbw_engine::actions::reachable(s, &u);
+                    r.check("legal.move_reachable", reach.contains_key(&end), || {
+                        tag(c, format!("{} ({}) {:?} -> {end:?} not generated", u.kind, co_of(s, u.owner), (u.x, u.y)))
+                    });
+                }
+                r.last_move = Some((u.id, path.len() > 1));
                 match path_cost(s, &u, &path) {
                     Ok(cost) => {
                         let range = movement_range(s, &u);
@@ -298,6 +303,10 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
             }
             "Build" => {
                 let nu = unit_from(&a["newUnit"]);
+                let offered = awbw_engine::actions::builds(s);
+                r.check("legal.build", offered.contains(&((nu.x, nu.y), nu.kind.clone())), || {
+                    tag(c, format!("{} at {:?} not generated", nu.kind, (nu.x, nu.y)))
+                });
                 let cost = (tables().unit(&nu.kind).cost as f64
                     * awbw_engine::co::price_multiplier(&co_of(s, nu.owner))).round() as i64;
                 let funds = s.player(nu.owner).map(|p| p.funds).unwrap_or(0);
@@ -340,6 +349,9 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     continue;
                 };
                 r.check("capt.foot_unit", is_foot(&u.kind), || tag(c, format!("{} capturing", u.kind)));
+                r.check("legal.capture", awbw_engine::actions::options_at(s, &u, (x, y)).contains(&awbw_engine::actions::Then::Capture), || {
+                    tag(c, format!("{} capture at {:?} not generated", u.kind, (x, y)))
+                });
                 let Some(b) = s.buildings.get(&(x, y)).cloned() else {
                     r.check("capt.is_building", false, || tag(c, format!("no building at {:?}", (x, y))));
                     continue;
@@ -402,6 +414,12 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     r.check("fire.units_known", false, || tag(c, format!("{aid} or {did} missing")));
                     continue;
                 };
+                let moved = r.last_move.is_some_and(|(id, m)| id == att.id && m);
+                let targets = awbw_engine::actions::attack_targets(s, &att, (att.x, att.y), moved);
+                r.check("legal.attack_target", targets.contains(&(def.x, def.y)), || {
+                    tag(c, format!("{} ({}, ammo {}) -> {} at distance {} not generated (moved={moved})",
+                        att.kind, co_of(s, att.owner), att.ammo, def.kind, dist((att.x, att.y), (def.x, def.y))))
+                });
                 let d = dist((att.x, att.y), (def.x, def.y));
                 let ai = tables().unit(&att.kind);
                 let mut maxr = ai.range[1] as u32;
@@ -773,24 +791,7 @@ fn moved_this_action(_u: &Unit) -> bool {
     false // Move and Fire are separate records; the move check covers indirect move-and-fire later.
 }
 
-fn capacity(kind: &str) -> usize {
-    match kind {
-        "APC" | "T-Copter" => 1,
-        "Lander" | "Cruiser" | "Carrier" | "Black Boat" => 2,
-        _ => 0,
-    }
-}
 
-fn can_carry(t: &str, l: &str) -> bool {
-    let mt = tables().unit(l).move_type.clone();
-    match t {
-        "APC" | "T-Copter" | "Black Boat" => is_foot(l),
-        "Lander" => matches!(mt.as_str(), "F" | "B" | "T" | "W"),
-        "Cruiser" => matches!(l, "B-Copter" | "T-Copter"),
-        "Carrier" => mt == "A",
-        _ => false,
-    }
-}
 
 /// A CO power or super power. AWBW records most of its effects on the action itself:
 /// changed units (`unitReplace`), across-the-board HP changes (`hpChange`), weather, funds.
@@ -1040,6 +1041,7 @@ fn check_game(dir: &Path, r: &mut Report) {
         r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as u32).collect();
         r.maybe_supplied.clear();
         r.hidden_hp.clear();
+        r.last_move = None;
         let actions: Vec<Value> = items(&cur["actions"]).into_iter().cloned().collect();
         if !actions.iter().any(|a| a["action"] == "NextTurn") {
             // The export lost this turn (an empty reply); the next file isn't its successor.
