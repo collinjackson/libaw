@@ -18,7 +18,7 @@ use awbw_engine::rules::*;
 use awbw_engine::*;
 use awbw_engine::combat::*;
 use awbw_engine::sim::*;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -443,6 +443,9 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     }
                 }
                 let att_rec = if att_hidden { new_att_hp.display_hi() } else { att_rec };
+                if !def_hidden && !att_hidden {
+                    export_fire(s, &att, &def, def_rec, att_rec, new_def.is_some());
+                }
                 let lost = |u: &Unit, after: u8| u.hp.display_hi().saturating_sub(after);
                 let fight = (!att_hidden && !def_hidden && att.hp.display().is_some() && def.hp.display().is_some())
                     .then(|| (att.clone(), lost(&att, att_rec), def.clone(), lost(&def, def_rec)));
@@ -723,6 +726,23 @@ fn moved_this_action(_u: &Unit) -> bool {
 
 /// A CO power or super power. AWBW records most of its effects on the action itself:
 /// changed units (`unitReplace`), across-the-board HP changes (`hpChange`), weather, funds.
+/// FIRE_CASES=path: append each recorded attack (both HPs known) as a JSON line, so other
+/// engines can be scored on the same cases (tools/warsworld bench). `ours` is our verdict.
+fn export_fire(s: &State, att: &Unit, def: &Unit, def_after: u8, att_after: u8, ours: bool) {
+    let Ok(path) = std::env::var("FIRE_CASES") else { return };
+    let side = |u: &Unit| json!({
+        "kind": u.kind, "hp": [u.hp.lo, u.hp.hi], "x": u.x, "y": u.y, "ammo": u.ammo,
+        "terrain": tables().tile(s.terrain_at(u.x, u.y)).name, "co": co_of(s, u.owner), "power": pw(s, u.owner),
+        "towers": awbw_engine::combat::towers(s, u.owner),
+    });
+    let line = json!({"attacker": side(att), "defender": side(def), "weather": s.weather.to_string(),
+        "def_after": def_after, "att_after": att_after, "ours_ok": ours}).to_string();
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
 /// After a fire: charge the meters the engine's way and compare with the recorded values
 /// (`copValues`), then take the recorded values so one miss doesn't spread.
 fn meter_check(s: &mut State, a: &Value, r: &mut Report, c: &Ctx, fight: Option<(Unit, u8, Unit, u8)>) {

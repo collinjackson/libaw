@@ -1,0 +1,21 @@
+{
+ "benchmark": "fire.damage: recorded attacks whose resulting HP is reachable with some luck roll",
+ "corpus": "AWBW Global League replays (league corpora)",
+ "cases": 18406,
+ "date": "2026-11-04",
+ "engines": [
+  {
+   "name": "awbw-engine (ours)",
+   "ok": 18399,
+   "pct": 99.96
+  },
+  {
+   "name": "WarsWorld",
+   "ok": 17863,
+   "pct": 97.05,
+   "commit": "0c5f481",
+   "mode": "AW2 CO versions where available, else AWDS",
+   "note": "run as a black box through our adapter (outside this repo; WarsWorld is AGPL-3.0); misses not yet triaged, some may be adapter issues"
+  }
+ ]
+}
