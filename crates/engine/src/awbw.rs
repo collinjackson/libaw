@@ -128,6 +128,7 @@ pub fn state_from(turn: &Value) -> State {
             meter: num(&p["players_co_power"]),
             cop_cost: num(&p["players_co_max_power"]),
             scop_cost: num(&p["players_co_max_spower"]),
+            power_attack: 0,
         })
         .collect();
     for p in items(&turn["players"]) {

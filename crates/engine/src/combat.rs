@@ -27,7 +27,8 @@ pub fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
     let t = tables().tile(att_terrain);
     let stars = stars(s, att, att_terrain);
     let v = 100 + 10 * towers(s, att.owner) as i32 * tower_multiplier(s, att.owner)
-        + co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars);
+        + co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars)
+        + s.player(att.owner).filter(|p| p.power != "N").map_or(0, |p| p.power_attack);
     v.max(0) as u32
 }
 

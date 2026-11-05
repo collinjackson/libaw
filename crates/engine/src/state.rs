@@ -91,6 +91,10 @@ pub struct Player {
     pub cop_cost: i64,
     #[serde(default)]
     pub scop_cost: i64,
+    /// Extra attack percent while a power lasts, fixed when it starts (Colin's super:
+    /// 3 per 1000 funds).
+    #[serde(default)]
+    pub power_attack: i32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

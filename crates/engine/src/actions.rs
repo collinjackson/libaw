@@ -194,6 +194,8 @@ pub fn builds(s: &State) -> Vec<(Pos, String)> {
             Some("Base") => &["F", "B", "T", "W", "P"],
             Some("Airport") => &["A"],
             Some("Port") => &["S", "L"],
+            // Hachi's Merchant Union: ground units from cities.
+            Some("City") if p.co == "Hachi" && p.power == "S" => &["F", "B", "T", "W", "P"],
             _ => continue,
         };
         for (name, info) in &tables().units {

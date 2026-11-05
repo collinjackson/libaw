@@ -157,6 +157,11 @@ pub struct Instant {
     pub missile_hp: i32,
     /// Multiply the user's funds (Colin's Gold Rush: 1.5).
     pub funds_mult: f64,
+    /// Attack +3% per 1000 funds the user holds, for the power's duration (Colin's super).
+    pub funds_attack: bool,
+    /// A 9 HP unit of this kind on every city the user owns with no unit on it, ready to
+    /// act (Sensei: Infantry, Mech).
+    pub spawn: Option<&'static str>,
 }
 
 /// Does a unit of this kind get a power's movement bonus?
@@ -173,8 +178,8 @@ pub fn moves_apply(kind: &str, moves_for: &str) -> bool {
 }
 
 pub fn instant(co: &str, power: &str) -> Option<Instant> {
-    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_mult: 1.0 });
-    let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel: 1.0, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_mult: 1.0 });
+    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_mult: 1.0, funds_attack: false, spawn: None });
+    let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel: 1.0, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_mult: 1.0, funds_attack: false, spawn: None });
     match (co, power) {
         ("Sami", "Y") => only(1, "foot", false),
         ("Sami", "S") => only(2, "foot", false),
@@ -195,6 +200,14 @@ pub fn instant(co: &str, power: &str) -> Option<Instant> {
         ("Sturm", "S") => Some(Instant { missiles: 1, missile_hp: 8, ..i(0, 0, 1.0, 0, None).unwrap() }),
         ("Olaf", "Y") => i(0, 0, 1.0, 0, Some('S')),
         ("Colin", "Y") => Some(Instant { funds_mult: 1.5, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        // Also unseen in records, from AWBW's published CO rules: Colin's Power of Money,
+        // Sensei's spawns, and two ongoing supers handled elsewhere (Sasha's War Bonds pays
+        // funds for damage dealt in sim::attack; Hachi's Merchant Union builds ground units
+        // on cities in actions::builds).
+        ("Colin", "S") => Some(Instant { funds_attack: true, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Sensei", "Y") => Some(Instant { spawn: Some("Infantry"), ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Sensei", "S") => Some(Instant { spawn: Some("Mech"), ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Sasha", "S") | ("Hachi", "S") => i(0, 0, 1.0, 0, None),
         // Luck and stat powers: their ongoing effects come from the CO tables; nothing instant.
         ("Nell", "Y") | ("Flak", _) | ("Jugger", _) | ("Eagle", "Y") | ("Kanbei", _) | ("Grit", _) | ("Hachi", "Y") => i(0, 0, 1.0, 0, None),
         ("Von Bolt", "S") => Some(Instant { missiles: 1, stun: true, ..i(0, 0, 1.0, 0, None).unwrap() }),

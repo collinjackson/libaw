@@ -267,6 +267,24 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
         let at = match targets { Some(t) => match t.get(k) { Some(&p) => p, None => break }, None => aim_missile(s, pid) };
         missile(s, at, e.stun, e.missile_hp);
     }
+    if let Some(p) = s.player_mut(pid) {
+        p.power_attack = if e.funds_attack { (3 * p.funds / 1000) as i32 } else { 0 };
+    }
+    if let Some(kind) = e.spawn {
+        let info = crate::data::tables().unit(kind);
+        let cities: Vec<(u16, u16)> = s.buildings.iter()
+            .filter(|(&(x, y), b)| b.owner == Some(pid) && s.unit_at(x, y).is_none()
+                && crate::data::tables().tile(b.terrain).building.as_deref() == Some("City"))
+            .map(|(&p, _)| p).collect();
+        for (x, y) in cities {
+            let id = s.units.keys().max().copied().unwrap_or(0) + 1;
+            s.units.insert(id, Unit {
+                id, owner: pid, kind: kind.to_string(), x, y, hp: Hp::exact(90),
+                fuel: info.fuel as i32, ammo: info.ammo as i32, moved: false, stunned: false,
+                carried_by: None, cargo: vec![], dived: false,
+            });
+        }
+    }
     if e.funds_mult != 1.0 {
         if let Some(p) = s.player_mut(pid) { p.funds = (p.funds as f64 * e.funds_mult).floor() as i64; }
     }
@@ -352,6 +370,11 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     let left = hp_now(&def).saturating_sub(dmg);
     set_hp(s, def.id, left);
     let def_lost = display(hp_now(&def)) - display(left);
+    // Sasha's War Bonds: funds worth half the damage dealt (attacks, not counters).
+    if co_of(s, att.owner) == "Sasha" && pw(s, att.owner) == "S" {
+        let bonus = tables().unit(&def.kind).cost as i64 * def_lost as i64 / 20;
+        if let Some(p) = s.player_mut(att.owner) { p.funds += bonus; }
+    }
     if left == 0 {
         charge(s, &att, 0, &def, def_lost);
         return Ok(());
