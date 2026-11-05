@@ -57,7 +57,8 @@ pub fn unit_from(v: &Value) -> Unit {
             .map(|c| num(c) as u32)
             .filter(|&c| c != 0)
             .collect(),
-        dived: v["units_sub_dive"].as_str() == Some("Y"),
+        // "Y", or "D" in some records (game-1692796, a hidden Stealth burning 8 fuel a day).
+        dived: matches!(v["units_sub_dive"].as_str(), Some("Y" | "D")),
     }
 }
 

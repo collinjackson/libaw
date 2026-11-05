@@ -16,7 +16,10 @@ for id in $ids; do
   d="$OUT/game-$id"
   if [ -f "$d/.done" ]; then continue; fi
   echo "== $id"
-  if "$PY" ~/repos/awbw_chart/awbw_replay_export.py --game-id "$id" --out-dir "$d" --pause "$PAUSE" >"$d.log" 2>&1; then
+  # The exporter can exit 0 after a network error (DNS outage, 2026-11-05: 27 empty games
+  # marked done): require turn files too.
+  if "$PY" ~/repos/awbw_chart/awbw_replay_export.py --game-id "$id" --out-dir "$d" --pause "$PAUSE" >"$d.log" 2>&1 \
+     && ls "$d"/turn-*.json >/dev/null 2>&1; then
     touch "$d/.done"; echo "ok $(ls "$d" | wc -l) turns"
   else
     echo "failed (see $d.log)"

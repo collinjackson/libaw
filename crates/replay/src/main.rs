@@ -371,6 +371,21 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let ra = &a["attacker"];
                 let rd = &a["defender"];
                 let (aid, did) = (num(&ra["units_id"]) as u32, num(&rd["units_id"]) as u32);
+                // Sasha's War Bonds: `gainedFunds` maps player id -> funds earned by this attack
+                // (cost x displayed HP lost / 20, as sim::attack pays).
+                if let Some(g) = a["gainedFunds"].as_object() {
+                    for (pid, amt) in g {
+                        let (Ok(pid), Some(amt)) = (pid.parse::<u32>(), amt.as_i64()) else { continue };
+                        // Her counters pay too: the earner's victim is whichever side isn't hers.
+                        let (vid, rv) = if s.units.get(&aid).is_some_and(|u| u.owner == pid) { (did, rd) } else { (aid, ra) };
+                        if let (Some(d), true) = (s.units.get(&vid), pid != 0) {
+                            let lost = d.hp.display_hi() as i64 - hp_display(&rv["units_hit_points"]) as i64;
+                            let want = tables().unit(&d.kind).cost as i64 * lost.max(0) / 20;
+                            r.check("fire.war_bonds", want == amt, || tag(c, format!("{} lost {lost}: engine {want}, recorded {amt}", d.kind)));
+                        }
+                        if let Some(p) = s.player_mut(pid) { p.funds += amt; }
+                    }
+                }
                 if aid == 0 || did == 0 {
                     // One side is hidden from this view (a dived sub). Take the visible side's
                     // recorded result as given.
@@ -1298,7 +1313,12 @@ fn check_game(dir: &Path, r: &mut Report) {
     let load = |p: &Path| -> Value {
         serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
     };
-    let mut cur = load(&files[0]);
+    // A failed fetch can leave a game folder with no turn files.
+    let Some(first) = files.first() else {
+        r.skip("game: no turn files");
+        return;
+    };
+    let mut cur = load(first);
     r.fog = cur["gameState"]["fog_array"].is_array();
     let mut prev: Option<State> = None;
     for i in 0..files.len().saturating_sub(1) {

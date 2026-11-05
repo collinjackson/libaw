@@ -104,7 +104,13 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
     }
     let minr = info.range[0] as u32;
     s.units.values()
-        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && !d.dived)
+        // A hidden Stealth can be hit by Fighters and Stealths, a dived Sub by Cruisers and
+        // Subs (game-1692796: a Fighter on a hidden Stealth).
+        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && (!d.dived || match d.kind.as_str() {
+            "Stealth" => matches!(u.kind.as_str(), "Fighter" | "Stealth"),
+            "Sub" => matches!(u.kind.as_str(), "Cruiser" | "Sub"),
+            _ => false,
+        }))
         .filter(|d| {
             let dd = dist(from, (d.x, d.y));
             dd >= minr && dd <= maxr as u32

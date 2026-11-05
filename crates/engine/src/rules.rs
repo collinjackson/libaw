@@ -233,6 +233,9 @@ pub fn secondary_target(att_kind: &str, def_kind: &str) -> bool {
     }
     match att_kind {
         "Cruiser" => tables().unit(def_kind).move_type == "A",
+        // The data says it has one, but it fires its cannon (and spends ammo) on Infantry
+        // too (game-1750944): an indirect has no machine gun.
+        "Piperunner" => false,
         _ => matches!(def_kind, "Infantry" | "Mech" | "B-Copter" | "T-Copter"),
     }
 }

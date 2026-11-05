@@ -144,7 +144,11 @@ pub fn apc_supply(s: &mut State, p: PlayerId) -> std::collections::BTreeSet<Unit
         for u in s.units.values_mut() {
             if u.id != aid && u.owner == p && u.carried_by.is_none() && dist((x, y), (u.x, u.y)) == 1 {
                 let info = tables().unit(&u.kind);
-                out.insert(u.id); // AWBW lists every adjacent unit, needed or not
+                // AWBW lists every adjacent unit, needed or not, except a hidden one: a hidden
+                // Stealth is refuelled but not listed (game-1692796).
+                if !u.dived {
+                    out.insert(u.id);
+                }
 
                 u.fuel = info.fuel as i32;
                 u.ammo = info.ammo as i32;
@@ -436,7 +440,7 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     let left = hp_now(&def).saturating_sub(dmg);
     set_hp(s, def.id, left);
     let def_lost = display(hp_now(&def)) - display(left);
-    // Sasha's War Bonds: funds worth half the damage dealt (attacks, not counters).
+    // Sasha's War Bonds: funds worth half the damage dealt (her counters pay too, below).
     if co_of(s, att.owner) == "Sasha" && pw(s, att.owner) == "S" {
         let bonus = tables().unit(&def.kind).cost as i64 * def_lost as i64 / 20;
         if let Some(p) = s.player_mut(att.owner) { p.funds += bonus; }
@@ -457,7 +461,13 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
         }
         let after = hp_now(&att).saturating_sub(dmg);
         set_hp(s, aid, after);
-        charge(s, &att, display(hp_now(&att)) - display(after), &def, def_lost);
+        let att_lost = display(hp_now(&att)) - display(after);
+        // War Bonds pays on her counters too (game-1752437, during the opponent's turn).
+        if co_of(s, def.owner) == "Sasha" && pw(s, def.owner) == "S" {
+            let bonus = tables().unit(&att.kind).cost as i64 * att_lost as i64 / 20;
+            if let Some(p) = s.player_mut(def.owner) { p.funds += bonus; }
+        }
+        charge(s, &att, att_lost, &def, def_lost);
         return Ok(());
     }
     charge(s, &att, 0, &def, def_lost);
