@@ -123,8 +123,12 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
     }
     // Only units still dry after resupply go down: a boat that burns its last fuel on its
     // own port is refuelled there, not sunk (7 Black Boats in league games).
+    // An own APC next door refuels it too (apc_supply, right after this) before it falls:
+    // a Bomber on 2 fuel beside an APC lived on at 99 (game-1754384 turn-055).
+    let apc_next_door = |s: &State, u: &Unit| s.units.values().any(|a| a.kind == "APC" && a.owner == u.owner
+        && a.carried_by.is_none() && dist((a.x, a.y), (u.x, u.y)) == 1);
     for id in crashed {
-        if s.units.get(&id).is_some_and(|u| u.fuel == 0) {
+        if s.units.get(&id).is_some_and(|u| u.fuel == 0 && !apc_next_door(s, u)) {
             remove_unit(s, id);
         }
     }

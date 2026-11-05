@@ -154,8 +154,12 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8, co
 
 /// Apply one turn's actions. Returns false if the turn hit something unsupported.
 fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> Result<(), String> {
+    let trace: Option<UnitId> = std::env::var("TRACE_UNIT").ok().and_then(|v| v.parse().ok());
     for (i, a) in actions.iter().enumerate() {
         let kind = a["action"].as_str().unwrap_or("?");
+        if let Some(t) = trace {
+            eprintln!("trace {} #{i} before {kind}: {:?}", c.file, s.units.get(&t).map(|u| (u.x, u.y, u.hp, u.fuel)));
+        }
         match kind {
             "Move" => {
                 let rec = unit_from(&a["unit"]);
