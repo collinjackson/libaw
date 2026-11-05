@@ -343,6 +343,22 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     // recorded result as given.
                     r.skip("fire: a side is hidden from this view (id 0)");
                     meter_check(s, a, r, c, None);
+                    // Defender "?" (Sonja's unit, game-1746729): any enemy the attacker could
+                    // reach may have been hit. Their HP is unknown this turn; one gone from the
+                    // next record died here.
+                    if did == 0 && rd.as_str() == Some("?") {
+                        if let Some(att) = s.units.get(&aid).cloned() {
+                            let moved = r.last_move.is_some_and(|(id, m)| id == att.id && m);
+                            let cands: Vec<UnitId> = awbw_engine::actions::attack_targets(s, &att, (att.x, att.y), moved)
+                                .into_iter().filter_map(|(x, y)| s.unit_at(x, y).map(|u| u.id)).collect();
+                            for id in cands {
+                                r.hidden_hp.insert(id);
+                                if !r.next_alive.is_empty() && !r.next_alive.contains(&id) {
+                                    remove_unit(s, id);
+                                }
+                            }
+                        }
+                    }
                     for (id, rv) in [(aid, ra), (did, rd)] {
                         if id == 0 { continue; }
                         let hp = hp_display(&rv["units_hit_points"]);
