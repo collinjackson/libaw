@@ -875,7 +875,52 @@ fn check_game(dir: &Path, r: &mut Report) {
 
 /// Random legal play from a turn file until someone wins or `max_days` pass, checking
 /// invariants after every action. A smoke test for the simulator.
-fn selfplay(file: &Path, seed: u64, max_days: u32) {
+/// One frame of a game log: the position after an action.
+fn frame(s: &State, label: &str) -> Value {
+    let units: Vec<Value> = s.units.values().filter(|u| u.carried_by.is_none())
+        .map(|u| serde_json::json!([u.id, u.owner, u.kind, u.x, u.y, u.hp.display_hi(), u.cargo.len()])).collect();
+    let buildings: Vec<Value> = s.buildings.iter()
+        .map(|(&(x, y), b)| serde_json::json!([x, y, b.owner, b.terrain, b.capture])).collect();
+    let funds: Vec<Value> = s.players.iter().map(|p| serde_json::json!([p.id, p.funds])).collect();
+    serde_json::json!({"a": label, "day": s.day, "cur": s.current, "u": units, "b": buildings, "f": funds})
+}
+
+/// Static part of a game log: the map and players.
+fn log_header(s: &State, title: &str) -> Value {
+    let names: BTreeMap<u16, Value> = s.terrain.iter().chain(s.buildings.values().map(|b| &b.terrain))
+        .map(|&t| (t, serde_json::json!({"name": tables().tile(t).name, "kind": tables().tile(t).kind,
+            "building": tables().tile(t).building})))
+        .collect();
+    serde_json::json!({
+        "title": title, "w": s.width, "h": s.height, "terrain": s.terrain, "tiles": names,
+        "players": s.players.iter().map(|p| serde_json::json!({"id": p.id, "co": p.co, "team": p.team})).collect::<Vec<_>>(),
+    })
+}
+
+fn describe(s: &State, a: &awbw_engine::actions::Action) -> String {
+    use awbw_engine::actions::{Action, Then};
+    match a {
+        Action::EndTurn => "end turn".into(),
+        Action::Build { at, kind } => format!("build {kind} at {at:?}"),
+        Action::Move { unit, path, then } => {
+            let k = s.units.get(unit).map(|u| u.kind.clone()).unwrap_or_default();
+            let to = path.last().copied().unwrap_or_default();
+            let t = match then {
+                Then::Wait => "wait".to_string(),
+                Then::Attack { target } => format!("attack {target:?}"),
+                Then::Capture => "capture".into(),
+                Then::Load => "load".into(),
+                Then::Join => "join".into(),
+                Then::Supply => "supply".into(),
+                Then::Repair { target } => format!("repair {target:?}"),
+                Then::Unload { to, .. } => format!("unload to {to:?}"),
+            };
+            format!("{k} {:?} -> {to:?}, {t}", path.first().copied().unwrap_or_default())
+        }
+    }
+}
+
+fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
     let mut s = state_from(&v);
     for u in s.units.values_mut() {
@@ -886,11 +931,14 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) {
     let (mut actions, mut errors, mut violations) = (0u64, 0u64, 0u64);
     let mut legal_total = 0u64;
     let t0 = std::time::Instant::now();
+    let log_dir = std::env::var("SELFPLAY_LOG_DIR").ok();
+    let mut frames = vec![frame(&s, "start")];
     while s.day <= max_days && awbw_engine::sim::winner(&s).is_none() {
         let legal = awbw_engine::actions::legal_actions(&s);
         legal_total += legal.len() as u64;
         // Prefer acting over ending the turn, so games progress.
         let a = if legal.len() > 1 && next() % 20 != 0 { &legal[next() as usize % (legal.len() - 1)] } else { legal.last().unwrap() };
+        let label = describe(&s, a);
         let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
         if let Err(e) = awbw_engine::sim::step(&mut s, a, &mut roll) {
             errors += 1;
@@ -898,6 +946,9 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) {
             let _ = awbw_engine::sim::end_turn(&mut s);
         }
         actions += 1;
+        if log_dir.is_some() {
+            frames.push(frame(&s, &label));
+        }
         // Invariants.
         let mut seen = std::collections::HashSet::new();
         for u in s.units.values() {
@@ -912,18 +963,28 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) {
             violations += 1;
         }
     }
+    if let Some(dir) = &log_dir {
+        let name = format!("{}-seed{seed}", file.file_stem().unwrap().to_string_lossy());
+        let mut log = log_header(&s, &format!("random vs random, {name}"));
+        log["frames"] = Value::Array(frames);
+        log["winner"] = serde_json::json!(awbw_engine::sim::winner(&s));
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(Path::new(dir).join(format!("{name}.json")), log.to_string()).unwrap();
+    }
     println!("selfplay seed {seed}: {actions} actions, day {}, winner {:?}, {:.1} legal/position, {errors} step errors, {violations} invariant violations, {:.0} actions/s",
         s.day, awbw_engine::sim::winner(&s), legal_total as f64 / actions.max(1) as f64,
         actions as f64 / t0.elapsed().as_secs_f64());
+    errors + violations
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--selfplay") {
+        let mut bad = 0;
         for seed in 1..=args.get(3).and_then(|n| n.parse().ok()).unwrap_or(3u64) {
-            selfplay(Path::new(&args[2]), seed, 60);
+            bad += selfplay(Path::new(&args[2]), seed, 60);
         }
-        return;
+        std::process::exit(if bad > 0 { 1 } else { 0 });
     }
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut r = Report { max_examples: 3, ..Default::default() };
