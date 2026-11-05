@@ -88,17 +88,18 @@ At `/opt/eval/STATUS.json` on the VM, the only file the clean side reads:
 
 ```json
 {"built": true, "commit": "<sha>", "bot_label": "bot-a", "bots": ["bot-a", "bot-b"],
- "contract_tests_passed": 6, "contract_tests_total": 6, "updated": "<ISO time>"}
+ "updated": "<ISO time>"}
 ```
 
-The contract test runs every test state against every bot, so the totals are states x bots.
+v0's `contract_tests_*` fields are gone: the clean side runs the contract test itself,
+through the API.
 
 No logs, no prose, no excerpts of the opponent's code or docs, here or anywhere the clean
 side can see.
 
 ## Contract test
 
-`check_contract.py` (clean side's) posts each file in `test-states/` and checks that the
+Run by the clean side through the API (IAP tunnel), not on the VM. `check_contract.py` posts each file in `test-states/` and checks that the
 reply has the shape above and refers to the moving player's own unmoved units, owned
 bases and in-bounds tiles. It does not judge legality or strength; the clean side does
 that with its engine.
