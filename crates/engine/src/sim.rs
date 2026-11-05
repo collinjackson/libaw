@@ -579,6 +579,13 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                         let hq = tables().tile(b.terrain).building.as_deref() == Some("HQ");
                         b.capture = CAPTURE_POINTS;
                         b.owner = Some(u.owner);
+                        if hq {
+                            // AWBW turns a captured HQ into the captor's city (3 stars, income).
+                            let city = crate::awbw::owned_tile(b.terrain, None);
+                            b.terrain = city;
+                            let w = s.width as usize;
+                            s.terrain[end.1 as usize * w + end.0 as usize] = city;
+                        }
                         if let (true, Some(p)) = (hq, prev) {
                             eliminate(s, p, u.owner);
                         }

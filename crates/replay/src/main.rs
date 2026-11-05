@@ -436,8 +436,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     continue;
                 }
                 // Sonja hides her units' HP from opponents: the record says "?".
-                let def_hidden = rd["units_hit_points"].as_str() == Some("?");
-                let att_hidden = ra["units_hit_points"].as_str() == Some("?");
+                // Some fog records (game-1749528) write her hidden HP as 0 instead: a 0 for a
+                // Sonja unit that turns up later is hidden, not a kill.
+                let sonja_zero = |u: &Unit, rec: u8| rec == 0 && co_of(s, u.owner) == "Sonja" && alive_after(r, actions, i, u.id);
+                let def_hidden = rd["units_hit_points"].as_str() == Some("?") || sonja_zero(&def, def_rec);
+                let att_hidden = ra["units_hit_points"].as_str() == Some("?") || sonja_zero(&att, att_rec);
                 if def_hidden || att_hidden {
                     r.hidden_hp.insert(aid);
                     r.hidden_hp.insert(did);
@@ -1033,6 +1036,17 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
                     u.stunned = p.stunned;
                 }
             }
+        }
+    }
+    // Sonja's units listed with HP "?" (Kindle's Urban Blight on them, game-1749528): their
+    // HP is hidden, so take the engine's result and stop comparing their HP this turn.
+    for x in items(&a["unitReplace"]["units"]) {
+        if x["units_hit_points"].as_str() != Some("?") { continue; }
+        let id = num(&x["units_id"]) as u32;
+        if let (Some(p), Some(u)) = (pred.units.get(&id), s.units.get_mut(&id)) {
+            r.skip("power: hidden HP (Sonja), engine's result taken");
+            u.hp = p.hp;
+            r.hidden_hp.insert(id);
         }
     }
     let mut bad = vec![];
