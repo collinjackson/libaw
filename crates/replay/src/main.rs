@@ -1286,12 +1286,17 @@ fn check_game(dir: &Path, r: &mut Report) {
 fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
     let mut s = state_from(&v);
+    // SELFPLAY_FOG=1 plays any map with fog: actions come from the mover's view.
+    if std::env::var("SELFPLAY_FOG").is_ok() {
+        s.fog = true;
+    }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as u32 };
     let (mut actions, mut errors, mut violations) = (0u64, 0u64, 0u64);
+    let mut traps = 0u64;
     let mut legal_total = 0u64;
     let t0 = std::time::Instant::now();
     let log_dir = std::env::var("SELFPLAY_LOG_DIR").ok();
@@ -1299,14 +1304,20 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     let (mut rt_bad, mut act_bad) = (0u64, 0u64);
     let mut rt_time = std::time::Duration::ZERO; // excluded from actions/s
     while s.day <= max_days && awbw_engine::sim::winner(&s).is_none() {
-        let legal = awbw_engine::actions::legal_actions(&s);
+        let view = awbw_engine::fog::player_view(&s, s.current);
+        let legal = awbw_engine::actions::legal_actions(&view);
         legal_total += legal.len() as u64;
         // Prefer acting over ending the turn, so games progress.
         let a = if legal.len() > 1 && next() % 20 != 0 { &legal[next() as usize % (legal.len() - 1)] } else { legal.last().unwrap() };
         let label = describe(&s, a);
+        if let awbw_engine::actions::Action::Move { unit, path, .. } = a {
+            if let Some(u) = s.units.get(unit) {
+                if awbw_engine::fog::trap(&s, u, path).is_some() { traps += 1; }
+            }
+        }
         // The chosen action must survive the contract format.
         let rt0 = std::time::Instant::now();
-        match action_from_contract(&s, &action_to_contract(a)) {
+        match action_from_contract(&view, &action_to_contract(a)) {
             Ok(b) if &b == a => {}
             other => { act_bad += 1; if act_bad <= 5 { eprintln!("contract round trip: {a:?} -> {other:?}"); } }
         }
@@ -1352,7 +1363,7 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
         std::fs::write(Path::new(dir).join(format!("{name}.json")), log.to_string()).unwrap();
     }
     violations += rt_bad + act_bad;
-    println!("selfplay seed {seed}: {rt_bad} state round-trip and {act_bad} action round-trip failures");
+    println!("selfplay seed {seed}: {rt_bad} state round-trip and {act_bad} action round-trip failures{}", if s.fog { format!(", {traps} fog traps") } else { String::new() });
     println!("selfplay seed {seed}: {actions} actions, day {}, winner {:?}, {:.1} legal/position, {errors} step errors, {violations} invariant violations, {:.0} actions/s",
         s.day, awbw_engine::sim::winner(&s), legal_total as f64 / actions.max(1) as f64,
         actions as f64 / (t0.elapsed() - rt_time).as_secs_f64());

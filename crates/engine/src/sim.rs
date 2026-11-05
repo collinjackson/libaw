@@ -498,6 +498,17 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
             if u.owner != s.current || u.moved {
                 return Err("unit can't act".into());
             }
+            // Fog: a path planned from the player's view may run into a hidden enemy unit;
+            // the move stops on the last free tile before it and the unit waits (a trap).
+            let (trapped_path, trapped_then);
+            let (path, then) = match crate::fog::trap(s, &u, path) {
+                Some(k) => {
+                    trapped_path = path[..k].to_vec();
+                    trapped_then = Then::Wait;
+                    (&trapped_path, &trapped_then)
+                }
+                None => (path, then),
+            };
             let cost = path_cost(s, &u, path)?;
             let end = *path.last().unwrap_or(&(u.x, u.y));
             {
@@ -601,6 +612,11 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     Ok(())
                 }
                 Then::Unload { cargo, to } => {
+                    // Fog: a hidden enemy unit on the drop tile blocks the unload; the cargo
+                    // stays aboard and the transport just waits.
+                    if s.unit_at(to.0, to.1).is_some_and(|o| o.id != *unit) {
+                        return Ok(());
+                    }
                     s.units.get_mut(unit).unwrap().cargo.retain(|x| x != cargo);
                     let cu = s.units.get_mut(cargo).ok_or("no cargo")?;
                     cu.carried_by = None;

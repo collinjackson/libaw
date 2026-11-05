@@ -144,6 +144,7 @@ pub fn state_from(turn: &Value) -> State {
     let current = num(&gs["currentTurnPId"]) as u32;
     let mut s = State {
         powers: false,
+        fog: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
         width: w,
         height: h,
         terrain,

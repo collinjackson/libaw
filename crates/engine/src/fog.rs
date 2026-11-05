@@ -80,3 +80,47 @@ pub fn vision(s: &State, pid: PlayerId) -> Vec<u8> {
     }
     out
 }
+
+/// Fog trap: if `path` (from the mover's view) runs into an enemy unit, the length of the
+/// prefix the unit actually walks: up to the tile before the enemy, backed off past
+/// friendly units it can't stop on. None when the path is clear (or there's no fog).
+pub fn trap(s: &State, u: &Unit, path: &[(u16, u16)]) -> Option<usize> {
+    if !s.fog {
+        return None;
+    }
+    let hit = path.iter().skip(1).position(|&(x, y)| {
+        s.unit_at(x, y).is_some_and(|o| !s.allied(o.owner, u.owner))
+    })? + 1;
+    let mut k = hit; // path[..k] is walked; path[k - 1] is the stop tile
+    while k > 1 && s.unit_at(path[k - 1].0, path[k - 1].1).is_some_and(|o| o.id != u.id) {
+        k -= 1;
+    }
+    Some(k)
+}
+
+/// What `pid` may know: enemy units outside its vision (and dived ones not next door) are
+/// gone, enemy cargo and funds are hidden. Bots in fog games plan on this.
+pub fn player_view(s: &State, pid: PlayerId) -> State {
+    let mut v = s.clone();
+    if !s.fog {
+        return v;
+    }
+    let seen = vision(s, pid);
+    let w = s.width as usize;
+    let near = |x: u16, y: u16| s.units.values().any(|o| s.allied(o.owner, pid) && o.carried_by.is_none()
+        && (o.x as i32 - x as i32).abs() + (o.y as i32 - y as i32).abs() <= 1);
+    let hidden: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && (u.carried_by.is_some()
+        || seen[u.y as usize * w + u.x as usize] == 0 || (u.dived && !near(u.x, u.y)))).map(|u| u.id).collect();
+    for id in &hidden {
+        v.units.remove(id);
+    }
+    for u in v.units.values_mut() {
+        u.cargo.retain(|c| !hidden.contains(c));
+    }
+    for p in v.players.iter_mut() {
+        if !s.allied(p.id, pid) {
+            p.funds = 0;
+        }
+    }
+    v
+}

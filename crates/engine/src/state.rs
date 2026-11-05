@@ -120,6 +120,10 @@ pub struct State {
     /// don't use powers yet); the replay checker applies recorded powers regardless.
     #[serde(default)]
     pub powers: bool,
+    /// Fog of war: players see only what `fog::vision` shows them; a move into a hidden
+    /// enemy unit stops short (a trap).
+    #[serde(default)]
+    pub fog: bool,
 }
 
 impl State {
