@@ -838,10 +838,13 @@ fn check_game(dir: &Path, r: &mut Report) {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir).unwrap()
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().map(|e| e == "json").unwrap_or(false))
+        .filter(|p| !p.file_name().unwrap().to_string_lossy().starts_with('.'))
         .collect();
     files.sort();
     let game = dir.file_name().unwrap().to_string_lossy().to_string();
-    let load = |p: &Path| -> Value { serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap() };
+    let load = |p: &Path| -> Value {
+        serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+    };
     let mut cur = load(&files[0]);
     for i in 0..files.len().saturating_sub(1) {
         let next = load(&files[i + 1]);
