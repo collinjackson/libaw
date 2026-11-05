@@ -6,9 +6,11 @@
 //! - foot soldiers on a mountain see 3 further;
 //! - forests and reefs are seen only from next door (or by standing on them);
 //! - a player's own properties see their own tile; pipes are always seen;
-//! - rain cuts vision by 1 (never below 1).
+//! - rain cuts vision by 1 (never below 1);
+//! - Sonja: +1 vision; under either power +1 more, and she sees into forests and reefs at
+//!   any range (AWBW's CO page; fits the fog records' `discovered` lists).
 
-use crate::combat::co_of;
+use crate::combat::{co_of, pw};
 use crate::data::tables;
 use crate::state::*;
 
@@ -22,6 +24,9 @@ pub fn vision_range(s: &State, u: &Unit) -> u32 {
     }
     if co_of(s, u.owner) == "Sonja" {
         v += 1;
+        if pw(s, u.owner) != "N" {
+            v += 1;
+        }
     }
     if s.weather == 'R' {
         v -= 1;
@@ -37,6 +42,11 @@ pub fn hiding_tile(s: &State, x: u16, y: u16) -> bool {
         && !s.unit_at(x, y).is_some_and(|u| tables().unit(&u.kind).move_type == "A")
 }
 
+/// Sonja under a power sees into hiding tiles from anywhere in range.
+fn sees_hidden(s: &State, p: PlayerId) -> bool {
+    co_of(s, p) == "Sonja" && pw(s, p) != "N"
+}
+
 /// How many of `pid`'s (and allies') sources see each tile, row-major (y * width + x).
 pub fn vision(s: &State, pid: PlayerId) -> Vec<u8> {
     let (w, h) = (s.width as i32, s.height as i32);
@@ -49,6 +59,7 @@ pub fn vision(s: &State, pid: PlayerId) -> Vec<u8> {
     };
     for u in s.units.values().filter(|u| s.allied(u.owner, pid) && u.carried_by.is_none()) {
         let r = vision_range(s, u) as i32;
+        let piercing = sees_hidden(s, u.owner);
         let (ux, uy) = (u.x as i32, u.y as i32);
         for dy in -r..=r {
             let rem = r - dy.abs();
@@ -57,7 +68,7 @@ pub fn vision(s: &State, pid: PlayerId) -> Vec<u8> {
                 if x < 0 || y < 0 || x >= w || y >= h {
                     continue;
                 }
-                if dx.abs() + dy.abs() > 1 && hiding_tile(s, x as u16, y as u16) {
+                if !piercing && dx.abs() + dy.abs() > 1 && hiding_tile(s, x as u16, y as u16) {
                     continue;
                 }
                 see(x, y);

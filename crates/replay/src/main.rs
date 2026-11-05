@@ -261,7 +261,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     // Fog misses 36 -> 14 (units), 35 -> 19 (buildings).
                     let dies = actions.get(i + 1).is_some_and(|n| n["action"] == "Fire"
                         && num(&n["attacker"]["units_id"]) as u32 == rec.id && n["attacker"]["units_hit_points"].as_i64() == Some(0));
-                    check_discovered(s, u.owner, rec.id, dies, &v0, &a["discovered"], r, c);
+                    check_discovered(s, u.owner, rec.id, (u.x, u.y), dies, &v0, &a["discovered"], r, c);
                     if trapped {
                         // A trap: the move stopped next to an enemy unit it couldn't see.
                         let w = s.width as usize;
@@ -1195,7 +1195,7 @@ fn restore_cargo(s: &mut State, prev: &State) {
 /// Fog: a move's `discovered` lists the enemy units and the buildings on tiles that just
 /// came into view. Ours: vision before vs after; dived Subs / hidden Stealths count only
 /// from next door.
-fn check_discovered(s: &State, pid: PlayerId, mover: UnitId, dies: bool, before: &[u8], disc: &Value, r: &mut Report, c: &Ctx) {
+fn check_discovered(s: &State, pid: PlayerId, mover: UnitId, from: (u16, u16), dies: bool, before: &[u8], disc: &Value, r: &mut Report, c: &Ctx) {
     let after = awbw_engine::fog::vision(s, pid);
     // A mover that dies in its own attack sees nothing.
     let after = if dies {
@@ -1206,8 +1206,14 @@ fn check_discovered(s: &State, pid: PlayerId, mover: UnitId, dies: bool, before:
     let w = s.width as usize;
     let new = |x: u16, y: u16| { let i = y as usize * w + x as usize; after[i] > 0 && before[i] == 0 };
     let adjacent = |x: u16, y: u16| s.units.values().any(|o| s.allied(o.owner, pid) && o.carried_by.is_none() && dist((o.x, o.y), (x, y)) <= 1);
+    // Before the move: the mover stood at `from`.
+    let adjacent_before = |x: u16, y: u16| s.units.values().any(|o| s.allied(o.owner, pid) && o.carried_by.is_none()
+        && dist(if o.id == mover { from } else { (o.x, o.y) }, (x, y)) <= 1);
+    // A dived unit shows only from next door: it's new when it becomes adjacent (game-1745732).
     let ours_u: std::collections::BTreeSet<UnitId> = s.units.values()
-        .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none() && new(u.x, u.y) && (!u.dived || adjacent(u.x, u.y)))
+        .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none() && if u.dived {
+            !dies && adjacent(u.x, u.y) && !adjacent_before(u.x, u.y)
+        } else { new(u.x, u.y) })
         .map(|u| u.id).collect();
     let rec_u: std::collections::BTreeSet<UnitId> = items(&disc["units"]).iter().map(|u| num(&u["units_id"]) as u32).collect();
     r.check("fog.discovered_units", ours_u == rec_u, || {
@@ -1216,7 +1222,7 @@ fn check_discovered(s: &State, pid: PlayerId, mover: UnitId, dies: bool, before:
         let near = |ids: Vec<&UnitId>| ids.iter().filter_map(|id| s.units.get(id)).map(|u| dist((u.x, u.y), (m.x, m.y)).to_string()).collect::<Vec<_>>().join(",");
         tag(c, format!("engine also {:?}; record also {:?} [mover {} at {:?}, vision {}, distances {}; {}]", show(ours_u.difference(&rec_u).collect()), show(rec_u.difference(&ours_u).collect()),
             m.kind, (m.x, m.y), awbw_engine::fog::vision_range(s, m), near(ours_u.difference(&rec_u).collect()),
-            tables().tile(s.terrain_at(m.x, m.y)).name))
+            tables().tile(s.terrain_at(m.x, m.y)).name) + &format!(" CO {} power {} weather {}", co_of(s, pid), pw(s, pid), s.weather))
     });
     let ours_b: std::collections::BTreeSet<(u16, u16)> = s.buildings.keys().filter(|&&(x, y)| new(x, y)).copied().collect();
     let rec_b: std::collections::BTreeSet<(u16, u16)> = items(&disc["buildings"]).iter()
