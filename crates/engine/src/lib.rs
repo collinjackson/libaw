@@ -6,6 +6,7 @@ pub mod baseline;
 pub mod co;
 pub mod combat;
 pub mod data;
+pub mod fog;
 pub mod rules;
 pub mod sim;
 pub mod state;

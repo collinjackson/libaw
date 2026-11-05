@@ -660,9 +660,13 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 start_turn(s, next, day);
                 let supplied = apc_supply(s, next);
                 let rec_sup: std::collections::BTreeSet<UnitId> = items(&a["supplied"]).iter().map(|x| num(x) as u32).collect();
+                if r.fog && rec_sup.is_empty() && !supplied.is_empty() {
+                    r.skip("turn.supplied_set: fog game, list empty");
+                } else {
                 r.check("turn.supplied_set", supplied == rec_sup, || {
                     tag(c, format!("engine supplied {supplied:?}, recorded {rec_sup:?}"))
                 });
+                }
                 check_repairs(s, &before, a, r, c);
                 let ours = s.player(next).map(|p| p.funds).unwrap_or(-1);
                 // Sonja's units are repaired with hidden HP, so our HP guess can be off by up to
@@ -693,6 +697,15 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 }
             }
             "Unhide" | "Hide" => {
+                // Fog records may give only the id: {"action":"Hide","unitId":..,"vision":true}.
+                if !a["unit"].is_object() {
+                    let id = num(&a["unitId"]) as u32;
+                    match s.units.get_mut(&id) {
+                        Some(m) => m.dived = kind == "Hide",
+                        None => { r.check("hide.unit_known", false, || tag(c, format!("unit {id}"))); }
+                    }
+                    continue;
+                }
                 let rec = unit_from(&a["unit"]);
                 match s.units.get_mut(&rec.id) {
                     Some(m) => {
@@ -1110,6 +1123,12 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
 /// put back the cargo our own state from the previous turn had, where the transport is still
 /// there and the record doesn't show the unit.
 fn restore_cargo(s: &mut State, prev: &State) {
+    // A hidden Stealth/dived Sub shows as surfaced in the other player's view: keep ours.
+    for u in prev.units.values().filter(|u| u.dived) {
+        if let Some(m) = s.units.get_mut(&u.id) {
+            m.dived = true;
+        }
+    }
     for u in prev.units.values() {
         let Some(t) = u.carried_by else { continue };
         if s.units.contains_key(&u.id) || !s.units.contains_key(&t) {
@@ -1125,6 +1144,48 @@ fn restore_cargo(s: &mut State, prev: &State) {
         cu.y = y;
         s.units.insert(cu.id, cu);
     }
+}
+
+/// `fog_array[x][y]`: PHP arrays come out as JSON arrays, or as objects keyed "0", "1", ...
+/// when sparse.
+fn grid_at(fa: &Value, x: usize, y: usize) -> u64 {
+    let idx = |v: &Value, i: usize| -> Value {
+        match v {
+            Value::Array(a) => a.get(i).cloned().unwrap_or(Value::Null),
+            Value::Object(o) => o.get(&i.to_string()).cloned().unwrap_or(Value::Null),
+            _ => Value::Null,
+        }
+    };
+    idx(&idx(fa, x), y).as_u64().unwrap_or(0)
+}
+
+/// Our vision for the player to move vs the record's `fog_array` (`[x][y]`, a count per
+/// tile). Checked as seen / not seen per tile; counts are tallied separately.
+fn check_vision(s: &State, v: &Value, r: &mut Report, c: &Ctx) {
+    let fa = &v["gameState"]["fog_array"];
+    if !fa.is_array() && !fa.is_object() { return; }
+    let ours = awbw_engine::fog::vision(s, s.current);
+    let w = s.width as usize;
+    let (mut extra, mut missing, mut count_off) = (vec![], vec![], 0u64);
+    for x in 0..s.width as usize {
+        for y in 0..s.height as usize {
+            let rec = grid_at(fa, x, y);
+            let o = ours[y * w + x] as u64;
+            if (o > 0) != (rec > 0) {
+                let t = awbw_engine::data::tables().tile(s.terrain_at(x as u16, y as u16)).name.clone();
+                if o > 0 { extra.push(format!("({x},{y}) {t}")) } else { missing.push(format!("({x},{y}) {t}")) }
+            } else if o != rec {
+                count_off += 1;
+            }
+        }
+    }
+    if count_off > 0 {
+        *r.tally.entry("vision: tiles seen with a different count".into()).or_default() += count_off;
+    }
+    r.check("vision.fog_array", extra.is_empty() && missing.is_empty(), || {
+        tag(c, format!("{} ({}): we see {} extra {:?}, miss {} {:?}", co_of(s, s.current), s.weather, extra.len(),
+            extra.iter().take(4).collect::<Vec<_>>(), missing.len(), missing.iter().take(4).collect::<Vec<_>>()))
+    });
 }
 
 fn check_game(dir: &Path, r: &mut Report) {
@@ -1148,6 +1209,9 @@ fn check_game(dir: &Path, r: &mut Report) {
         let mut s = state_from(&cur);
         if r.fog {
             if let Some(p) = &prev { restore_cargo(&mut s, p); }
+        }
+        if r.fog {
+            check_vision(&s, &cur, r, &c);
         }
         r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as u32).collect();
         r.maybe_supplied.clear();
