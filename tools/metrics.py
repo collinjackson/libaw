@@ -42,8 +42,13 @@ def corpora():
 
 
 def run_checker(dirs):
-    out = subprocess.run([str(BIN), *dirs], capture_output=True, text=True).stdout
+    if not dirs:
+        sys.exit("metrics: empty corpus (data not unpacked?)")
+    run = subprocess.run([str(BIN), *dirs], capture_output=True, text=True)
+    out = run.stdout
     m = re.search(r"turns compared: (\d+)\s+clean: (\d+)", out)
+    if not m:
+        sys.exit(f"metrics: checker gave no summary (exit {run.returncode}):\n{out[-2000:]}\n{run.stderr[-3000:]}")
     checks = {}
     for line in out.splitlines():
         c = re.match(r"(\S+)\s+(\d+) ok\s+(\d+) bad", line)

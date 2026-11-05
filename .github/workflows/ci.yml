@@ -55,11 +55,12 @@ jobs:
         if: env.HAS_DATA_KEY == 'true'
       - name: Replay check (fails on regression vs metrics/baseline.json)
         if: env.HAS_DATA_KEY == 'true'
+        shell: bash   # -eo pipefail, so a failure before tee fails the step
         env:
           AWBW_DATA: ${{ github.workspace }}/corpus
           AWBW_TEAM: ${{ github.workspace }}/corpus/data
         run: |
-          (cd corpus && tar xzf packed/replays.tgz && tar xzf packed/team.tgz)
+          (cd corpus && tar xzf packed/replays.tgz --warning=no-unknown-keyword && tar xzf packed/team.tgz --warning=no-unknown-keyword)
           python3 -I tools/metrics.py --check | tee metrics-run.txt
       - name: "Nightly: append to metrics history"
         if: env.HAS_DATA_KEY == 'true' && github.event_name == 'schedule'
