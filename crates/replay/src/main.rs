@@ -399,7 +399,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 }
                 let def_rec = hp_display(&rd["units_hit_points"]);
                 let att_rec = hp_display(&ra["units_hit_points"]);
-                let Some(base) = tables().base_damage(&att.kind, &def.kind) else {
+                let Some(base) = base_damage_now(&att, &def.kind) else {
                     r.check("fire.can_target", false, || tag(c, format!("{} can't hit {}", att.kind, def.kind)));
                     continue;
                 };
@@ -433,10 +433,9 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     let di = tables().unit(&def.kind);
                     let first = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
                         && d == 1 && di.range[1] == 1 && !is_indirect(&def.kind)
-                        && tables().base_damage(&def.kind, &att.kind).is_some()
-                        && (def.ammo > 0 || di.second_weapon || di.ammo == 0);
+                        && base_damage_now(&def, &att.kind).is_some();
                     if first {
-                        let b2 = tables().base_damage(&def.kind, &att.kind).unwrap();
+                        let b2 = base_damage_now(&def, &att.kind).unwrap();
                         // A first strike isn't a counterattack: no x1.5 (all 7 recorded ones fit
                         // without it, none with it).
                         let cf = if att_hidden { hidden_range(s, alive_after(r, actions, i, att.id), &def, &att, b2, false) } else { attack_feasible(s, &def, &att, att_rec, b2, false) };
@@ -500,12 +499,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 if def_rec > 0 {
                     let di = tables().unit(&def.kind);
                     let can_counter = d == 1 && di.range[1] == 1 && !is_indirect(&def.kind)
-                        && tables().base_damage(&def.kind, &att.kind).is_some()
-                        && (def.ammo > 0 || di.second_weapon || di.ammo == 0);
+                        && base_damage_now(&def, &att.kind).is_some();
                     if can_counter {
                         let mut d2 = def.clone();
                         d2.hp = new_def_hp;
-                        let b2 = tables().base_damage(&def.kind, &att.kind).unwrap();
+                        let b2 = base_damage_now(&def, &att.kind).unwrap();
                         let cf = if att_hidden { hidden_range(s, alive_after(r, actions, i, att.id), &d2, &att, b2, true) } else { attack_feasible(s, &d2, &att, att_rec, b2, true) };
                         let att_rec = if att_hidden { cf.map(|h| h.display_hi()).unwrap_or(0) } else { att_rec };
                         r.check("fire.counter_damage", cf.is_some(), || {

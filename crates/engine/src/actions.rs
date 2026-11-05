@@ -107,12 +107,8 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
             let dd = dist(from, (d.x, d.y));
             dd >= minr && dd <= maxr as u32
         })
-        .filter(|d| tables().base_damage(&u.kind, &d.kind).is_some())
-        .filter(|d| u.ammo > 0 || info.ammo == 0 || secondary_target(&u.kind, &d.kind)
-            // Out of ammo, a machine gun still hits ground vehicles (seen: Mech vs Md.Tank).
-            // The damage chart only has each pair's best weapon, so this damage is unmodelled.
-            || (info.second_weapon && u.kind != "Cruiser"
-                && matches!(tables().unit(&d.kind).move_type.as_str(), "T" | "W")))
+        // Out of ammo, a machine gun still hits ground vehicles (rules::mg_damage).
+        .filter(|d| base_damage_now(u, &d.kind).is_some())
         .map(|d| (d.x, d.y))
         .collect()
 }

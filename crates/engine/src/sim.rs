@@ -175,7 +175,7 @@ fn hp_now(u: &Unit) -> u8 {
 
 /// Damage `att` does to `def` with a given luck roll (internal HP points).
 pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8 {
-    let Some(base) = tables().base_damage(&att.kind, &def.kind) else { return 0 };
+    let Some(base) = base_damage_now(att, &def.kind) else { return 0 };
     let at = s.terrain_at(att.x, att.y);
     let dt = s.terrain_at(def.x, def.y);
     let p = AttackParams {
@@ -384,11 +384,9 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     // that can counter strikes first, without her x1.5 counter bonus; the attacker then fires
     // with what's left, and there's no second counter.
     {
-        let di = tables().unit(&def.kind);
         let first = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
             && dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind)
-            && tables().base_damage(&def.kind, &att.kind).is_some()
-            && (def.ammo > 0 || di.ammo == 0 || secondary_target(&def.kind, &att.kind));
+            && base_damage_now(&def, &att.kind).is_some();
         if first {
             let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
             let dmg = damage(s, &def, &att, luck(lo, hi), false);
@@ -434,10 +432,8 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     }
     let def = s.units.get(&def.id).cloned().unwrap();
     let att = s.units.get(&aid).cloned().unwrap();
-    let di = tables().unit(&def.kind);
     let can_counter = dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind)
-        && tables().base_damage(&def.kind, &att.kind).is_some()
-        && (def.ammo > 0 || di.ammo == 0 || secondary_target(&def.kind, &att.kind));
+        && base_damage_now(&def, &att.kind).is_some();
     if can_counter {
         let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
         let dmg = damage(s, &def, &att, luck(lo, hi), true);

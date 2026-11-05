@@ -188,6 +188,40 @@ pub fn uses_primary(att: &Unit, def_kind: &str) -> bool {
 
 /// Targets a unit hits with its second weapon (machine gun / anti-air gun), which costs no
 /// ammo. False for units without one.
+/// Machine-gun base damage of a second-weapon unit with no ammo against a target it would
+/// normally hit with its main weapon (the damage chart only holds each pair's main weapon).
+/// From the published AW2 damage chart; checked against replays only for B-Copter vs
+/// Neotank and Mech vs Md.Tank (the only out-of-ammo attacks in our records). None: the
+/// machine gun can't hit it.
+pub fn mg_damage(att_kind: &str, def_kind: &str) -> Option<u8> {
+    let row: &[(&str, u8)] = match att_kind {
+        "Mech" => &[("Recon", 18), ("APC", 20), ("Artillery", 15), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
+        "B-Copter" => &[("Recon", 30), ("APC", 20), ("Artillery", 25), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
+        "Tank" => &[("Recon", 40), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 30), ("Anti-Air", 5), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
+        "Md.Tank" => &[("Recon", 45), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 35), ("Anti-Air", 7), ("Tank", 8), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
+        "Neotank" | "Mega Tank" => &[("Recon", 65), ("APC", 65), ("Artillery", 65), ("Rocket", 75), ("Missile", 55), ("Anti-Air", 17), ("Tank", 10), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
+        _ => &[],
+    };
+    row.iter().find(|(k, _)| *k == def_kind).map(|&(_, v)| v)
+}
+
+/// Base damage `att` deals `def` with the weapon it would use now, or None if it can't
+/// fire at it: the chart's value; out of ammo, its second weapon's (the chart's value for
+/// second-weapon targets, the machine-gun table otherwise) or nothing.
+pub fn base_damage_now(att: &Unit, def_kind: &str) -> Option<u8> {
+    let info = tables().unit(&att.kind);
+    if info.ammo > 0 && att.ammo == 0 {
+        if secondary_target(&att.kind, def_kind) {
+            return tables().base_damage(&att.kind, def_kind);
+        }
+        if info.second_weapon && att.kind != "Cruiser" {
+            return mg_damage(&att.kind, def_kind);
+        }
+        return None;
+    }
+    tables().base_damage(&att.kind, def_kind)
+}
+
 pub fn secondary_target(att_kind: &str, def_kind: &str) -> bool {
     if !tables().unit(att_kind).second_weapon && att_kind != "Cruiser" {
         return false;
