@@ -421,6 +421,65 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     r.hidden_hp.insert(aid);
                     r.hidden_hp.insert(did);
                 }
+                // Sonja's Counter Break (super, lasting through the opponent's turn): a defender
+                // that can counter strikes first; the attacker then fires with what's left
+                // (game-1746729 turns 019, 025, 031).
+                {
+                    let di = tables().unit(&def.kind);
+                    let first = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
+                        && d == 1 && di.range[1] == 1 && !is_indirect(&def.kind)
+                        && tables().base_damage(&def.kind, &att.kind).is_some()
+                        && (def.ammo > 0 || di.second_weapon || di.ammo == 0);
+                    if first {
+                        let b2 = tables().base_damage(&def.kind, &att.kind).unwrap();
+                        // A first strike isn't a counterattack: no x1.5 (all 7 recorded ones fit
+                        // without it, none with it).
+                        let cf = if att_hidden { hidden_range(s, alive_after(r, actions, i, att.id), &def, &att, b2, false) } else { attack_feasible(s, &def, &att, att_rec, b2, false) };
+                        let def_ammo_after = num(&rd["units_ammo"]) as i32;
+                        let want = if uses_primary(&def, &att.kind) { def.ammo - 1 } else { def.ammo };
+                        // A hidden (Sonja) defender's ammo shows as 0 in the record: keep ours.
+                        // A dead defender's ammo shows as 0 too.
+                        let def_ammo_after = if def_hidden || (def_ammo_after == 0 && hp_display(&rd["units_hit_points"]) == 0) { want } else { def_ammo_after };
+                        r.check("fire.counter_ammo", def_ammo_after == want, || {
+                            tag(c, format!("{} ammo {} -> {def_ammo_after} striking first at {}", def.kind, def.ammo, att.kind))
+                        });
+                        let att_rec = if att_hidden { cf.map(|h| h.display_hi()).unwrap_or(0) } else { att_rec };
+                        r.check("fire.counter_damage", cf.is_some(), || {
+                            tag(c, format!("first strike {} {}hp (Sonja) -> {} {}hp: recorded {}hp",
+                                def.kind, def.hp.display_hi(), att.kind, att.hp.display_hi(), att_rec))
+                        });
+                        let new_att_hp = cf.unwrap_or(Hp::from_display(att_rec));
+                        let new_def_hp = if att_rec == 0 {
+                            def.hp
+                        } else {
+                            let mut a2 = att.clone();
+                            a2.hp = new_att_hp;
+                            let nd = if def_hidden { hidden_range(s, alive_after(r, actions, i, def.id), &a2, &def, base, false) } else { attack_feasible(s, &a2, &def, def_rec, base, false) };
+                            r.check("fire.damage", nd.is_some(), || {
+                                tag(c, format!("after first strike {} {}hp -> {} {}hp (Sonja): recorded {}hp",
+                                    att.kind, att_rec, def.kind, def.hp.display_hi(), def_rec))
+                            });
+                            nd.unwrap_or(Hp::from_display(def_rec))
+                        };
+                        let def_rec = if def_hidden { new_def_hp.display_hi() } else { def_rec };
+                        meter_check(s, a, r, c, None);
+                        if let Some(m) = s.units.get_mut(&aid) {
+                            m.hp = if att_rec == 0 { Hp::exact(0) } else { new_att_hp };
+                            m.ammo = ammo_after;
+                            m.moved = true;
+                        }
+                        if let Some(m) = s.units.get_mut(&did) {
+                            m.hp = if def_rec == 0 { Hp::exact(0) } else { new_def_hp };
+                            m.ammo = def_ammo_after;
+                        }
+                        for id in [aid, did] {
+                            if s.units.get(&id).map(|u| u.hp.hi == 0).unwrap_or(false) {
+                                remove_unit(s, id);
+                            }
+                        }
+                        continue;
+                    }
+                }
                 let new_def = if def_hidden { hidden_range(s, alive_after(r, actions, i, def.id), &att, &def, base, false) } else { attack_feasible(s, &att, &def, def_rec, base, false) };
                 let def_rec = if def_hidden { new_def.map(|h| h.display_hi()).unwrap_or(0) } else { def_rec };
                 r.check("fire.damage", new_def.is_some(), || {

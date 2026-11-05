@@ -380,6 +380,41 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
 pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(), String> {
     let att = s.units.get(&aid).cloned().ok_or("attacker gone")?;
     let def = s.unit_at(target.0, target.1).cloned().ok_or("no target")?;
+    // Sonja's Counter Break: while her super lasts (through the opponent's turn), a defender
+    // that can counter strikes first, without her x1.5 counter bonus; the attacker then fires
+    // with what's left, and there's no second counter.
+    {
+        let di = tables().unit(&def.kind);
+        let first = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
+            && dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind)
+            && tables().base_damage(&def.kind, &att.kind).is_some()
+            && (def.ammo > 0 || di.ammo == 0 || secondary_target(&def.kind, &att.kind));
+        if first {
+            let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
+            let dmg = damage(s, &def, &att, luck(lo, hi), false);
+            if uses_primary(&def, &att.kind) {
+                s.units.get_mut(&def.id).unwrap().ammo -= 1;
+            }
+            let after = hp_now(&att).saturating_sub(dmg);
+            set_hp(s, aid, after);
+            let att_lost = display(hp_now(&att)) - display(after);
+            if after == 0 {
+                charge(s, &att, att_lost, &def, 0);
+                return Ok(());
+            }
+            let att = s.units.get(&aid).cloned().unwrap();
+            let def = s.units.get(&def.id).cloned().unwrap();
+            let (lo, hi) = co::luck(&co_of(s, att.owner), &pw(s, att.owner));
+            let dmg = damage(s, &att, &def, luck(lo, hi), false);
+            if uses_primary(&att, &def.kind) {
+                s.units.get_mut(&aid).unwrap().ammo -= 1;
+            }
+            let left = hp_now(&def).saturating_sub(dmg);
+            set_hp(s, def.id, left);
+            charge(s, &att, att_lost, &def, display(hp_now(&def)) - display(left));
+            return Ok(());
+        }
+    }
     let (lo, hi) = co::luck(&co_of(s, att.owner), &pw(s, att.owner));
     let dmg = damage(s, &att, &def, luck(lo, hi), false);
     if uses_primary(&att, &def.kind) {
