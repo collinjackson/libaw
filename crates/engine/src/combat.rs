@@ -16,6 +16,12 @@ pub fn towers(s: &State, p: PlayerId) -> u32 {
         .count() as u32
 }
 
+/// Kindle's High Society: +3% attack per income property owned (fits game-1755277 better
+/// than counting cities only: 7 of 8 attacks vs 6 of 8).
+fn kindle_count(s: &State, p: PlayerId) -> i32 {
+    s.buildings.values().filter(|b| b.owner == Some(p) && crate::rules::is_income_property(b.terrain)).count() as i32
+}
+
 /// The owner's active power: "N", "Y" (CO power) or "S" (super power).
 pub fn pw(s: &State, p: PlayerId) -> String {
     s.player(p).map(|p| p.power.clone()).unwrap_or_else(|| "N".into())
@@ -28,7 +34,8 @@ pub fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
     let stars = stars(s, att, att_terrain);
     let v = 100 + 10 * towers(s, att.owner) as i32 * tower_multiplier(s, att.owner)
         + co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars)
-        + s.player(att.owner).filter(|p| p.power != "N").map_or(0, |p| p.power_attack);
+        + s.player(att.owner).filter(|p| p.power != "N").map_or(0, |p| p.power_attack)
+        + if co == "Kindle" && pw(s, att.owner) == "S" { 3 * kindle_count(s, att.owner) } else { 0 };
     v.max(0) as u32
 }
 
