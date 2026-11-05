@@ -46,12 +46,12 @@ impl Agent {
     }
     /// One action for the player to move, in contract JSON.
     /// In fog, the agent sees only `fog::player_view` (the caller passes that as `s`).
-    fn act(&self, s: &State, template: &Value, seed: u64, rng: &mut impl FnMut() -> u32) -> Result<Value, String> {
+    fn act(&self, s: &State, template: &Value, seed: u64, game: &str, rng: &mut impl FnMut() -> u32) -> Result<Value, String> {
         match self {
             Agent::Random => Ok(action_to_contract(&awbw_engine::baseline::random(s, rng))),
             Agent::Greedy => Ok(action_to_contract(&awbw_engine::baseline::choose(s))),
             Agent::Http { url, bot, agent } => {
-                let body = json!({"player_id": s.current, "seed": seed, "bot": bot, "state": to_turn_json(s, template)});
+                let body = json!({"player_id": s.current, "seed": seed, "game": game, "bot": bot, "state": to_turn_json(s, template)});
                 let mut r = agent.post(format!("{url}/act")).send_json(&body).map_err(|e| format!("http: {e}"))?;
                 r.body_mut().read_json::<Value>().map_err(|e| format!("bad json: {e}"))
             }
@@ -118,13 +118,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         // Fog: the agent plans on what its player can see; its reply is read against that
         // view and applied to the real state (a path may run into a hidden unit: a trap).
         let view = awbw_engine::fog::player_view(&s, s.current);
-        let reply = seats[i].act(&view, start, req_seed, &mut next);
-        if std::env::var("DEBUG_FOG").is_ok() && this_turn == 0 {
-            let l = awbw_engine::actions::legal_actions(&view);
-            let mine = view.units.values().filter(|u| u.owner == s.current).count();
-            let ready = view.units.values().filter(|u| u.owner == s.current && !u.moved).count();
-            eprintln!("DBG day {} cur {} legal {} mine {} ready {} winner {:?} reply {:?}", s.day, s.current, l.len(), mine, ready, sim::winner(&view), reply.as_ref().map(|v| v["type"].clone()));
-        }
+        let reply = seats[i].act(&view, start, req_seed, name, &mut next);
         // A Supply with nobody to supply does what Wait does: take it as Wait (counted),
         // rather than end the bot's turn over a no-op.
         let reply = reply.map(|v| {
@@ -249,7 +243,7 @@ pub fn suggest(args: &[String]) {
     let (mut moves, mut illegal, mut first_error) = (vec![], 0, None::<String>);
     for n in 0..300u64 {
         if s.current != me || sim::winner(&s).is_some() { break; }
-        let a = match agent.act(&s, &start, 0x5eed ^ n, &mut next).and_then(|v| action_from_contract(&s, &v).map_err(|e| format!("illegal: {e}"))) {
+        let a = match agent.act(&s, &start, 0x5eed ^ n, "contract-test", &mut next).and_then(|v| action_from_contract(&s, &v).map_err(|e| format!("illegal: {e}"))) {
             Ok(a) => a,
             Err(e) => { illegal += 1; first_error.get_or_insert(e); Action::EndTurn }
         };
