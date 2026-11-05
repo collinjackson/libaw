@@ -4,7 +4,7 @@
 //! it with seeded luck, and asks again until the game ends or hits the day limit.
 //!
 //!   awbw-replay --match START.json AGENT_A AGENT_B [GAMES] [MAX_DAYS] [SEED]
-//!   AGENT: random | http://host:port#bot-b
+//!   AGENT: random | greedy | http://host:port#bot-b
 //!
 //! Games alternate seats. One JSON line per game goes to stdout; with SELFPLAY_LOG_DIR set,
 //! a viewer log per game too.
@@ -19,6 +19,7 @@ use std::time::Duration;
 
 pub enum Agent {
     Random,
+    Greedy,
     Http { url: String, bot: String, agent: ureq::Agent },
 }
 
@@ -29,6 +30,8 @@ impl Agent {
             let agent: ureq::Agent = ureq::Agent::config_builder()
                 .timeout_global(Some(Duration::from_secs(15))).build().into();
             Agent::Http { url: format!("http{url}"), bot: bot.to_string(), agent }
+        } else if spec == "greedy" {
+            Agent::Greedy
         } else {
             Agent::Random
         }
@@ -36,6 +39,7 @@ impl Agent {
     pub fn name(&self) -> String {
         match self {
             Agent::Random => "random".into(),
+            Agent::Greedy => "greedy".into(),
             Agent::Http { bot, .. } => bot.clone(),
         }
     }
@@ -48,6 +52,7 @@ impl Agent {
                 let a = if legal.len() > 1 && rng() % 20 != 0 { &legal[rng() as usize % (legal.len() - 1)] } else { legal.last().unwrap() };
                 Ok(action_to_contract(a))
             }
+            Agent::Greedy => Ok(action_to_contract(&crate::greedy::choose(s))),
             Agent::Http { url, bot, agent } => {
                 let body = json!({"player_id": s.current, "seed": seed, "bot": bot, "state": to_turn_json(s, template)});
                 let mut r = agent.post(format!("{url}/act")).send_json(&body).map_err(|e| format!("http: {e}"))?;
@@ -61,6 +66,7 @@ impl Agent {
 struct Stats {
     actions: u64,
     illegal: u64,
+    normalized: u64,
     errors: u64,
     forced_ends: u64,
 }
@@ -83,6 +89,19 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         let i = seat_of(s.current);
         let req_seed = seed ^ (st[0].actions + st[1].actions).wrapping_mul(0x9E3779B97F4A7C15);
         let reply = seats[i].act(&s, start, req_seed, &mut next);
+        // A Supply with nobody to supply does what Wait does: take it as Wait (counted),
+        // rather than end the bot's turn over a no-op.
+        let reply = reply.map(|v| {
+            if v["then"]["type"] == "supply" && action_from_contract(&s, &v).is_err() {
+                let mut w = v.clone();
+                w["then"] = json!({"type": "wait"});
+                if action_from_contract(&s, &w).is_ok() {
+                    st[i].normalized += 1;
+                    return w;
+                }
+            }
+            v
+        });
         let a = match reply.and_then(|v| action_from_contract(&s, &v).map_err(|e| format!("illegal: {e}: {v}"))) {
             Ok(a) => a,
             Err(e) => {
@@ -128,6 +147,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         "winner": winner_seat.map(|i| seats[i].name()), "days": s.day.min(max_days),
         "worth": [worth(0), worth(1)],
         "actions": [st[0].actions, st[1].actions], "illegal": [st[0].illegal, st[1].illegal],
+        "normalized": [st[0].normalized, st[1].normalized],
         "errors": [st[0].errors, st[1].errors], "forced_ends": [st[0].forced_ends, st[1].forced_ends],
         "first_error": first_error,
     })

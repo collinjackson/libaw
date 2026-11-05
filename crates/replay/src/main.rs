@@ -11,6 +11,7 @@
 
 
 use awbw_engine::awbw::*;
+mod greedy;
 mod matchrun;
 use awbw_engine::data::tables;
 use awbw_engine::rules::*;
