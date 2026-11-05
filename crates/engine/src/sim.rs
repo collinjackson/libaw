@@ -179,6 +179,31 @@ fn set_hp(s: &mut State, id: UnitId, hp: u8) {
 }
 
 /// One attack with its counterattack. Ammo is spent by whichever side uses its primary.
+/// Charge CO power meters after a fight. AWBW: the side that loses HP gains the funds value
+/// of the displayed HP it lost; the other side gains half of that. Meters stored x10, capped
+/// at the super power's cost; no charge while a power is on.
+pub fn charge(s: &mut State, att: &Unit, att_lost: u8, def: &Unit, def_lost: u8) {
+    let value = |u: &Unit, lost: u8| tables().unit(&u.kind).cost as i64 * lost as i64; // x10 /10
+    let (a_val, d_val) = (value(att, att_lost), value(def, def_lost));
+    for (owner, gain) in [(att.owner, a_val + d_val / 2), (def.owner, d_val + a_val / 2)] {
+        if let Some(p) = s.player_mut(owner) {
+            if p.power == "N" {
+                p.meter = (p.meter + gain).min(if p.scop_cost > 0 { p.scop_cost } else { i64::MAX });
+            }
+        }
+    }
+}
+
+/// Activate a power: "Y" (CO power) or "S" (super). Spends its cost from the meter.
+/// (Cost growth after each use and per-CO effects aren't modeled here yet.)
+pub fn spend_power(s: &mut State, pid: PlayerId, kind: &str) {
+    if let Some(p) = s.player_mut(pid) {
+        let cost = if kind == "S" { p.scop_cost } else { p.cop_cost };
+        p.meter = (p.meter - cost).max(0);
+        p.power = kind.to_string();
+    }
+}
+
 pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(), String> {
     let att = s.units.get(&aid).cloned().ok_or("attacker gone")?;
     let def = s.unit_at(target.0, target.1).cloned().ok_or("no target")?;
@@ -189,7 +214,9 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     }
     let left = hp_now(&def).saturating_sub(dmg);
     set_hp(s, def.id, left);
+    let def_lost = display(hp_now(&def)) - display(left);
     if left == 0 {
+        charge(s, &att, 0, &def, def_lost);
         return Ok(());
     }
     let def = s.units.get(&def.id).cloned().unwrap();
@@ -204,8 +231,12 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
         if uses_primary(&def, &att.kind) {
             s.units.get_mut(&def.id).unwrap().ammo -= 1;
         }
-        set_hp(s, aid, hp_now(&att).saturating_sub(dmg));
+        let after = hp_now(&att).saturating_sub(dmg);
+        set_hp(s, aid, after);
+        charge(s, &att, display(hp_now(&att)) - display(after), &def, def_lost);
+        return Ok(());
     }
+    charge(s, &att, 0, &def, def_lost);
     Ok(())
 }
 

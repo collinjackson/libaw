@@ -340,6 +340,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     // One side is hidden from this view (a dived sub). Take the visible side's
                     // recorded result as given.
                     r.skip("fire: a side is hidden from this view (id 0)");
+                    meter_check(s, a, r, c, None);
                     for (id, rv) in [(aid, ra), (did, rd)] {
                         if id == 0 { continue; }
                         let hp = hp_display(&rv["units_hit_points"]);
@@ -387,6 +388,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 });
                 if std::env::var("SKIP_POWERED").is_ok() && (pw(s, att.owner) != "N" || pw(s, def.owner) != "N") {
                     r.skip("fire: SKIP_POWERED set");
+                    meter_check(s, a, r, c, None);
                     if let Some(m) = s.units.get_mut(&aid) { m.hp = Hp::from_display(att_rec); m.ammo = ammo_after; }
                     if let Some(m) = s.units.get_mut(&did) { m.hp = Hp::from_display(def_rec); m.ammo = num(&rd["units_ammo"]) as i32; }
                     for id in [aid, did] {
@@ -441,6 +443,10 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     }
                 }
                 let att_rec = if att_hidden { new_att_hp.display_hi() } else { att_rec };
+                let lost = |u: &Unit, after: u8| u.hp.display_hi().saturating_sub(after);
+                let fight = (!att_hidden && !def_hidden && att.hp.display().is_some() && def.hp.display().is_some())
+                    .then(|| (att.clone(), lost(&att, att_rec), def.clone(), lost(&def, def_rec)));
+                meter_check(s, a, r, c, fight);
                 if let Some(m) = s.units.get_mut(&aid) {
                     m.hp = if att_rec == 0 { Hp::exact(0) } else { new_att_hp };
                     m.ammo = ammo_after;
@@ -717,12 +723,57 @@ fn moved_this_action(_u: &Unit) -> bool {
 
 /// A CO power or super power. AWBW records most of its effects on the action itself:
 /// changed units (`unitReplace`), across-the-board HP changes (`hpChange`), weather, funds.
+/// After a fire: charge the meters the engine's way and compare with the recorded values
+/// (`copValues`), then take the recorded values so one miss doesn't spread.
+fn meter_check(s: &mut State, a: &Value, r: &mut Report, c: &Ctx, fight: Option<(Unit, u8, Unit, u8)>) {
+    let cv = &a["copValues"];
+    if !cv.is_object() {
+        return;
+    }
+    if let Some((att, al, def, dl)) = fight {
+        let before: Vec<(u32, i64)> = s.players.iter().map(|p| (p.id, p.meter)).collect();
+        awbw_engine::sim::charge(s, &att, al, &def, dl);
+        for side in ["attacker", "defender"] {
+            let pid = num(&cv[side]["playerId"]) as u32;
+            let want = num(&cv[side]["copValue"]);
+            let ours = s.player(pid).map(|p| p.meter).unwrap_or(-1);
+            let was = before.iter().find(|b| b.0 == pid).map(|b| b.1).unwrap_or(-1);
+            r.check("power.meter", ours == want, || {
+                tag(c, format!("{side} {pid} ({}, power {}): meter {was} -> engine {ours}, recorded {want} [{} lost {al}, {} lost {dl}]",
+                    co_of(s, pid), pw(s, pid), att.kind, def.kind))
+            });
+        }
+    }
+    for side in ["attacker", "defender"] {
+        let pid = num(&cv[side]["playerId"]) as u32;
+        if let Some(p) = s.player_mut(pid) {
+            p.meter = num(&cv[side]["copValue"]);
+        }
+    }
+}
+
 fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     let pid = num(&a["playerId"]) as u32;
     let kind = a["coPower"].as_str().unwrap_or("Y").to_string();
     r.check("power.player_is_current", pid == s.current, || tag(c, format!("power by {pid}")));
-    if let Some(p) = s.player_mut(pid) {
-        p.power = kind;
+    if s.player(pid).is_some() {
+        let was = s.player(pid).map(|p| p.meter).unwrap_or(0);
+        awbw_engine::sim::spend_power(s, pid, &kind);
+        if let Some(want) = opt_num(&a["copValue"]) {
+            let ours = s.player(pid).map(|p| p.meter).unwrap_or(-1);
+            r.check("power.meter_after_use", ours == want, || {
+                tag(c, format!("{} {kind}: meter {was} -> engine {ours}, recorded {want}", co_of(s, pid)))
+            });
+            s.player_mut(pid).unwrap().meter = want;
+        }
+    }
+    // Sasha's Market Crash drains other meters.
+    if let Value::Object(m) = &a["playerReplace"] {
+        for (id, v) in m {
+            if let (Ok(id), Some(cp)) = (id.parse::<u32>(), opt_num(&v["players_co_power"])) {
+                if let Some(p) = s.player_mut(id) { p.meter = cp; }
+            }
+        }
     }
     // Older records: a movement change for all the player's units ("global").
     if let Some(d) = opt_num(&a["global"]["units_movement_points"]) {

@@ -80,6 +80,13 @@ pub struct Player {
     pub order: u32,
     /// "N" none, "Y" CO power, "S" super power (AWBW's players_co_power_on).
     pub power: String,
+    /// CO power meter in AWBW units (funds of damage x 10), and the costs of each power.
+    #[serde(default)]
+    pub meter: i64,
+    #[serde(default)]
+    pub cop_cost: i64,
+    #[serde(default)]
+    pub scop_cost: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -124,6 +124,9 @@ pub fn state_from(turn: &Value) -> State {
             eliminated: p["players_eliminated"].as_str() == Some("Y"),
             order: num(&p["players_order"]) as u32,
             power: p["players_co_power_on"].as_str().unwrap_or("N").to_string(),
+            meter: num(&p["players_co_power"]),
+            cop_cost: num(&p["players_co_max_power"]),
+            scop_cost: num(&p["players_co_max_spower"]),
         })
         .collect();
     for p in items(&turn["players"]) {
@@ -255,6 +258,7 @@ pub fn to_turn_json(s: &State, template: &Value) -> Value {
             "players_id": p.id, "players_team": p.team, "co_name": p.co, "players_funds": p.funds,
             "players_eliminated": if p.eliminated { "Y" } else { "N" }, "players_order": p.order,
             "players_co_power_on": p.power, "players_income": income(p),
+            "players_co_power": p.meter, "players_co_max_power": p.cop_cost, "players_co_max_spower": p.scop_cost,
         });
         if let (Value::Object(o), Value::Object(f)) = (&mut o, f) {
             o.extend(f);
