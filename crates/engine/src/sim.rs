@@ -119,8 +119,12 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
             u.ammo = info.ammo as i32;
         }
     }
+    // Only units still dry after resupply go down: a boat that burns its last fuel on its
+    // own port is refuelled there, not sunk (7 Black Boats in league games).
     for id in crashed {
-        remove_unit(s, id);
+        if s.units.get(&id).is_some_and(|u| u.fuel == 0) {
+            remove_unit(s, id);
+        }
     }
 }
 
