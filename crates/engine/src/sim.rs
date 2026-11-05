@@ -222,7 +222,7 @@ pub fn power_effects(s: &mut State, pid: PlayerId, kind: &str) -> bool {
 
 /// Missile damage within 2 tiles of `at`: 3 displayed HP off each enemy unit there, never
 /// killing (a unit pushed to the floor shows 1 HP).
-fn missile(s: &mut State, pid: PlayerId, at: (u16, u16), stun: bool) {
+fn missile(s: &mut State, pid: PlayerId, at: (u16, u16), stun: bool, hp: i32) {
     let hit: Vec<UnitId> = s.units.values()
         .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()
             && (u.x as i32 - at.0 as i32).abs() + (u.y as i32 - at.1 as i32).abs() <= 2)
@@ -230,7 +230,7 @@ fn missile(s: &mut State, pid: PlayerId, at: (u16, u16), stun: bool) {
     for id in hit {
         let u = s.units.get_mut(&id).unwrap();
         let floor_hi = u.hp.hi.min(10);
-        u.hp = crate::state::Hp { lo: (u.hp.lo as i32 - 30).max(1) as u8, hi: ((u.hp.hi as i32 - 30).max(1) as u8).max(floor_hi) };
+        u.hp = crate::state::Hp { lo: (u.hp.lo as i32 - hp * 10).max(1) as u8, hi: ((u.hp.hi as i32 - hp * 10).max(1) as u8).max(floor_hi) };
         if stun {
             u.stunned = true;
             u.moved = true;
@@ -263,7 +263,10 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
     let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
     for k in 0..e.missiles as usize {
         let at = match targets { Some(t) => match t.get(k) { Some(&p) => p, None => break }, None => aim_missile(s, pid) };
-        missile(s, pid, at, e.stun);
+        missile(s, pid, at, e.stun, e.missile_hp);
+    }
+    if e.funds_mult != 1.0 {
+        if let Some(p) = s.player_mut(pid) { p.funds = (p.funds as f64 * e.funds_mult).floor() as i64; }
     }
     let mine: Vec<UnitId> = s.units.values().filter(|u| s.allied(u.owner, pid)).map(|u| u.id).collect();
     let theirs: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).map(|u| u.id).collect();
@@ -402,7 +405,7 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
         Action::Build { at, kind } => {
             let me = s.current;
             let p = s.player(me).ok_or("no player")?;
-            let price = (tables().unit(kind).cost as f64 * co::price_multiplier(&p.co)).round() as i64;
+            let price = (tables().unit(kind).cost as f64 * co::price_multiplier(&p.co, &p.power)).round() as i64;
             if price > p.funds || s.unit_at(at.0, at.1).is_some() {
                 return Err(format!("can't build {kind} at {at:?}"));
             }

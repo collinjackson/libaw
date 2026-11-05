@@ -71,8 +71,9 @@ pub fn luck(co: &str, power: &str) -> (i32, i32) {
     }
 }
 
-pub fn price_multiplier(co: &str) -> f64 {
-    d2d(co).and_then(|d| d["UnitPriceMultiplier"].as_f64()).unwrap_or(1.0)
+/// Build price multiplier, with an active power's own value taking over (Hachi: 0.5).
+pub fn price_multiplier(co: &str, power: &str) -> f64 {
+    active(co, power).into_iter().rev().find_map(|d| d["UnitPriceMultiplier"].as_f64()).unwrap_or(1.0)
 }
 
 pub fn property_fund_increase(co: &str) -> i64 {
@@ -152,6 +153,10 @@ pub struct Instant {
     pub missiles: u8,
     /// Units the missiles hit can't act in their next turn (Von Bolt).
     pub stun: bool,
+    /// Displayed HP each missile takes (3; Sturm's meteors 4 and 8).
+    pub missile_hp: i32,
+    /// Multiply the user's funds (Colin's Gold Rush: 1.5).
+    pub funds_mult: f64,
 }
 
 /// Does a unit of this kind get a power's movement bonus?
@@ -168,8 +173,8 @@ pub fn moves_apply(kind: &str, moves_for: &str) -> bool {
 }
 
 pub fn instant(co: &str, power: &str) -> Option<Instant> {
-    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false });
-    let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel: 1.0, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false });
+    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_mult: 1.0 });
+    let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel: 1.0, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_mult: 1.0 });
     match (co, power) {
         ("Sami", "Y") => only(1, "foot", false),
         ("Sami", "S") => only(2, "foot", false),
@@ -184,6 +189,14 @@ pub fn instant(co: &str, power: &str) -> Option<Instant> {
         ("Kindle", "Y") => Some(Instant { urban_loss: 3, ..i(0, 0, 1.0, 0, None).unwrap() }),
         ("Sasha", "Y") => Some(Instant { drain: true, ..i(0, 0, 1.0, 0, None).unwrap() }),
         ("Rachel", "S") => Some(Instant { missiles: 3, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        // Not seen in our recorded games (ballpark until checked): Sturm's meteors, Olaf's
+        // Blizzard, Colin's Gold Rush.
+        ("Sturm", "Y") => Some(Instant { missiles: 1, missile_hp: 4, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Sturm", "S") => Some(Instant { missiles: 1, missile_hp: 8, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        ("Olaf", "Y") => i(0, 0, 1.0, 0, Some('S')),
+        ("Colin", "Y") => Some(Instant { funds_mult: 1.5, ..i(0, 0, 1.0, 0, None).unwrap() }),
+        // Luck and stat powers: their ongoing effects come from the CO tables; nothing instant.
+        ("Nell", "Y") | ("Flak", _) | ("Jugger", _) | ("Eagle", "Y") | ("Kanbei", _) | ("Grit", _) | ("Hachi", "Y") => i(0, 0, 1.0, 0, None),
         ("Von Bolt", "S") => Some(Instant { missiles: 1, stun: true, ..i(0, 0, 1.0, 0, None).unwrap() }),
         ("Andy", "Y") => i(2, 0, 1.0, 0, None),
         ("Andy", "S") => i(5, 0, 1.0, 1, None),
@@ -206,7 +219,12 @@ pub fn instant(co: &str, power: &str) -> Option<Instant> {
 pub fn roster() -> Vec<(String, &'static str)> {
     let mut v: Vec<(String, &'static str)> = tables().cos.keys().cloned().collect::<Vec<_>>()
         .into_iter().filter(|c: &String| c != "No CO" && power_base(c).is_some())
-        .map(|c| { let st = if instant(&c, "Y").is_some() && instant(&c, "S").is_some() { "full" } else { "partial" }; (c, st) })
+        .map(|c| {
+            // A CO whose COP costs as much as the super has no COP (Von Bolt).
+            let no_cop = power_base(&c).is_some_and(|(y, s)| y == s);
+            let st = if (no_cop || instant(&c, "Y").is_some()) && instant(&c, "S").is_some() { "full" } else { "partial" };
+            (c, st)
+        })
         .collect();
     v.sort();
     v.insert(0, ("No CO".to_string(), "none"));

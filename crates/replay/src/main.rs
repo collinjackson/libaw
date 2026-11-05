@@ -251,7 +251,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     tag(c, format!("{} at {:?} not generated", nu.kind, (nu.x, nu.y)))
                 });
                 let cost = (tables().unit(&nu.kind).cost as f64
-                    * awbw_engine::co::price_multiplier(&co_of(s, nu.owner))).round() as i64;
+                    * awbw_engine::co::price_multiplier(&co_of(s, nu.owner), &s.player(nu.owner).map(|p| p.power.clone()).unwrap_or_default())).round() as i64;
                 let funds = s.player(nu.owner).map(|p| p.funds).unwrap_or(0);
                 r.check("build.affordable", cost <= funds, || {
                     tag(c, format!("{} costs {cost}, funds {funds}", nu.kind))
