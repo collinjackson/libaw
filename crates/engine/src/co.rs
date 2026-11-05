@@ -120,3 +120,38 @@ pub fn powers_ready(s: &crate::state::State, pid: u32) -> Vec<&'static str> {
     }
     out
 }
+
+/// A power's effects at the moment it's activated (HP, fuel, movement, weather). Values read
+/// from the recorded Power actions (`hpChange`, `global`, `weatherReplace`); every recorded
+/// use of a CO and power agrees. Ongoing effects (attack, defense, luck, range) live in the
+/// CO data. Powers that change chosen units (missiles, Kindle, Jake, Sami...) aren't here yet.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Instant {
+    /// Displayed HP added to the user's side's units (heals reach carried units).
+    pub gain: i32,
+    /// Displayed HP removed from the other side's units (not carried ones); never kills.
+    pub loss: i32,
+    /// Fuel multiplier for the units that lose HP (Drake halves it, rounding up).
+    pub loss_fuel: f64,
+    /// Movement points added to the user's units for the rest of the turn.
+    pub moves: i32,
+    pub weather: Option<char>,
+}
+
+pub fn instant(co: &str, power: &str) -> Option<Instant> {
+    let i = |gain, loss, loss_fuel, moves, weather| Some(Instant { gain, loss, loss_fuel, moves, weather });
+    match (co, power) {
+        ("Andy", "Y") => i(2, 0, 1.0, 0, None),
+        ("Andy", "S") => i(5, 0, 1.0, 1, None),
+        ("Hawke", "Y") => i(1, 1, 1.0, 0, None),
+        ("Hawke", "S") => i(2, 2, 1.0, 0, None),
+        ("Drake", "Y") => i(0, 1, 0.5, 0, None),
+        ("Drake", "S") => i(0, 2, 0.5, 0, Some('R')),
+        ("Olaf", "S") => i(0, 2, 1.0, 0, Some('S')),
+        ("Adder", "Y") | ("Koal", "Y") => i(0, 0, 1.0, 1, None),
+        ("Adder", "S") | ("Koal", "S") => i(0, 0, 1.0, 2, None),
+        // Powers with no instant effect beyond their ongoing ones.
+        ("Grimm", _) | ("Javier", _) | ("Lash", _) | ("Sonja", _) | ("Rachel", "Y") | ("Kindle", "S") => i(0, 0, 1.0, 0, None),
+        _ => None,
+    }
+}

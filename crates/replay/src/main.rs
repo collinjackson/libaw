@@ -775,6 +775,9 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
             }
         }
     }
+    // The engine's prediction of the instant effects, compared after the record is applied.
+    let mut pred = s.clone();
+    let modelled = awbw_engine::sim::power_effects(&mut pred, pid, &kind);
     // Older records: a movement change for all the player's units ("global").
     if let Some(d) = opt_num(&a["global"]["units_movement_points"]) {
         let ids: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
@@ -825,6 +828,26 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
             }
         }
     }
+    if !modelled {
+        r.skip(&format!("power effects not modelled: {} {kind}", co_of(s, pid)));
+        return;
+    }
+    let co = co_of(s, pid);
+    let mut bad = vec![];
+    for (id, u) in &s.units {
+        let Some(p) = pred.units.get(id) else { continue };
+        if (p.hp, p.fuel) != (u.hp, u.fuel) {
+            bad.push(format!("{} {id}: engine hp {:?} fuel {}, record hp {:?} fuel {}", u.kind, p.hp, p.fuel, u.hp, u.fuel));
+        }
+        let (mp, mr) = (movement_range(&pred, p), movement_range(s, u));
+        if mp != mr {
+            bad.push(format!("{} {id}: engine move {mp}, record {mr}", u.kind));
+        }
+    }
+    if pred.weather != s.weather {
+        bad.push(format!("weather engine {} record {}", pred.weather, s.weather));
+    }
+    r.check("power.effects", bad.is_empty(), || tag(c, format!("{co} {kind}: {}", bad.iter().take(3).cloned().collect::<Vec<_>>().join("; "))));
 }
 
 

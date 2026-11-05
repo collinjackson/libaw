@@ -209,6 +209,41 @@ pub fn spend_power(s: &mut State, pid: PlayerId, kind: &str) {
     }
 }
 
+/// Apply a power's instant effects (see `co::instant`). Returns false when the engine
+/// doesn't model this CO's power yet (it was still activated; only effects are missing).
+pub fn power_effects(s: &mut State, pid: PlayerId, kind: &str) -> bool {
+    let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
+    let mine: Vec<UnitId> = s.units.values().filter(|u| s.allied(u.owner, pid)).map(|u| u.id).collect();
+    let theirs: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).map(|u| u.id).collect();
+    let bump = |h: u8, n: i32| (h as i32 + n).clamp(1, 100) as u8;
+    for id in mine {
+        let u = s.units.get_mut(&id).unwrap();
+        if e.gain != 0 {
+            u.hp = crate::state::Hp { lo: bump(u.hp.lo, e.gain * 10), hi: bump(u.hp.hi, e.gain * 10) };
+        }
+    }
+    for id in theirs {
+        let u = s.units.get_mut(&id).unwrap();
+        if e.loss != 0 {
+            u.hp = crate::state::Hp { lo: bump(u.hp.lo, -e.loss * 10), hi: bump(u.hp.hi, -e.loss * 10) };
+            if e.loss_fuel != 1.0 {
+                u.fuel = (u.fuel as f64 * e.loss_fuel).ceil() as i32;
+            }
+        }
+    }
+    if e.moves != 0 {
+        let own: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
+        for id in own {
+            let m = crate::rules::movement_range(s, &s.units[&id]) as i32 + e.moves;
+            s.move_override.insert(id, m.max(0) as u32);
+        }
+    }
+    if let Some(w) = e.weather {
+        s.weather = w;
+    }
+    true
+}
+
 pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(), String> {
     let att = s.units.get(&aid).cloned().ok_or("attacker gone")?;
     let def = s.unit_at(target.0, target.1).cloned().ok_or("no target")?;
@@ -267,7 +302,9 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
             if !co::powers_ready(s, s.current).contains(&kind.as_str()) {
                 return Err(format!("power {kind} not ready"));
             }
-            spend_power(s, s.current, kind);
+            let me = s.current;
+            spend_power(s, me, kind);
+            power_effects(s, me, kind);
             Ok(())
         }
         Action::Build { at, kind } => {
