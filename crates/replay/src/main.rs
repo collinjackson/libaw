@@ -936,12 +936,21 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     let t0 = std::time::Instant::now();
     let log_dir = std::env::var("SELFPLAY_LOG_DIR").ok();
     let mut frames = vec![frame(&s, "start")];
+    let (mut rt_bad, mut act_bad) = (0u64, 0u64);
+    let mut rt_time = std::time::Duration::ZERO; // excluded from actions/s
     while s.day <= max_days && awbw_engine::sim::winner(&s).is_none() {
         let legal = awbw_engine::actions::legal_actions(&s);
         legal_total += legal.len() as u64;
         // Prefer acting over ending the turn, so games progress.
         let a = if legal.len() > 1 && next() % 20 != 0 { &legal[next() as usize % (legal.len() - 1)] } else { legal.last().unwrap() };
         let label = describe(&s, a);
+        // The chosen action must survive the contract format.
+        let rt0 = std::time::Instant::now();
+        match action_from_contract(&s, &action_to_contract(a)) {
+            Ok(b) if &b == a => {}
+            other => { act_bad += 1; if act_bad <= 5 { eprintln!("contract round trip: {a:?} -> {other:?}"); } }
+        }
+        rt_time += rt0.elapsed();
         let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
         if let Err(e) = awbw_engine::sim::step(&mut s, a, &mut roll) {
             errors += 1;
@@ -965,6 +974,14 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
         if s.players.iter().any(|p| p.funds < 0) {
             violations += 1;
         }
+        // The state must survive AWBW's format.
+        let rt0 = std::time::Instant::now();
+        let back = state_from(&to_turn_json(&s, &v));
+        if fingerprint(&back) != fingerprint(&s) {
+            rt_bad += 1;
+            if rt_bad <= 3 { eprintln!("state round trip after {a:?}:\n{}", diff(&fingerprint(&s), &fingerprint(&back))); }
+        }
+        rt_time += rt0.elapsed();
     }
     if let Some(dir) = &log_dir {
         let name = format!("{}-seed{seed}", file.file_stem().unwrap().to_string_lossy());
@@ -974,14 +991,51 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
         std::fs::create_dir_all(dir).unwrap();
         std::fs::write(Path::new(dir).join(format!("{name}.json")), log.to_string()).unwrap();
     }
+    violations += rt_bad + act_bad;
+    println!("selfplay seed {seed}: {rt_bad} state round-trip and {act_bad} action round-trip failures");
     println!("selfplay seed {seed}: {actions} actions, day {}, winner {:?}, {:.1} legal/position, {errors} step errors, {violations} invariant violations, {:.0} actions/s",
         s.day, awbw_engine::sim::winner(&s), legal_total as f64 / actions.max(1) as f64,
-        actions as f64 / t0.elapsed().as_secs_f64());
+        actions as f64 / (t0.elapsed() - rt_time).as_secs_f64());
     errors + violations
+}
+
+fn diff(a: &str, b: &str) -> String {
+    let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
+    let mut out = String::new();
+    for l in &la { if !lb.contains(l) { out += &format!("  - {l}\n"); } }
+    for l in &lb { if !la.contains(l) { out += &format!("  + {l}\n"); } }
+    out
+}
+
+/// Parse -> write -> parse every turn file; the two parses must agree.
+fn roundtrip(dirs: &[String]) -> u64 {
+    let (mut n, mut bad) = (0u64, 0u64);
+    for d in dirs {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(d).unwrap().filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|e| e == "json") && !p.file_name().unwrap().to_string_lossy().starts_with('.'))
+            .collect();
+        files.sort();
+        for f in files {
+            let v: Value = serde_json::from_slice(&std::fs::read(&f).unwrap()).unwrap();
+            if v["gameState"].is_null() { continue; }
+            let a = state_from(&v);
+            let b = state_from(&to_turn_json(&a, &v));
+            n += 1;
+            if fingerprint(&a) != fingerprint(&b) {
+                bad += 1;
+                if bad <= 3 { eprintln!("{}:\n{}", f.display(), diff(&fingerprint(&a), &fingerprint(&b))); }
+            }
+        }
+    }
+    println!("roundtrip: {n} turn files, {bad} differ");
+    bad
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--roundtrip") {
+        std::process::exit((roundtrip(&args[2..]) > 0) as i32);
+    }
     if args.get(1).map(String::as_str) == Some("--selfplay") {
         let mut bad = 0;
         for seed in 1..=args.get(3).and_then(|n| n.parse().ok()).unwrap_or(3u64) {

@@ -23,21 +23,26 @@ def main():
     if not wt.exists():
         git("worktree", "add", "--detach", str(wt))
     out = ROOT / "metrics/backfill.jsonl"
-    done = {json.loads(l)["commit"] for l in out.read_text().splitlines()} if out.exists() else set()
+    old = {}
+    for l in (out.read_text().splitlines() if out.exists() else []):
+        r = json.loads(l)
+        old[r["commit"]] = r
     corp = metrics.corpora()
     for c in commits:
-        if c in done:
+        prev = old.get(c)
+        todo = {k: v for k, v in corp.items() if not prev or k not in prev["replay"]}
+        if not todo:
             continue
         git("checkout", "-q", "--detach", c, cwd=wt)
         b = subprocess.run(["cargo", "build", "--release", "-q"], cwd=wt, capture_output=True, text=True,
                            env={**__import__("os").environ, "CARGO_TARGET_DIR": str(work / "target")})
-        row = {"commit": c, "time": git("show", "-s", "--format=%cI", c).strip(),
-               "subject": git("show", "-s", "--format=%s", c).strip(), "replay": {}}
+        row = prev or {"commit": c, "time": git("show", "-s", "--format=%cI", c).strip(),
+                       "subject": git("show", "-s", "--format=%s", c).strip(), "replay": {}}
         if b.returncode != 0:
             row["error"] = "build failed"
         else:
             binp = work / "target/release/awbw-replay"
-            for name, dirs in corp.items():
+            for name, dirs in todo.items():
                 r = subprocess.run([str(binp), *dirs], capture_output=True, text=True)
                 m = re.search(r"turns compared: (\d+)\s+clean: (\d+)", r.stdout)
                 a = re.search(r"all checks: ([\d.]+)% of (\d+)", r.stdout)
@@ -46,8 +51,8 @@ def main():
                                         "checks": int(a.group(2)) if a else None}
                                        if m else {"error": f"exit {r.returncode}"})
         print(json.dumps(row), flush=True)
-        with open(out, "a") as f:
-            f.write(json.dumps(row) + "\n")
+        old[c] = row
+        out.write_text("".join(json.dumps(r) + "\n" for r in old.values()))
 
 
 if __name__ == "__main__":

@@ -83,12 +83,12 @@
 
   <div class="card wide" id="method">
     <h2>How it's measured</h2>
-    <p class="note">For each recorded turn, the engine starts from AWBW's state, replays the turn's actions with its own rules, and compares the result with AWBW's state at the start of the next turn: every unit's position, HP, fuel and ammo; every building's owner and capture points; each player's funds. Damage luck is taken from the record. Replays show HP as 1 to 10, so HP matches at that resolution. The games are cached copies of public AWBW replays, fetched once, so these checks put no load on AWBW. Sets: League is Global League standard 1v1 games; League, batch 2 is a second sample of them; Team games are multi-player team matches.</p>
+    <p class="note">For each recorded turn, the engine starts from AWBW's state, replays the turn's actions with its own rules, and compares the result with AWBW's state at the start of the next turn: every unit's position, HP, fuel and ammo; every building's owner and capture points; each player's funds. Damage luck is taken from the record. Replays show HP as 1 to 10, so HP matches at that resolution. The games are cached copies of public AWBW replays, fetched once, so these checks put no load on AWBW. Sets: League is Global League standard 1v1 games; League, batch 2 is a second sample of them; League, rest of pages 1-5 is every other game on the first five pages of the league's game list; Team games are multi-player team matches.</p>
   </div>
 </div>
 
 <script>
-const SET_NAME = {league: 'League', league_batch2: 'League, batch 2', team: 'Team games'};
+const SET_NAME = {league: 'League', league_batch2: 'League, batch 2', league_more: 'League, rest of pages 1-5', team: 'Team games'};
 window.ppSetName = SET_NAME;
 
 dash.calc('summary', {

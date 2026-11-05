@@ -62,6 +62,7 @@ jobs:
         run: |
           (cd corpus && tar xzf packed/replays.tgz --warning=no-unknown-keyword && tar xzf packed/team.tgz --warning=no-unknown-keyword)
           python3 -I tools/metrics.py --check | tee metrics-run.txt
+          ./target/release/awbw-replay --roundtrip corpus/replays/game-*/ corpus/data/game-*/
       - name: "Nightly: append to metrics history"
         if: env.HAS_DATA_KEY == 'true' && github.event_name == 'schedule'
         env:
