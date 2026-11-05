@@ -254,6 +254,15 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 }
                 if let Some(v0) = seen_before {
                     check_discovered(s, u.owner, &v0, &a["discovered"], r, c);
+                    if trapped {
+                        // A trap: the move stopped next to an enemy unit it couldn't see.
+                        let w = s.width as usize;
+                        let end = (rec.x, rec.y);
+                        let blocker = s.units.values().any(|o| !s.allied(o.owner, u.owner) && o.carried_by.is_none()
+                            && dist((o.x, o.y), end) == 1
+                            && (v0[o.y as usize * w + o.x as usize] == 0 || o.dived));
+                        r.check("fog.trap_blocker", blocker, || tag(c, format!("{} trapped at {end:?}", u.kind)));
+                    }
                 }
             }
             "Build" => {
@@ -758,7 +767,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 if let Some(u) = s.units.get(&aid).cloned() {
                     let d = dist((u.x, u.y), (x, y));
                     let ri = tables().unit(&u.kind).range;
-                    r.check("seam.range", d >= ri[0] as u32 && d <= ri[1] as u32, || tag(c, format!("{} at {d}", u.kind)));
+                    let co = co_of(s, u.owner);
+                    let pw = s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default();
+                    // Indirects get their CO's range bonus (Grit +1) against seams too.
+                    let maxr = if is_indirect(&u.kind) { (ri[1] as i32 + awbw_engine::co::range_bonus(&co, &pw, &u.kind)).max(2) as u32 } else { ri[1] as u32 };
+                    r.check("seam.range", d >= ri[0] as u32 && d <= maxr, || tag(c, format!("{} at {d}", u.kind)));
                     let m = s.units.get_mut(&aid).unwrap();
                     m.ammo = num(&a["attacker"]["units_ammo"]) as i32;
                     m.moved = true;
