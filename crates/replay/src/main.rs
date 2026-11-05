@@ -659,9 +659,25 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 });
                 check_repairs(s, &before, a, r, c);
                 let ours = s.player(next).map(|p| p.funds).unwrap_or(-1);
-                r.check("turn.next_funds", ours == next_funds, || {
-                    tag(c, format!("next player {next} ({}): engine funds {ours}, recorded {next_funds}", co_of(s, next)))
-                });
+                // Sonja's units are repaired with hidden HP, so our HP guess can be off by up to
+                // 2 repair steps each way: accept a gap that some such combination explains.
+                let hidden_steps: Vec<i64> = items(&a["repaired"]).iter()
+                    .filter(|x| x["units_hit_points"].as_str() == Some("?"))
+                    .filter_map(|x| s.units.get(&(num(&x["units_id"]) as u32)))
+                    .map(|u| tables().unit(&u.kind).cost as i64 / 10).collect();
+                if ours != next_funds && !hidden_steps.is_empty() {
+                    let mut gaps = std::collections::BTreeSet::from([0i64]);
+                    for st in &hidden_steps {
+                        gaps = gaps.iter().flat_map(|g| (-2..=2).map(move |k| g + k * st)).collect();
+                    }
+                    r.check("turn.next_funds_hidden", gaps.contains(&(ours - next_funds)), || {
+                        tag(c, format!("next player {next} ({}): engine funds {ours}, recorded {next_funds}, not explained by hidden repairs", co_of(s, next)))
+                    });
+                } else {
+                    r.check("turn.next_funds", ours == next_funds, || {
+                        tag(c, format!("next player {next} ({}): engine funds {ours}, recorded {next_funds}", co_of(s, next)))
+                    });
+                }
                 if let Some(p) = s.player_mut(next) {
                     p.funds = next_funds;
                 }
