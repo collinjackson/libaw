@@ -60,7 +60,7 @@ jobs:
           AWBW_DATA: ${{ github.workspace }}/corpus
           AWBW_TEAM: ${{ github.workspace }}/corpus/data
         run: |
-          (cd corpus && tar xzf packed/replays.tgz --warning=no-unknown-keyword && tar xzf packed/team.tgz --warning=no-unknown-keyword)
+          (cd corpus && for t in packed/replays*.tgz packed/team.tgz; do tar xzf "$t" --warning=no-unknown-keyword; done)
           python3 -I tools/metrics.py --check | tee metrics-run.txt
           ./target/release/awbw-replay --roundtrip corpus/replays/game-*/ corpus/data/game-*/
       - name: "Nightly: append to metrics history"

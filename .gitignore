@@ -4,3 +4,4 @@ target/
 site/api/maps/
 site/api/pkg/
 .venv/
+__pycache__/
