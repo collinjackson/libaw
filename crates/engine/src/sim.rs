@@ -220,11 +220,11 @@ pub fn power_effects(s: &mut State, pid: PlayerId, kind: &str) -> bool {
     power_effects_at(s, pid, kind, None)
 }
 
-/// Missile damage within 2 tiles of `at`: 3 displayed HP off each enemy unit there, never
+/// Missile damage within 2 tiles of `at`: `hp` displayed HP off every unit there (either side), never
 /// killing (a unit pushed to the floor shows 1 HP).
-fn missile(s: &mut State, pid: PlayerId, at: (u16, u16), stun: bool, hp: i32) {
+fn missile(s: &mut State, at: (u16, u16), stun: bool, hp: i32) {
     let hit: Vec<UnitId> = s.units.values()
-        .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()
+        .filter(|u| u.carried_by.is_none()
             && (u.x as i32 - at.0 as i32).abs() + (u.y as i32 - at.1 as i32).abs() <= 2)
         .map(|u| u.id).collect();
     for id in hit {
@@ -249,8 +249,10 @@ fn aim_missile(s: &State, pid: PlayerId) -> (u16, u16) {
                 if dx.abs() + dy.abs() > 2 { continue; }
                 let (x, y) = (c.x as i32 + dx, c.y as i32 + dy);
                 if x < 0 || y < 0 { continue; }
-                let v: i64 = enemies.iter().filter(|u| (u.x as i32 - x).abs() + (u.y as i32 - y).abs() <= 2)
-                    .map(|u| crate::data::tables().unit(&u.kind).cost as i64 * ((u.hp.hi as i64 - 1).min(30)) / 100).sum();
+                // Missiles hit every unit in range, the caster's own too (Rachel and Von Bolt,
+                // 8 recorded uses): count own units' loss against the target.
+                let v: i64 = s.units.values().filter(|u| u.carried_by.is_none() && (u.x as i32 - x).abs() + (u.y as i32 - y).abs() <= 2)
+                    .map(|u| (if s.allied(u.owner, pid) { -1 } else { 1 }) * crate::data::tables().unit(&u.kind).cost as i64 * ((u.hp.hi as i64 - 1).min(30)) / 100).sum();
                 if v > best { best = v; at = (x as u16, y as u16); }
             }
         }
@@ -263,7 +265,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
     let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
     for k in 0..e.missiles as usize {
         let at = match targets { Some(t) => match t.get(k) { Some(&p) => p, None => break }, None => aim_missile(s, pid) };
-        missile(s, pid, at, e.stun, e.missile_hp);
+        missile(s, at, e.stun, e.missile_hp);
     }
     if e.funds_mult != 1.0 {
         if let Some(p) = s.player_mut(pid) { p.funds = (p.funds as f64 * e.funds_mult).floor() as i64; }
