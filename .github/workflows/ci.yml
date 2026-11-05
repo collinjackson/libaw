@@ -61,7 +61,7 @@ jobs:
         run: |
           (cd corpus && tar xzf packed/replays.tgz && tar xzf packed/team.tgz)
           python3 -I tools/metrics.py --check | tee metrics-run.txt
-      - name: Nightly: append to metrics history
+      - name: "Nightly: append to metrics history"
         if: env.HAS_DATA_KEY == 'true' && github.event_name == 'schedule'
         env:
           AWBW_DATA: ${{ github.workspace }}/corpus
