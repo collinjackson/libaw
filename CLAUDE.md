@@ -1,7 +1,8 @@
 # awbw-engine (private)
 
 A clean-room Advance Wars By Web rules engine, and later a strong bot on top of it. Private,
-the "secret sauce": no remote, no pushing, nothing from here goes into public repos.
+the "secret sauce": its only remote is a private GitHub repo (collinjackson/awbw-engine);
+nothing from here goes into public repos.
 
 ## Clean room: read this first
 
@@ -35,4 +36,6 @@ the "secret sauce": no remote, no pushing, nothing from here goes into public re
 
 ## Commits
 
-Commit locally at the end of each chunk, with a clear message. Never add a remote or push.
+Commit at the end of each chunk, with a clear message, and push to `origin` (the private
+repo; Collin approved 2026-11-04). Never make the repo public, add other remotes, or push
+anywhere else. Replay data (~/repos/awbw-engine-data) stays out of the repo.
