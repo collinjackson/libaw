@@ -1099,6 +1099,10 @@ fn main() {
         matchrun::run(&args[2..]);
         return;
     }
+    if args.get(1).map(String::as_str) == Some("--suggest") {
+        matchrun::suggest(&args[2..]);
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--roundtrip") {
         std::process::exit((roundtrip(&args[2..]) > 0) as i32);
     }

@@ -165,3 +165,43 @@ pub fn run(args: &[String]) {
         println!("{r}");
     }
 }
+
+/// One full turn for the player to move, played by `agent` from a turn file with average
+/// luck (so the line isn't flattered or punished by rolls). Returns the moves, described,
+/// and the position at the start of the next player's turn as a turn file, so commentary
+/// can compare it with what the player actually did.
+///
+///   awbw-replay --suggest TURN.json AGENT [OUT.json]
+pub fn suggest(args: &[String]) {
+    let start: Value = serde_json::from_str(&std::fs::read_to_string(&args[0]).expect("turn file")).expect("json");
+    let agent = Agent::parse(&args[1]);
+    let mut s = state_from(&start);
+    for u in s.units.values_mut() {
+        u.hp = Hp::exact(u.hp.hi);
+    }
+    let me = s.current;
+    let mut rng = 0x5eed_u64;
+    let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as u32 };
+    let (mut moves, mut illegal, mut first_error) = (vec![], 0, None::<String>);
+    for n in 0..300u64 {
+        if s.current != me || sim::winner(&s).is_some() { break; }
+        let a = match agent.act(&s, &start, 0x5eed ^ n, &mut next).and_then(|v| action_from_contract(&s, &v).map_err(|e| format!("illegal: {e}"))) {
+            Ok(a) => a,
+            Err(e) => { illegal += 1; first_error.get_or_insert(e); Action::EndTurn }
+        };
+        let label = awbw_engine::view::describe(&s, &a);
+        let mut avg = |lo: i32, hi: i32| (lo + hi) / 2;
+        if let Err(e) = sim::step(&mut s, &a, &mut avg) {
+            first_error.get_or_insert(format!("referee: {e}"));
+            let _ = sim::end_turn(&mut s);
+            break;
+        }
+        if a != Action::EndTurn { moves.push(label); }
+    }
+    let out = json!({"agent": agent.name(), "moves": moves, "illegal": illegal, "error": first_error,
+                     "after": to_turn_json(&s, &start)});
+    match args.get(2) {
+        Some(p) => std::fs::write(p, out.to_string()).expect("write"),
+        None => println!("{out}"),
+    }
+}
