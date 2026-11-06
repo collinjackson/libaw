@@ -166,6 +166,14 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         }
         st[i].actions += 1;
         if pos_log.is_some() && ended && sim::winner(&s).is_none() { positions.push(snap(&s)); }
+        // MATCH_DUMP=DIR: the full engine state at each turn start (DIR/<game>-d<day>-p<player>.json),
+        // to replay one decision in a bot offline.
+        if ended && sim::winner(&s).is_none() {
+            if let Ok(dir) = std::env::var("MATCH_DUMP") {
+                let f = format!("{dir}/{name}-d{:02}-p{}.json", s.day, s.current);
+                let _ = std::fs::write(f, serde_json::to_vec(&s).unwrap_or_default());
+            }
+        }
         if log_dir.is_some() {
             let mut f = awbw_engine::view::frame(&s, &label);
             f["h"] = json!(awbw_engine::view::state_hash(&s));
