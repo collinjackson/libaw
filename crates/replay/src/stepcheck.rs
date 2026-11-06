@@ -112,7 +112,16 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
             (id(&a["unitId"]), Then::Repair { target: (t.x, t.y) })
         }
         // Supply names only the supplied units; the supplier is the APC that just moved.
-        "Supply" => (mover?.0, Then::Supply),
+        // Standing still, it's the player's APC next to the first supplied unit.
+        "Supply" => match mover {
+            Some((m, _)) => (m, Then::Supply),
+            None => {
+                let first = s.units.get(&(num(items(&a["suppliedIds"]).first()?) as UnitId))?;
+                let apc = s.units.values().find(|o| o.kind == "APC" && o.owner == first.owner && o.carried_by.is_none()
+                    && (o.x as i32 - first.x as i32).abs() + (o.y as i32 - first.y as i32).abs() == 1)?;
+                (apc.id, Then::Supply)
+            }
+        },
         _ => return None,
     })
 }
@@ -163,8 +172,15 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -
                 continue;
             }
             "Power" => {
-                if !items(&a["missileCoords"]).is_empty() {
-                    return Err("missiles: the server aims them".into());
+                let coords: Vec<Pos> = items(&a["missileCoords"]).into_iter().map(|m| pos(m, "x", "y")).collect();
+                if !coords.is_empty() {
+                    // The server aims missiles: land them where the record says.
+                    let kind = a["coPower"].as_str().unwrap_or("");
+                    let res = awbw_engine::sim::use_power(&mut s, kind, Some(&coords));
+                    r.check("step.ok", res.is_ok(), || tag(c, format!("power {kind} at {coords:?}: {:?}", res.as_ref().err())));
+                    res.map_err(|e| format!("step error: {e}"))?;
+                    i += 1;
+                    continue;
                 }
                 Action::Power { kind: a["coPower"].as_str().unwrap_or("").to_string() }
             }

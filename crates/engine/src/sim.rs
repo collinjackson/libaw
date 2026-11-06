@@ -298,6 +298,18 @@ fn aim_missile(s: &State, pid: PlayerId) -> (u16, u16) {
     at
 }
 
+/// The player to move activates a power. Missiles land on `targets` when given (the server
+/// aims them in real games; replays record where), else on the engine's own aim.
+pub fn use_power(s: &mut State, kind: &str, targets: Option<&[(u16, u16)]>) -> Result<(), String> {
+    if !co::powers_ready(s, s.current).contains(&kind) {
+        return Err(format!("power {kind} not ready"));
+    }
+    let me = s.current;
+    spend_power(s, me, kind);
+    power_effects_at(s, me, kind, targets);
+    Ok(())
+}
+
 /// As `power_effects`, with missile targets given (the replay checker passes AWBW's).
 pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Option<&[(u16, u16)]>) -> bool {
     let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
@@ -493,15 +505,7 @@ fn eliminate(s: &mut State, gone: PlayerId, by: PlayerId) {
 pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
     match a {
         Action::EndTurn => end_turn(s),
-        Action::Power { kind } => {
-            if !co::powers_ready(s, s.current).contains(&kind.as_str()) {
-                return Err(format!("power {kind} not ready"));
-            }
-            let me = s.current;
-            spend_power(s, me, kind);
-            power_effects(s, me, kind);
-            Ok(())
-        }
+        Action::Power { kind } => use_power(s, kind, None),
         Action::Build { at, kind } => {
             let me = s.current;
             let p = s.player(me).ok_or("no player")?;
