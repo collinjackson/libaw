@@ -55,8 +55,8 @@ pub fn step_cost(s: &State, u: &Unit, t: u16) -> Option<u32> {
     let w = felt_weather(s.weather, co);
     let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
     let c = move_cost_in(t, &info.move_type, w)?;
-    // Lash's powers: every passable tile costs 1, except in snow.
-    if co == "Lash" && pw != "N" && w != 'S' {
+    // Lash's powers, and Sturm always: every passable tile costs 1, except in snow.
+    if ((co == "Lash" && pw != "N") || co == "Sturm") && w != 'S' {
         return Some(1);
     }
     Some(c as u32)
