@@ -124,6 +124,10 @@ pub struct State {
     /// treat seams as walls). The simulator applies them either way.
     #[serde(default)]
     pub seams: bool,
+    /// Offer Subs diving / Stealths hiding (and surfacing). Off by default: contract v1
+    /// bots play without them (banned in v1 tournaments). The simulator applies them either way.
+    #[serde(default)]
+    pub dives: bool,
     /// Fog of war: players see only what `fog::vision` shows them; a move into a hidden
     /// enemy unit stops short (a trap).
     #[serde(default)]

@@ -146,6 +146,7 @@ pub fn state_from(turn: &Value) -> State {
     let mut s = State {
         powers: false,
         seams: false,
+        dives: false,
         fog: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
         partial: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
         width: w,
@@ -373,6 +374,9 @@ pub fn action_to_contract(a: &Action) -> Value {
                 Then::Load => json!({"type": "load"}),
                 Then::Join => json!({"type": "join"}),
                 Then::Supply => json!({"type": "supply"}),
+                // Not in contract v1 either.
+                Then::Hide => json!({"type": "hide"}),
+                Then::Unhide => json!({"type": "unhide"}),
                 Then::Repair { target } => json!({"type": "repair", "target": [target.0, target.1]}),
                 Then::Unload { cargo, to } => json!({"type": "unload", "cargo_id": cargo, "to": [to.0, to.1]}),
             };
@@ -414,6 +418,8 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
                 Some("load") => Then::Load,
                 Some("join") => Then::Join,
                 Some("supply") => Then::Supply,
+                Some("hide") => Then::Hide,
+                Some("unhide") => Then::Unhide,
                 Some("repair") => Then::Repair { target: xy(&t["target"]).ok_or("repair: bad target")? },
                 Some("unload") => Then::Unload {
                     cargo: t["cargo_id"].as_u64().ok_or("unload: no cargo_id")? as u32,

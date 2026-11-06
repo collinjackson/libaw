@@ -24,6 +24,10 @@ pub enum Then {
     Unload { cargo: UnitId, to: Pos },
     /// Hit a pipe seam (only generated when `State::seams`).
     AttackSeam { target: Pos },
+    /// A Sub dives / a Stealth hides; Unhide surfaces or reveals it (only generated when
+    /// `State::dives`).
+    Hide,
+    Unhide,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -170,6 +174,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
         for t in seam_targets(s, &as_there, to, moved) {
             out.push(Then::AttackSeam { target: t });
         }
+    }
+    if s.dives && matches!(u.kind.as_str(), "Sub" | "Stealth") {
+        out.push(if u.dived { Then::Unhide } else { Then::Hide });
     }
     if is_foot(&u.kind) {
         if let Some(b) = s.buildings.get(&to) {

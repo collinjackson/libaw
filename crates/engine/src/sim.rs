@@ -642,6 +642,10 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     }
                     Ok(())
                 }
+                Then::Hide | Then::Unhide => {
+                    s.units.get_mut(unit).unwrap().dived = matches!(then, Then::Hide);
+                    Ok(())
+                }
                 Then::Supply => {
                     let near: Vec<UnitId> = s.units.values()
                         .filter(|o| o.owner == u.owner && o.id != *unit && o.carried_by.is_none() && dist((o.x, o.y), end) == 1)

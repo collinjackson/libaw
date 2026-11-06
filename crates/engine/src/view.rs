@@ -44,6 +44,8 @@ pub fn describe(s: &State, a: &crate::actions::Action) -> String {
                 Then::Load => "load".into(),
                 Then::Join => "join".into(),
                 Then::Supply => "supply".into(),
+                Then::Hide => if k == "Sub" { "dive".into() } else { "hide".into() },
+                Then::Unhide => "surface".into(),
                 Then::Repair { target } => format!("repair {target:?}"),
                 Then::Unload { to, .. } => format!("unload to {to:?}"),
             };

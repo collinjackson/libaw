@@ -1390,6 +1390,10 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     if std::env::var("SELFPLAY_SEAMS").is_ok() {
         s.seams = true;
     }
+    // SELFPLAY_DIVES=1 lets Subs dive and Stealths hide.
+    if std::env::var("SELFPLAY_DIVES").is_ok() {
+        s.dives = true;
+    }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }
