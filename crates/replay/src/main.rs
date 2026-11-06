@@ -12,6 +12,7 @@
 
 use awbw_engine::awbw::*;
 mod matchrun;
+mod stepcheck;
 use awbw_engine::view::{describe, frame, log_header};
 use awbw_engine::data::tables;
 use awbw_engine::rules::*;
@@ -1513,6 +1514,10 @@ fn main() {
         matchrun::suggest(&args[2..]);
         return;
     }
+    if args.get(1).map(String::as_str) == Some("--step") {
+        stepcheck::run(&args[2..]);
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--roundtrip") {
         std::process::exit((roundtrip(&args[2..]) > 0) as i32);
     }
@@ -1543,13 +1548,17 @@ fn main() {
     for d in &args {
         check_game(Path::new(d), &mut r);
     }
+    print_report(&r, only.as_deref());
+}
+
+fn print_report(r: &Report, only: Option<&str>) {
     let pct = |a: u64, b: u64| if a + b == 0 { 100.0 } else { 100.0 * a as f64 / (a + b) as f64 };
     println!("turns compared: {}  clean: {} ({:.1}%)", r.turns, r.turns_clean, pct(r.turns_clean, r.turns - r.turns_clean));
     let (mut tp, mut tf) = (0, 0);
     for (k, (p, f)) in &r.checks {
         tp += p;
         tf += f;
-        if only.as_deref().map(|o| k.starts_with(o)).unwrap_or(true) {
+        if only.map(|o| k.starts_with(o)).unwrap_or(true) {
             println!("{:28} {:7} ok {:6} bad  {:6.2}%", k, p, f, pct(*p, *f));
         }
     }
@@ -1561,7 +1570,7 @@ fn main() {
         println!("tally: {k} x{n}");
     }
     for (k, ex) in &r.examples {
-        if only.as_deref().map(|o| k.starts_with(o)).unwrap_or(true) {
+        if only.map(|o| k.starts_with(o)).unwrap_or(true) {
             for e in ex {
                 println!("  [{k}] {e}");
             }

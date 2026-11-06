@@ -1,0 +1,273 @@
+//! Step parity: replay each recorded turn through the simulator's own `sim::step` (the
+//! code bots play with), not the checker's hand-applied record, and compare the state it
+//! reaches with the next turn file. Luck is searched per attack so the recorded HP come out.
+//!
+//! `awbw-replay --step [--examples N] GAME_DIR...`. Fog games are skipped (cargo and
+//! funds are hidden there), as are turns with records the engine has no action for.
+
+use crate::{compare, print_report, tag, Ctx, Report};
+use awbw_engine::actions::{Action, Pos, Then};
+use awbw_engine::awbw::{items, num, state_from, unit_from};
+use awbw_engine::state::*;
+use serde_json::Value;
+use std::path::Path;
+
+pub fn run(args: &[String]) {
+    let mut r = Report { max_examples: 3, ..Default::default() };
+    let mut dirs = vec![];
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--examples" {
+            r.max_examples = args[i + 1].parse().unwrap();
+            i += 2;
+        } else {
+            dirs.push(args[i].clone());
+            i += 1;
+        }
+    }
+    for d in &dirs {
+        game(Path::new(d), &mut r);
+    }
+    print_report(&r, None);
+}
+
+fn game(dir: &Path, r: &mut Report) {
+    let mut files: Vec<_> = std::fs::read_dir(dir).map(|d| d.flatten().map(|e| e.path())
+        .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("turn-") && n.to_string_lossy().ends_with(".json")))
+        .collect()).unwrap_or_default();
+    files.sort();
+    let name = dir.file_name().unwrap().to_string_lossy().to_string();
+    let load = |p: &Path| -> Value { serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap() };
+    let Some(first) = files.first() else { return };
+    let mut cur = load(first);
+    if cur["gameState"]["fog_array"].is_array() {
+        r.skip("game: fog");
+        return;
+    }
+    for i in 0..files.len().saturating_sub(1) {
+        let next = load(&files[i + 1]);
+        let file = files[i].file_name().unwrap().to_string_lossy().to_string();
+        let c = Ctx { game: &name, file: &file };
+        let actions: Vec<Value> = items(&cur["actions"]).into_iter().cloned().collect();
+        match turn(&cur, &next, &actions, r, &c) {
+            Ok(s) => {
+                r.turns += 1;
+                let mut rec = state_from(&next);
+                rec.weather = s.weather; // weather is drawn by the server
+                if compare(&s, &rec, r, &c) {
+                    r.turns_clean += 1;
+                }
+            }
+            Err(why) => r.skip(&format!("turn: {why}")),
+        }
+        cur = next;
+    }
+}
+
+fn pos(v: &Value, x: &str, y: &str) -> Pos {
+    (num(&v[x]) as u16, num(&v[y]) as u16)
+}
+
+fn path_of(a: &Value) -> Vec<Pos> {
+    items(&a["path"]).into_iter().map(|p| pos(p, "x", "y")).collect()
+}
+
+/// The follow-up a record action gives the unit that just moved (or stood still).
+fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId, Then)> {
+    let id = |v: &Value| num(v) as UnitId;
+    Some(match a["action"].as_str()? {
+        "Fire" if a["attacker"].is_object() && a["defender"].is_object() => {
+            (id(&a["attacker"]["units_id"]), Then::Attack { target: pos(&a["defender"], "units_x", "units_y") })
+        }
+        "AttackSeam" => {
+            (id(&a["attacker"]["units_id"]), Then::AttackSeam { target: pos(a, "seamX", "seamY") })
+        }
+        "Capt" => {
+            let at = pos(&a["buildingInfo"], "buildings_x", "buildings_y");
+            match mover {
+                Some((m, end)) if end == at => (m, Then::Capture),
+                _ => (s.unit_at(at.0, at.1)?.id, Then::Capture),
+            }
+        }
+        "Load" => (id(&a["loadedId"]), Then::Load),
+        "Join" => (id(&a["joinId"]), Then::Join),
+        "Unload" => (id(&a["transportId"]), Then::Unload {
+            cargo: id(&a["unloadedUnit"]["units_id"]),
+            to: pos(&a["unloadedUnit"], "units_x", "units_y"),
+        }),
+        "Repair" => {
+            let t = s.units.get(&id(&a["repairedUnit"]["units_id"]))?;
+            (id(&a["unitId"]), Then::Repair { target: (t.x, t.y) })
+        }
+        // Supply names only the supplied units; the supplier is the APC that just moved.
+        "Supply" => (mover?.0, Then::Supply),
+        _ => return None,
+    })
+}
+
+/// Run one turn through `sim::step`. Err names why the turn can't be replayed this way.
+fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -> Result<State, String> {
+    if !actions.iter().any(|a| a["action"] == "NextTurn") {
+        return Err("no NextTurn".into());
+    }
+    if crate::unrecorded_mover(cur, next, actions).is_some() {
+        return Err("export lost actions".into());
+    }
+    let mut s = state_from(cur);
+    s.powers = true;
+    s.seams = true;
+    let mut i = 0;
+    while i < actions.len() {
+        let a = &actions[i];
+        let kind = a["action"].as_str().unwrap_or("?");
+        let act = match kind {
+            "Move" => {
+                let rec = unit_from(&a["unit"]);
+                let path = path_of(a);
+                let path = if path.is_empty() { vec![(rec.x, rec.y)] } else { path };
+                let end = *path.last().unwrap();
+                let then = match actions.get(i + 1).and_then(|n| then_of(&s, n, Some((rec.id, end)))) {
+                    Some((who, t)) if who == rec.id => {
+                        i += 1;
+                        t
+                    }
+                    _ => Then::Wait,
+                };
+                Action::Move { unit: rec.id, path, then }
+            }
+            "Build" => {
+                let nu = unit_from(&a["newUnit"]);
+                // The engine numbers new units itself; take the record's id so later actions find it.
+                let before: Vec<UnitId> = s.units.keys().copied().collect();
+                step(&mut s, &Action::Build { at: (nu.x, nu.y), kind: nu.kind.clone() }, a, r, c)?;
+                if let Some(&new) = s.units.keys().find(|k| !before.contains(k)) {
+                    let mut u = s.units.remove(&new).unwrap();
+                    u.id = nu.id;
+                    s.units.insert(nu.id, u);
+                }
+                i += 1;
+                continue;
+            }
+            "Power" => {
+                if !items(&a["missileCoords"]).is_empty() {
+                    return Err("missiles: the server aims them".into());
+                }
+                Action::Power { kind: a["coPower"].as_str().unwrap_or("").to_string() }
+            }
+            "NextTurn" => {
+                step(&mut s, &Action::EndTurn, a, r, c)?;
+                return Ok(s);
+            }
+            "Hide" | "Unhide" | "Delete" | "Resign" => return Err(format!("{kind}: no engine action")),
+            _ => match then_of(&s, a, None) {
+                // A follow-up with no Move before it: the unit acted where it stood (or a
+                // transport dropped its second cargo).
+                Some((who, then)) => {
+                    let u = s.units.get(&who).ok_or_else(|| format!("{kind}: unit {who} unknown"))?;
+                    if let Then::Unload { cargo, to } = then {
+                        // AWBW records drops apart from the transport's own move (a second
+                        // cargo, or one loaded this turn) and they don't spend its action.
+                        // The engine has no such action yet: apply by hand and count.
+                        let ok = u.cargo.contains(&cargo) && s.unit_at(to.0, to.1).is_none()
+                            && (u.x as i32 - to.0 as i32).abs() + (u.y as i32 - to.1 as i32).abs() == 1;
+                        r.check("step.unload_by_hand", ok, || tag(c, format!("{} drops {cargo} at {to:?}", u.kind)));
+                        *r.tally.entry((if u.moved { "unload apart from move: transport had moved" } else { "unload apart from move: transport unmoved" }).to_string()).or_default() += 1;
+                        s.units.get_mut(&who).unwrap().cargo.retain(|x| *x != cargo);
+                        let cu = s.units.get_mut(&cargo).ok_or("unload: cargo unknown")?;
+                        cu.carried_by = None;
+                        cu.x = to.0;
+                        cu.y = to.1;
+                        cu.moved = true;
+                        i += 1;
+                        continue;
+                    }
+                    Action::Move { unit: who, path: vec![(u.x, u.y)], then }
+                }
+                None => return Err(format!("{kind}: not mapped")),
+            },
+        };
+        // `i` now points at the record that carries the result (the Fire after its Move).
+        step(&mut s, &act, &actions[i], r, c)?;
+        i += 1;
+    }
+    Err("ran out of actions".into())
+}
+
+/// One `sim::step`. For an attack, try luck rolls until the recorded HP come out.
+fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Result<(), String> {
+    let fire = match act {
+        Action::Move { then: Then::Attack { .. }, .. } => rec.clone(),
+        Action::Move { .. } => Value::Null,
+        _ => Value::Null,
+    };
+    let fire = if fire["attacker"].is_object() { Some(fire) } else { None };
+    if let Some(f) = fire {
+        let (aid, did) = (num(&f["attacker"]["units_id"]) as UnitId, num(&f["defender"]["units_id"]) as UnitId);
+        let (ah, dh) = (num(&f["attacker"]["units_hit_points"]), num(&f["defender"]["units_hit_points"]));
+        let shown = |s: &State, id: UnitId| s.units.get(&id).and_then(|u| u.hp.display()).map(|d| d as i64).unwrap_or(0);
+        // Records show displayed HP only; try the HP each side could really have, top first.
+        let range = |id: UnitId| s.units.get(&id).map(|u| (u.hp.lo.max(1)..=u.hp.hi).rev().collect::<Vec<u8>>()).unwrap_or_default();
+        let (ar, dr) = (range(aid), range(did));
+        // Keep every outcome that fits: the units' HP become the range over all of them.
+        let mut found: Option<State> = None;
+        let (mut alo, mut ahi, mut dlo, mut dhi) = (u8::MAX, 0u8, u8::MAX, 0u8);
+        for &ahp in &ar {
+            for &dhp in &dr {
+                // Each roll spans the range the engine asks for (Rachel's power: 0..39).
+                let (span1, span2) = (std::cell::Cell::new(9), std::cell::Cell::new(9));
+                let mut k1 = 0;
+                while k1 <= span1.get() {
+                    let mut k2 = 0;
+                    while k2 <= span2.get() {
+                        let mut t = s.clone();
+                        if let Some(u) = t.units.get_mut(&aid) { u.hp = Hp::exact(ahp); }
+                        if let Some(u) = t.units.get_mut(&did) { u.hp = Hp::exact(dhp); }
+                        let mut n = 0;
+                        let mut luck = |lo: i32, hi: i32| {
+                            n += 1;
+                            if n == 1 { span1.set(hi - lo); } else { span2.set(hi - lo); }
+                            (lo + if n == 1 { k1 } else { k2 }).min(hi)
+                        };
+                        let ok = awbw_engine::sim::step(&mut t, act, &mut luck).is_ok();
+                        let calls = n;
+                        if ok && shown(&t, aid) == ah && shown(&t, did) == dh {
+                            if let Some(u) = t.units.get(&aid) { alo = alo.min(u.hp.lo); ahi = ahi.max(u.hp.hi); }
+                            if let Some(u) = t.units.get(&did) { dlo = dlo.min(u.hp.lo); dhi = dhi.max(u.hp.hi); }
+                            found.get_or_insert(t);
+                        }
+                        if calls < 2 { break; } // no counter: the second roll changes nothing
+                        k2 += 1;
+                    }
+                    k1 += 1;
+                }
+            }
+        }
+        if let Some(mut t) = found {
+            if let Some(u) = t.units.get_mut(&aid) { u.hp = Hp { lo: alo, hi: ahi }; }
+            if let Some(u) = t.units.get_mut(&did) { u.hp = Hp { lo: dlo, hi: dhi }; }
+            *s = t;
+            r.check("step.fire", true, String::new);
+            return Ok(());
+        }
+        r.check("step.fire", false, || tag(c, format!("no luck roll gives attacker {ah} / defender {dh}")));
+        // Go on from the recorded result so one miss doesn't spread through the turn.
+        let mut mid = |lo: i32, hi: i32| (lo + hi) / 2;
+        let res = awbw_engine::sim::step(s, act, &mut mid);
+        r.check("step.ok", res.is_ok(), || tag(c, format!("{act:?}: {}", res.as_ref().err().cloned().unwrap_or_default())));
+        res.map_err(|e| format!("step error: {e}"))?;
+        for (id, d) in [(aid, ah), (did, dh)] {
+            if d <= 0 {
+                if let Some(u) = s.units.remove(&id) { for cid in u.cargo { s.units.remove(&cid); } }
+            } else if let Some(u) = s.units.get_mut(&id) {
+                u.hp = Hp::from_display(d as u8);
+            } else {
+                return Err("forced fire result: unit gone".into());
+            }
+        }
+        return Ok(());
+    }
+    let mut mid = |lo: i32, hi: i32| (lo + hi) / 2;
+    let res = awbw_engine::sim::step(s, act, &mut mid);
+    r.check("step.ok", res.is_ok(), || tag(c, format!("{act:?}: {}", res.as_ref().err().cloned().unwrap_or_default())));
+    res.map_err(|e| format!("step error: {e}"))
+}

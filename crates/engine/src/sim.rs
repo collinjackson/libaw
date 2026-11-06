@@ -181,11 +181,9 @@ fn hp_now(u: &Unit) -> u8 {
     u.hp.hi
 }
 
-/// Damage `att` does to `def` with a given luck roll (internal HP points).
 /// Damage to a pipe seam (99 HP, kept in its building's capture field): what the attacker
 /// would do to a Neotank, without luck or terrain: base x attack% x displayed HP / 10,
-/// rounded down. Fits 1598 of 1606 corpus hits (rounding up or to nearest: 68% / 87%);
-/// the 8 misses are damaged attackers doing 1 more (hidden HP fractions?). None: it can't.
+/// rounded down after rounding up to the next 0.05. Fits all 2241 corpus hits. None: it can't.
 pub fn seam_damage(s: &State, att: &Unit) -> Option<i32> {
     let base = base_damage_now(att, "Neotank")? as u64;
     let av = att_value(s, att, s.terrain_at(att.x, att.y)) as u64;
@@ -195,6 +193,7 @@ pub fn seam_damage(s: &State, att: &Unit) -> Option<i32> {
     Some(((base * av * hp + 50) / 1000) as i32)
 }
 
+/// Damage `att` does to `def` with a given luck roll (internal HP points).
 pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8 {
     let Some(base) = base_damage_now(att, &def.kind) else { return 0 };
     let at = s.terrain_at(att.x, att.y);
