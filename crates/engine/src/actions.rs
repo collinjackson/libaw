@@ -31,6 +31,9 @@ pub enum Then {
     /// A foot soldier on a loaded missile silo fires it: 3 HP to every unit within 2 tiles
     /// of `target` (never kills). Offered only at targets whose blast reaches an enemy.
     Launch { target: Pos },
+    /// Scrap the unit (no refund). Only in place by an unmoved unit (all 47 recorded
+    /// deletions); offered only when `State::deletes`.
+    Delete,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -206,6 +209,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
         });
         targets.extend(dump.map(|(x, y)| (x as u16, y as u16)));
         out.extend(targets.into_iter().map(|t| Then::Launch { target: t }));
+    }
+    if s.deletes && to == (u.x, u.y) && !u.moved {
+        out.push(Then::Delete);
     }
     if s.dives && matches!(u.kind.as_str(), "Sub" | "Stealth") {
         out.push(if u.dived { Then::Unhide } else { Then::Hide });

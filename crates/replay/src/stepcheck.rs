@@ -90,6 +90,7 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
             }
         }
         "Load" => (id(&a["loadedId"]), Then::Load),
+        "Delete" => (id(&a["deletedId"]), Then::Delete),
         "Launch" => {
             let at = pos(a, "siloX", "siloY");
             let who = match mover {
@@ -128,6 +129,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -
     s.powers = true;
     s.seams = true;
     s.dives = true;
+    s.deletes = true;
     let mut i = 0;
     while i < actions.len() {
         let a = &actions[i];
@@ -170,7 +172,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -
                 step(&mut s, &Action::EndTurn, a, r, c)?;
                 return Ok(s);
             }
-            "Delete" | "Resign" => return Err(format!("{kind}: no engine action")),
+            "Resign" => return Err(format!("{kind}: no engine action")),
             _ => match then_of(&s, a, None) {
                 // A follow-up with no Move before it: the unit acted where it stood (or a
                 // transport dropped its second cargo).
@@ -207,6 +209,9 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
             Action::Move { unit: u, path: p, then: Then::Launch { target: t } } if u == unit && p.last().copied() == end
                 && (t == target || (hits_none(*t) && hits_none(*target)))));
         r.check("legal.launch", offered, || tag(c, format!("{act:?} not generated")));
+    }
+    if let Action::Move { then: Then::Delete, .. } = act {
+        r.check("legal.delete", awbw_engine::actions::legal_actions(s).contains(act), || tag(c, format!("{act:?} not generated")));
     }
     let fire = match act {
         Action::Move { then: Then::Attack { .. }, .. } => rec.clone(),

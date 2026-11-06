@@ -642,6 +642,13 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     }
                     Ok(())
                 }
+                Then::Delete => {
+                    if end != (u.x, u.y) {
+                        return Err("delete only in place".into());
+                    }
+                    remove_unit(s, *unit);
+                    Ok(())
+                }
                 Then::Launch { target } => {
                     let b = s.buildings.get_mut(&end).ok_or("no silo")?;
                     if tables().tile(b.terrain).building.as_deref() != Some("Missile") {

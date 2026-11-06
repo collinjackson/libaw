@@ -46,6 +46,7 @@ pub fn describe(s: &State, a: &crate::actions::Action) -> String {
                 Then::Supply => "supply".into(),
                 Then::Hide => if k == "Sub" { "dive".into() } else { "hide".into() },
                 Then::Unhide => "surface".into(),
+                Then::Delete => "delete".into(),
                 Then::Launch { target } => format!("launch silo at {target:?}"),
                 Then::Repair { target } => format!("repair {target:?}"),
                 Then::Unload { to, .. } => format!("unload to {to:?}"),

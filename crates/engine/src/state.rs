@@ -128,6 +128,10 @@ pub struct State {
     /// bots play without them (banned in v1 tournaments). The simulator applies them either way.
     #[serde(default)]
     pub dives: bool,
+    /// Offer deleting an unmoved unit of one's own (no refund). Off by default: it only
+    /// widens bot search. The simulator applies it either way.
+    #[serde(default)]
+    pub deletes: bool,
     /// Fog of war: players see only what `fog::vision` shows them; a move into a hidden
     /// enemy unit stops short (a trap).
     #[serde(default)]
