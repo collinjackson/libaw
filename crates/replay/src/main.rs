@@ -814,8 +814,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     });
                     if let Some(before) = s.buildings.get(&(x, y)).map(|b| b.capture) {
                         let want = awbw_engine::sim::seam_damage(s, &u).map(|d| (before - d).max(0));
-                        r.check("seam.damage", want == Some(hp.max(0)), || tag(c, format!("{} {}hp ({}) on seam {before}: engine {want:?}, recorded {hp}",
-                            u.kind, u.hp.display_hi(), co, )));
+                        r.check("seam.damage", want == Some(hp.max(0)), || tag(c, format!("{} {}hp ({}) on seam {before}: engine {want:?}, recorded {hp} [base {:?} att {} on {} at {:?}, power {}]",
+                            u.kind, u.hp.display_hi(), co, awbw_engine::rules::base_damage_now(&u, "Neotank"),
+                            awbw_engine::combat::att_value(s, &u, s.terrain_at(u.x, u.y)),
+                            awbw_engine::data::tables().tile(s.terrain_at(u.x, u.y)).name, (u.x, u.y),
+                            s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default())));
                     }
                     let m = s.units.get_mut(&aid).unwrap();
                     m.ammo = num(&a["attacker"]["units_ammo"]) as i32;

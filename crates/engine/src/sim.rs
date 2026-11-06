@@ -190,7 +190,9 @@ pub fn seam_damage(s: &State, att: &Unit) -> Option<i32> {
     let base = base_damage_now(att, "Neotank")? as u64;
     let av = att_value(s, att, s.terrain_at(att.x, att.y)) as u64;
     let hp = att.hp.display_hi().max(1) as u64;
-    Some((base * av * hp / 1000) as i32)
+    // AWBW rounds the raw damage up to the next 0.05 before flooring, so x.95 and above
+    // count as the next whole point (13 recorded hits at 0.96, 0.99, 1.95, 4.95).
+    Some(((base * av * hp + 50) / 1000) as i32)
 }
 
 pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8 {
