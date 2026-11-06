@@ -6,6 +6,18 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 /// One frame of a game log: the position after an action.
+/// A short stable fingerprint of the whole state (FNV-1a over its JSON), so a game log
+/// reader can tell positions apart and match a frame to a saved state.
+pub fn state_hash(s: &State) -> String {
+    let bytes = serde_json::to_vec(s).unwrap_or_default();
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{h:016x}")
+}
+
 pub fn frame(s: &State, label: &str) -> Value {
     let units: Vec<Value> = s.units.values().filter(|u| u.carried_by.is_none())
         .map(|u| serde_json::json!([u.id, u.owner, u.kind, u.x, u.y, u.hp.display_hi(), u.cargo.len()])).collect();

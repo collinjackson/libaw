@@ -72,9 +72,15 @@ fn goal_distance(s: &State, u: &Unit) -> u32 {
 }
 
 pub fn choose(s: &State) -> Action {
+    ranked(s).into_iter().next().map(|(_, a)| a).unwrap_or(Action::EndTurn)
+}
+
+/// Every action that gains something by the greedy score, best first (what `choose` picks
+/// from, and what a game log shows as the candidates). Ending the turn isn't listed.
+pub fn ranked(s: &State) -> Vec<(f64, Action)> {
     let me = s.current;
     let base = score(s, me);
-    let mut best: (f64, Action) = (0.0, Action::EndTurn);
+    let mut out: Vec<(f64, Action)> = vec![];
     for a in legal_actions(s) {
         if a == Action::EndTurn {
             continue;
@@ -93,11 +99,13 @@ pub fn choose(s: &State) -> Action {
                 gain -= 1.0; // standing still is a tie-break loser
             }
         }
-        if gain > best.0 {
-            best = (gain, a);
+        if gain > 0.0 {
+            out.push((gain, a));
         }
     }
-    best.1
+    // Stable: equal gains keep generation order, as `choose` did (first best wins).
+    out.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    out
 }
 
 /// A random legal action; `rng` gives uniform u32s. Ends the turn 1 time in 20 when it could

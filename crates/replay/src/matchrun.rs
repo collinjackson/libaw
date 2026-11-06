@@ -49,7 +49,16 @@ impl Agent {
     fn act(&self, s: &State, template: &Value, seed: u64, game: &str, rng: &mut impl FnMut() -> u32) -> Result<Value, String> {
         match self {
             Agent::Random => Ok(action_to_contract(&awbw_engine::baseline::random(s, rng))),
-            Agent::Greedy => Ok(action_to_contract(&awbw_engine::baseline::choose(s))),
+            Agent::Greedy => {
+                // The reply carries the top candidates (an optional "why" any agent may send).
+                let ranked = awbw_engine::baseline::ranked(s);
+                let pick = ranked.first().map(|(_, a)| a.clone()).unwrap_or(Action::EndTurn);
+                let mut v = action_to_contract(&pick);
+                v["why"] = json!(ranked.iter().take(5).map(|(g, a)| json!({
+                    "label": awbw_engine::view::describe(s, a), "score": (g * 10.0).round() / 10.0,
+                })).collect::<Vec<_>>());
+                Ok(v)
+            }
             Agent::Http { url, bot, agent } => {
                 let body = json!({"player_id": s.current, "seed": seed, "game": game, "bot": bot, "state": to_turn_json(s, template)});
                 let mut r = agent.post(format!("{url}/act")).send_json(&body).map_err(|e| format!("http: {e}"))?;
@@ -119,6 +128,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         // view and applied to the real state (a path may run into a hidden unit: a trap).
         let view = awbw_engine::fog::player_view(&s, s.current);
         let reply = seats[i].act(&view, start, req_seed, name, &mut next);
+        let why = reply.as_ref().ok().map(|v| v["why"].clone()).filter(|w| w.is_array());
         // A Supply with nobody to supply does what Wait does: take it as Wait (counted),
         // rather than end the bot's turn over a no-op.
         let reply = reply.map(|v| {
@@ -154,7 +164,12 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         }
         st[i].actions += 1;
         if pos_log.is_some() && ended && sim::winner(&s).is_none() { positions.push(snap(&s)); }
-        if log_dir.is_some() { frames.push(awbw_engine::view::frame(&s, &label)); }
+        if log_dir.is_some() {
+            let mut f = awbw_engine::view::frame(&s, &label);
+            f["h"] = json!(awbw_engine::view::state_hash(&s));
+            if let Some(w) = &why { f["why"] = w.clone(); }
+            frames.push(f);
+        }
     }
     let win_team = sim::winner(&s);
     let winner_seat = win_team.as_ref().and_then(|t| s.players.iter().find(|p| &p.team == t)).map(|p| seat_of(p.id));
