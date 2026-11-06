@@ -1353,6 +1353,13 @@ fn check_game(dir: &Path, r: &mut Report) {
             cur = next;
             continue;
         }
+        if let Some(id) = unrecorded_mover(&cur, &next, &actions) {
+            // The export dropped actions: a unit changed tiles with no action naming it.
+            r.skip(&format!("turn not compared: unit {id} moved with no recorded action (export lost actions)"));
+            prev = None;
+            cur = next;
+            continue;
+        }
         match apply_actions(&mut s, &actions, r, &c) {
             Ok(()) => {
                 r.turns += 1;
@@ -1560,4 +1567,21 @@ fn main() {
             }
         }
     }
+}
+
+/// A unit (not cargo) on a different tile in the next file although no action this turn
+/// names it: the record lost actions (seen once, game-1752181 turn 24: a Tank's Move and
+/// Fire missing). None when every move is accounted for.
+fn unrecorded_mover(cur: &Value, next: &Value, actions: &[Value]) -> Option<u32> {
+    let text = serde_json::to_string(actions).unwrap_or_default();
+    let pos = |v: &Value| -> std::collections::HashMap<u32, (i64, i64)> {
+        items(&v["gameState"]["units"]).into_iter()
+            .filter(|u| u["units_carried"] != "Y")
+            .map(|u| (num(&u["units_id"]) as u32, (num(&u["units_x"]) as i64, num(&u["units_y"]) as i64)))
+            .collect()
+    };
+    let (a, b) = (pos(cur), pos(next));
+    a.iter().filter(|(id, p)| b.get(id).is_some_and(|q| q != *p))
+        .map(|(id, _)| *id)
+        .find(|id| !text.contains(&id.to_string()))
 }
