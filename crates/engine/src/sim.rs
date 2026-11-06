@@ -521,7 +521,10 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
         }
         Action::Move { unit, path, then } => {
             let u = s.units.get(unit).cloned().ok_or("no such unit")?;
-            if u.owner != s.current || u.moved {
+            // Dropping cargo where the transport stands doesn't spend its move, and a moved
+            // transport may still do it (AWBW records: 87 transports drop, then move).
+            let in_place_drop = path.len() <= 1 && matches!(then, Then::Unload { .. });
+            if u.owner != s.current || (u.moved && !in_place_drop) {
                 return Err("unit can't act".into());
             }
             // Fog: a path planned from the player's view may run into a hidden enemy unit;
@@ -671,7 +674,11 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     if s.unit_at(to.0, to.1).is_some_and(|o| o.id != *unit) {
                         return Ok(());
                     }
-                    s.units.get_mut(unit).unwrap().cargo.retain(|x| x != cargo);
+                    let t = s.units.get_mut(unit).unwrap();
+                    t.cargo.retain(|x| x != cargo);
+                    if in_place_drop {
+                        t.moved = u.moved;
+                    }
                     let cu = s.units.get_mut(cargo).ok_or("no cargo")?;
                     cu.carried_by = None;
                     cu.x = to.0;

@@ -164,22 +164,12 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -
                 // transport dropped its second cargo).
                 Some((who, then)) => {
                     let u = s.units.get(&who).ok_or_else(|| format!("{kind}: unit {who} unknown"))?;
-                    if let Then::Unload { cargo, to } = then {
-                        // AWBW records drops apart from the transport's own move (a second
-                        // cargo, or one loaded this turn) and they don't spend its action.
-                        // The engine has no such action yet: apply by hand and count.
-                        let ok = u.cargo.contains(&cargo) && s.unit_at(to.0, to.1).is_none()
-                            && (u.x as i32 - to.0 as i32).abs() + (u.y as i32 - to.1 as i32).abs() == 1;
-                        r.check("step.unload_by_hand", ok, || tag(c, format!("{} drops {cargo} at {to:?}", u.kind)));
-                        *r.tally.entry((if u.moved { "unload apart from move: transport had moved" } else { "unload apart from move: transport unmoved" }).to_string()).or_default() += 1;
-                        s.units.get_mut(&who).unwrap().cargo.retain(|x| *x != cargo);
-                        let cu = s.units.get_mut(&cargo).ok_or("unload: cargo unknown")?;
-                        cu.carried_by = None;
-                        cu.x = to.0;
-                        cu.y = to.1;
-                        cu.moved = true;
-                        i += 1;
-                        continue;
+                    if let Then::Unload { .. } = then {
+                        // A drop apart from the transport's own move (see sim::step).
+                        let key = if u.moved { "drop apart from move: transport had moved" } else { "drop apart from move: transport unmoved" };
+                        *r.tally.entry(key.to_string()).or_default() += 1;
+                        let a = Action::Move { unit: who, path: vec![(u.x, u.y)], then: then.clone() };
+                        r.check("legal.drop", awbw_engine::actions::legal_actions(&s).contains(&a), || tag(c, format!("{a:?} not generated")));
                     }
                     Action::Move { unit: who, path: vec![(u.x, u.y)], then }
                 }

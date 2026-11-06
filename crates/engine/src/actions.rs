@@ -252,6 +252,19 @@ pub fn legal_actions(s: &State) -> Vec<Action> {
             }
         }
     }
+    // A transport that has moved may still drop cargo where it stands (AWBW records ~400
+    // such drops: a second cargo, cargo that boarded after it moved, or after other units
+    // cleared the tile). An unmoved transport's in-place drop is offered above.
+    for u in s.units.values() {
+        if u.owner != s.current || !u.moved || u.carried_by.is_some() || u.cargo.is_empty() {
+            continue;
+        }
+        for then in options_at(s, u, (u.x, u.y)) {
+            if matches!(then, Then::Unload { .. }) {
+                out.push(Action::Move { unit: u.id, path: vec![(u.x, u.y)], then });
+            }
+        }
+    }
     for (at, kind) in builds(s) {
         out.push(Action::Build { at, kind });
     }
