@@ -105,16 +105,25 @@ pub fn bot_turn(state: &str, level: &str, seed: u32) -> String {
         if sim::winner(&s).is_some() || s.current != me {
             break;
         }
-        let a = match level {
-            "greedy" => baseline::choose(&s),
-            _ => baseline::random(&s, &mut next),
+        // Greedy also reports its top candidates, so the page can show why it moved.
+        let (a, why) = match level {
+            "greedy" => {
+                let r = baseline::ranked(&s);
+                let why: Vec<Value> = r.iter().take(3).map(|(g, c)| json!({"label": describe(&s, c), "score": (g * 10.0).round() / 10.0})).collect();
+                (r.into_iter().next().map(|(_, a)| a).unwrap_or(Action::EndTurn), why)
+            }
+            _ => (baseline::random(&s, &mut next), vec![]),
         };
         let label = describe(&s, &a);
         let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
         if sim::step(&mut s, &a, &mut roll).is_err() {
             let _ = sim::end_turn(&mut s);
         }
-        frames.push(frame(&s, &label));
+        let mut f = frame(&s, &label);
+        if !why.is_empty() {
+            f["why"] = json!(why);
+        }
+        frames.push(f);
         if a == Action::EndTurn {
             break;
         }
