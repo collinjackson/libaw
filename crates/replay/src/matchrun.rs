@@ -85,6 +85,8 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         s.fog = true;
     }
     s.partial = false; // the referee sees everything
+    // Bots may disband (AWBW "delete"); a bot that never sends it is unaffected.
+    s.deletes = true;
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }
