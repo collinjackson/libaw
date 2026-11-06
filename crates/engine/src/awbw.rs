@@ -377,6 +377,7 @@ pub fn action_to_contract(a: &Action) -> Value {
                 // Not in contract v1 either.
                 Then::Hide => json!({"type": "hide"}),
                 Then::Unhide => json!({"type": "unhide"}),
+                Then::Launch { target } => json!({"type": "launch", "target": [target.0, target.1]}),
                 Then::Repair { target } => json!({"type": "repair", "target": [target.0, target.1]}),
                 Then::Unload { cargo, to } => json!({"type": "unload", "cargo_id": cargo, "to": [to.0, to.1]}),
             };
@@ -420,6 +421,7 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
                 Some("supply") => Then::Supply,
                 Some("hide") => Then::Hide,
                 Some("unhide") => Then::Unhide,
+                Some("launch") => Then::Launch { target: xy(&t["target"]).ok_or("launch: bad target")? },
                 Some("repair") => Then::Repair { target: xy(&t["target"]).ok_or("repair: bad target")? },
                 Some("unload") => Then::Unload {
                     cargo: t["cargo_id"].as_u64().ok_or("unload: no cargo_id")? as u32,

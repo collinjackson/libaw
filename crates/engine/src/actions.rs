@@ -1,8 +1,8 @@
 //! Legal actions: what the player to move may do now. Shapes follow the opponent API
 //! contract (docs/eval-harness/CONTRACT.md) so bots and the harness share one vocabulary.
 //!
-//! v1 scope: no fog, no dived Subs or hidden Stealths (banned in v1 tournaments), no CO
-//! power activation yet, no silo launches; seam attacks only when `State::seams`.
+//! Optional parts, off by default for contract v1 bots: seam attacks (`State::seams`),
+//! diving and hiding (`State::dives`), CO powers (`State::powers`).
 
 use crate::co;
 use crate::data::tables;
@@ -28,6 +28,9 @@ pub enum Then {
     /// `State::dives`).
     Hide,
     Unhide,
+    /// A foot soldier on a loaded missile silo fires it: 3 HP to every unit within 2 tiles
+    /// of `target` (never kills). Offered only at targets whose blast reaches an enemy.
+    Launch { target: Pos },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -174,6 +177,35 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
         for t in seam_targets(s, &as_there, to, moved) {
             out.push(Then::AttackSeam { target: t });
         }
+    }
+    if is_foot(&u.kind) && s.buildings.get(&to).is_some_and(|b| tables().tile(b.terrain).building.as_deref() == Some("Missile")) {
+        let mut targets = std::collections::BTreeSet::new();
+        for e in s.units.values().filter(|e| !s.allied(e.owner, u.owner) && e.carried_by.is_none()) {
+            for dy in -2i32..=2 {
+                for dx in (-2 + dy.abs())..=(2 - dy.abs()) {
+                    let (x, y) = (e.x as i32 + dx, e.y as i32 + dy);
+                    if s.in_bounds(x, y) {
+                        targets.insert((x as u16, y as u16));
+                    }
+                }
+            }
+        }
+        // Plus one "dump" target whose blast hits nobody (the nearest such tile): emptying a
+        // silo keeps the enemy off it (a recorded team-game launch hit empty ground).
+        let empty_blast = |x: i32, y: i32| (-2i32..=2).all(|dy| ((-2 + dy.abs())..=(2 - dy.abs())).all(|dx| {
+            !s.in_bounds(x + dx, y + dy) || s.unit_at((x + dx) as u16, (y + dy) as u16).is_none()
+        }));
+        // Search rings outward from the silo; the first fitting tile (row-major in its ring).
+        let reach = s.width.max(s.height) as i32 * 2;
+        let dump = (0..=reach).find_map(|d| {
+            let ring = (-d..=d).flat_map(move |dy| { let r = d - dy.abs(); [(-r, dy), (r, dy)] });
+            let mut c: Vec<(i32, i32)> = ring.map(|(dx, dy)| (to.0 as i32 + dx, to.1 as i32 + dy))
+                .filter(|&(x, y)| s.in_bounds(x, y)).collect();
+            c.sort_by_key(|&(x, y)| (y, x));
+            c.into_iter().find(|&(x, y)| empty_blast(x, y))
+        });
+        targets.extend(dump.map(|(x, y)| (x as u16, y as u16)));
+        out.extend(targets.into_iter().map(|t| Then::Launch { target: t }));
     }
     if s.dives && matches!(u.kind.as_str(), "Sub" | "Stealth") {
         out.push(if u.dived { Then::Unhide } else { Then::Hide });

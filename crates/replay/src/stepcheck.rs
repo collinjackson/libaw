@@ -90,6 +90,14 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
             }
         }
         "Load" => (id(&a["loadedId"]), Then::Load),
+        "Launch" => {
+            let at = pos(a, "siloX", "siloY");
+            let who = match mover {
+                Some((m, end)) if end == at => m,
+                _ => s.unit_at(at.0, at.1)?.id,
+            };
+            (who, Then::Launch { target: pos(a, "targetX", "targetY") })
+        }
         // Newer records give `unitId`, older (team) ones the whole `unit`.
         "Hide" => (id(&a["unitId"]).max(id(&a["unit"]["units_id"])), Then::Hide),
         "Unhide" => (id(&a["unitId"]).max(id(&a["unit"]["units_id"])), Then::Unhide),
@@ -189,6 +197,17 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -
 
 /// One `sim::step`. For an attack, try luck rolls until the recorded HP come out.
 fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Result<(), String> {
+    if let Action::Move { unit, path, then: then @ Then::Launch { .. } } = act {
+        let end = path.last().copied();
+        // A blast that hits nobody is the same move wherever it lands: match the dump target.
+        let hits_none = |t: Pos| !s.units.values().any(|o| o.carried_by.is_none()
+            && (o.x as i32 - t.0 as i32).abs() + (o.y as i32 - t.1 as i32).abs() <= 2);
+        let Then::Launch { target } = then else { unreachable!() };
+        let offered = awbw_engine::actions::legal_actions(s).iter().any(|a| matches!(a,
+            Action::Move { unit: u, path: p, then: Then::Launch { target: t } } if u == unit && p.last().copied() == end
+                && (t == target || (hits_none(*t) && hits_none(*target)))));
+        r.check("legal.launch", offered, || tag(c, format!("{act:?} not generated")));
+    }
     let fire = match act {
         Action::Move { then: Then::Attack { .. }, .. } => rec.clone(),
         Action::Move { .. } => Value::Null,

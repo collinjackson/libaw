@@ -642,6 +642,18 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     }
                     Ok(())
                 }
+                Then::Launch { target } => {
+                    let b = s.buildings.get_mut(&end).ok_or("no silo")?;
+                    if tables().tile(b.terrain).building.as_deref() != Some("Missile") {
+                        return Err("silo is empty".into());
+                    }
+                    let empty = 112; // Missile Silo Empty: plain ground from now on
+                    b.terrain = empty;
+                    let w = s.width as usize;
+                    s.terrain[end.1 as usize * w + end.0 as usize] = empty;
+                    missile(s, *target, false, 3);
+                    Ok(())
+                }
                 Then::Hide | Then::Unhide => {
                     s.units.get_mut(unit).unwrap().dived = matches!(then, Then::Hide);
                     Ok(())
