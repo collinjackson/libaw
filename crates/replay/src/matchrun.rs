@@ -60,7 +60,7 @@ impl Agent {
                 Ok(v)
             }
             Agent::Http { url, bot, agent } => {
-                let body = json!({"player_id": s.current, "seed": seed, "game": game, "bot": bot, "state": to_turn_json(s, template)});
+                let body = json!({"player_id": s.current, "seed": seed, "game": game, "bot": bot, "powers": s.powers, "state": to_turn_json(s, template)});
                 let mut r = agent.post(format!("{url}/act")).send_json(&body).map_err(|e| format!("http: {e}"))?;
                 r.body_mut().read_json::<Value>().map_err(|e| format!("bad json: {e}"))
             }
@@ -87,6 +87,11 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     s.partial = false; // the referee sees everything
     // Bots may disband (AWBW "delete"); a bot that never sends it is unaffected.
     s.deletes = true;
+    // MATCH_POWERS=1: CO powers on (default No CO, as against Carson's bots). Bots are told
+    // through the request's "powers" field.
+    if std::env::var("MATCH_POWERS").is_ok() {
+        s.powers = true;
+    }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }
