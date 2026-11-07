@@ -207,7 +207,7 @@ pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8
         def_hp: display(hp_now(def)),
         luck_min: roll,
         luck_max: roll,
-        scale: if counter { co::counter_multiplier(&co_of(s, att.owner)) } else { 1.0 },
+        scale_pct: if counter { co::counter_pct(&co_of(s, att.owner)) } else { 100 },
     };
     damage_range(&p).0.min(255) as u8
 }

@@ -134,7 +134,7 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8, co
                 def_hp: dhp,
                 luck_min: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
                 luck_max: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).1,
-                scale: if counter { awbw_engine::co::counter_multiplier(&co_of(s, att.owner)) } else { 1.0 },
+                scale_pct: if counter { awbw_engine::co::counter_pct(&co_of(s, att.owner)) } else { 100 },
             };
             let (dlo, dhi) = damage_range(&p);
             let cand = def.hp.intersect(Hp::from_display(dhp))?;

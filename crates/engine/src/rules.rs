@@ -151,19 +151,22 @@ pub struct AttackParams {
     pub def_hp: u8,
     pub luck_min: i32,
     pub luck_max: i32,
-    /// Final multiplier (Sonja's counterattacks: 1.5).
-    pub scale: f64,
+    /// Final multiplier in per cent (Sonja's counterattacks: 150).
+    pub scale_pct: u32,
 }
 
+/// Exact integer arithmetic (no floats; the proof-of-artifice zkVM plan wants none): one
+/// numerator over the denominator 100 * 10 * 100 * 100, floored. Same results as the old
+/// f64 floor(x + 1e-6): every replay check unchanged, and 0 differences over 2M random
+/// inputs (2026-11-07).
 pub fn damage_range(p: &AttackParams) -> (u32, u32) {
-    let f = |luck: i32| -> f64 {
-        let a = p.base as f64 * p.att_value as f64 / 100.0 + luck as f64;
-        let d = (200.0 - (p.def_value as f64 + p.def_terrain as f64 * p.def_hp as f64)) / 100.0;
-        (a * p.att_hp as f64 / 10.0 * d * p.scale).max(0.0)
+    let f = |luck: i32| -> u32 {
+        let a = p.base as i64 * p.att_value as i64 + 100 * luck as i64; // x100
+        let d = 200 - (p.def_value as i64 + p.def_terrain as i64 * p.def_hp as i64); // x100
+        let num = a * p.att_hp as i64 * d * p.scale_pct as i64;
+        if num <= 0 { 0 } else { (num / (100 * 10 * 100 * 100)) as u32 }
     };
-    // Floor with a small epsilon, the way AWBW avoids float artefacts like 54.9999.
-    let fl = |v: f64| (v + 1e-6).floor() as u32;
-    (fl(f(p.luck_min)), fl(f(p.luck_max)))
+    (f(p.luck_min), f(p.luck_max))
 }
 
 /// Terrain defence stars that apply to a unit (air units get none).

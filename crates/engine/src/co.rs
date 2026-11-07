@@ -85,8 +85,9 @@ pub fn air_fuel_decrease(co: &str) -> i32 {
 }
 
 /// Counterattack damage multiplier (Sonja 1.5).
-pub fn counter_multiplier(co: &str) -> f64 {
-    d2d(co).and_then(|d| d["CounterAttackPower"].as_f64()).unwrap_or(1.0)
+/// Counterattack multiplier in per cent (Sonja: 150). Read from the CO data table once.
+pub fn counter_pct(co: &str) -> u32 {
+    d2d(co).and_then(|d| d["CounterAttackPower"].as_f64()).map(|v| (v * 100.0).round() as u32).unwrap_or(100)
 }
 
 /// Base power costs (CO power, super power) in meter units (funds of damage x 10), before
