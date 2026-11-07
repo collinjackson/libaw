@@ -673,9 +673,13 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     Ok(())
                 }
                 Then::Supply => {
-                    let near: Vec<UnitId> = s.units.values()
+                    let mut near: Vec<UnitId> = s.units.values()
                         .filter(|o| o.owner == u.owner && o.id != *unit && o.carried_by.is_none() && dist((o.x, o.y), end) == 1)
                         .map(|o| o.id).collect();
+                    // Cargo of a supplied transport is supplied too (game-1751953: the Supply
+                    // record lists a Lander and both units aboard).
+                    let cargo: Vec<UnitId> = near.iter().flat_map(|t| s.units[t].cargo.clone()).collect();
+                    near.extend(cargo);
                     for id in near {
                         let o = s.units.get_mut(&id).unwrap();
                         let info = tables().unit(&o.kind);

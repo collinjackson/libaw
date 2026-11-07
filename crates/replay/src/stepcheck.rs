@@ -136,8 +136,10 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
         // Supply names only the supplied units; the supplier is the APC that just moved.
         // Standing still, it's the player's APC next to the first supplied unit.
         "Supply" => match mover {
-            Some((m, _)) => (m, Then::Supply),
-            None => {
+            // After a non-APC's move (game-1746741: the Missile is the one supplied), the
+            // supplier is a standing APC beside it.
+            Some((m, _)) if s.units.get(&m).is_some_and(|u| u.kind == "APC") => (m, Then::Supply),
+            _ => {
                 let first = s.units.get(&(num(items(&a["suppliedIds"]).first()?) as UnitId))?;
                 let apc = s.units.values().find(|o| o.kind == "APC" && o.owner == first.owner && o.carried_by.is_none()
                     && (o.x as i32 - first.x as i32).abs() + (o.y as i32 - first.y as i32).abs() == 1)?;
