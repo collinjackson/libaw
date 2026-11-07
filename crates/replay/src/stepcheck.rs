@@ -150,6 +150,9 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
     if r.fog {
         restore_cargo(&mut s, prev);
     }
+    // Sonja hides her units' HP in fire records ("?", or 0 in some fog exports): such a side
+    // matches any result, with its death settled by the next turn file.
+    r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as UnitId).collect();
     let mut i = 0;
     while i < actions.len() {
         let a = &actions[i];
@@ -249,6 +252,23 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
     if let Some(f) = fire {
         let (aid, did) = (num(&f["attacker"]["units_id"]) as UnitId, num(&f["defender"]["units_id"]) as UnitId);
         let (ah, dh) = (num(&f["attacker"]["units_hit_points"]), num(&f["defender"]["units_hit_points"]));
+        let hidden = |side: &str, id: UnitId| {
+            let v = &f[side]["units_hit_points"];
+            v.as_str() == Some("?")
+                || (num(v) == 0 && s.units.get(&id).is_some_and(|u| awbw_engine::combat::co_of(s, u.owner) == "Sonja") && r.next_alive.contains(&id))
+        };
+        let (ahid, dhid) = (hidden("attacker", aid), hidden("defender", did));
+        // Meters after the fight, when the record gives them (copValues): they settle hidden
+        // HP, since the meter gain follows the damage done.
+        let meters: Vec<(PlayerId, i64)> = ["attacker", "defender"].iter()
+            .filter_map(|k| { let c = &f["copValues"][*k]; c["copValue"].is_number().then(|| (num(&c["playerId"]) as PlayerId, num(&c["copValue"]))) })
+            .collect();
+        let meters_fit = |t: &State| meters.iter().all(|(p, m)| t.player(*p).is_none_or(|pl| pl.meter == *m));
+        let mut meter_found: Option<State> = None;
+        let (mut malo, mut mahi, mut mdlo, mut mdhi) = (u8::MAX, 0u8, u8::MAX, 0u8);
+        let fits = |shown_hp: i64, rec: i64, hid: bool, id: UnitId, r: &Report| {
+            if hid { !r.next_alive.contains(&id) || shown_hp > 0 } else { shown_hp == rec }
+        };
         let shown = |s: &State, id: UnitId| s.units.get(&id).and_then(|u| u.hp.display()).map(|d| d as i64).unwrap_or(0);
         // Records show displayed HP only; try the HP each side could really have, top first.
         let range = |id: UnitId| s.units.get(&id).map(|u| (u.hp.lo.max(1)..=u.hp.hi).rev().collect::<Vec<u8>>()).unwrap_or_default();
@@ -275,9 +295,14 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
                         };
                         let ok = awbw_engine::sim::step(&mut t, act, &mut luck).is_ok();
                         let calls = n;
-                        if ok && shown(&t, aid) == ah && shown(&t, did) == dh {
+                        if ok && fits(shown(&t, aid), ah, ahid, aid, r) && fits(shown(&t, did), dh, dhid, did, r) {
                             if let Some(u) = t.units.get(&aid) { alo = alo.min(u.hp.lo); ahi = ahi.max(u.hp.hi); }
                             if let Some(u) = t.units.get(&did) { dlo = dlo.min(u.hp.lo); dhi = dhi.max(u.hp.hi); }
+                            if meters_fit(&t) {
+                                if let Some(u) = t.units.get(&aid) { malo = malo.min(u.hp.lo); mahi = mahi.max(u.hp.hi); }
+                                if let Some(u) = t.units.get(&did) { mdlo = mdlo.min(u.hp.lo); mdhi = mdhi.max(u.hp.hi); }
+                                meter_found.get_or_insert_with(|| t.clone());
+                            }
                             found.get_or_insert(t);
                         }
                         if calls < 2 { break; } // no counter: the second roll changes nothing
@@ -286,6 +311,17 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
                     k1 += 1;
                 }
             }
+        }
+        if !meters.is_empty() && found.is_some() {
+            r.check("step.fire_meter", meter_found.is_some(), || tag(c, format!("no fitting roll gives meters {meters:?}")));
+        }
+        if let Some(mut t) = meter_found.take().filter(|_| ahid || dhid) {
+            // Hidden HP: the rolls that also fit the meters bound what the HP really is.
+            if let Some(u) = t.units.get_mut(&aid) { u.hp = Hp { lo: malo, hi: mahi }; }
+            if let Some(u) = t.units.get_mut(&did) { u.hp = Hp { lo: mdlo, hi: mdhi }; }
+            *s = t;
+            r.check("step.fire", true, String::new);
+            return Ok(());
         }
         if let Some(mut t) = found {
             if let Some(u) = t.units.get_mut(&aid) { u.hp = Hp { lo: alo, hi: ahi }; }
