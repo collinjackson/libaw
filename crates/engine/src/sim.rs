@@ -690,7 +690,9 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     tm.fuel = info.fuel as i32;
                     tm.ammo = info.ammo as i32;
                     if afford && display(hp_now(&t)) < 10 {
-                        tm.hp = Hp::exact(((display(hp_now(&t)) + 1) * 10).min(100));
+                        // +1 displayed HP; the fraction under it is kept, so (like property
+                        // repairs) the result is the whole range of the new display value.
+                        tm.hp = Hp::from_display((display(hp_now(&t)) + 1).min(10));
                         s.player_mut(t.owner).unwrap().funds -= cost;
                     }
                     Ok(())

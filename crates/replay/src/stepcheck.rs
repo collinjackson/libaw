@@ -40,16 +40,20 @@ fn game(dir: &Path, r: &mut Report) {
     let load = |p: &Path| -> Value { serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap() };
     let Some(first) = files.first() else { return };
     let mut cur = load(first);
-    if cur["gameState"]["fog_array"].is_array() {
+    // Fog games: the export shows every unit, so the full state steps like any other game;
+    // STEP_NO_FOG=1 skips them as before.
+    if cur["gameState"]["fog_array"].is_array() && std::env::var("STEP_NO_FOG").is_ok() {
         r.skip("game: fog");
         return;
     }
+    r.fog = cur["gameState"]["fog_array"].is_array();
+    let mut prev: Option<State> = None;
     for i in 0..files.len().saturating_sub(1) {
         let next = load(&files[i + 1]);
         let file = files[i].file_name().unwrap().to_string_lossy().to_string();
         let c = Ctx { game: &name, file: &file };
         let actions: Vec<Value> = items(&cur["actions"]).into_iter().cloned().collect();
-        match turn(&cur, &next, &actions, r, &c) {
+        match turn(&cur, &next, &actions, prev.as_ref(), r, &c) {
             Ok(s) => {
                 r.turns += 1;
                 let mut rec = state_from(&next);
@@ -57,8 +61,12 @@ fn game(dir: &Path, r: &mut Report) {
                 if compare(&s, &rec, r, &c) {
                     r.turns_clean += 1;
                 }
+                prev = Some(s);
             }
-            Err(why) => r.skip(&format!("turn: {why}")),
+            Err(why) => {
+                r.skip(&format!("turn: {why}"));
+                prev = None;
+            }
         }
         cur = next;
     }
@@ -127,7 +135,7 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
 }
 
 /// Run one turn through `sim::step`. Err names why the turn can't be replayed this way.
-fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -> Result<State, String> {
+fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &mut Report, c: &Ctx) -> Result<State, String> {
     if !actions.iter().any(|a| a["action"] == "NextTurn") {
         return Err("no NextTurn".into());
     }
@@ -139,6 +147,9 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], r: &mut Report, c: &Ctx) -
     s.seams = true;
     s.dives = true;
     s.deletes = true;
+    if r.fog {
+        restore_cargo(&mut s, prev);
+    }
     let mut i = 0;
     while i < actions.len() {
         let a = &actions[i];
@@ -283,7 +294,15 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
             r.check("step.fire", true, String::new);
             return Ok(());
         }
-        r.check("step.fire", false, || tag(c, format!("no luck roll gives attacker {ah} / defender {dh}")));
+        let desc = |id: UnitId| s.units.get(&id).map(|u| format!("{} hp {}..{} at {:?}", u.kind, u.hp.lo, u.hp.hi, (u.x, u.y))).unwrap_or("?".into());
+        let probe = |k: i32| {
+            let mut t = s.clone();
+            let mut l = |lo: i32, hi: i32| (lo + k).min(hi);
+            let ok = awbw_engine::sim::step(&mut t, act, &mut l).is_ok();
+            format!("{}{}/{}", if ok { "" } else { "err " }, shown(&t, aid), shown(&t, did))
+        };
+        r.check("step.fire", false, || tag(c, format!("no luck roll gives attacker {ah} / defender {dh}; engine {} vs {}; luck 0 gives {}, luck 9 gives {}; {act:?}",
+            desc(aid), desc(did), probe(0), probe(9))));
         // Go on from the recorded result so one miss doesn't spread through the turn.
         let mut mid = |lo: i32, hi: i32| (lo + hi) / 2;
         let res = awbw_engine::sim::step(s, act, &mut mid);
@@ -304,4 +323,21 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
     let res = awbw_engine::sim::step(s, act, &mut mid);
     r.check("step.ok", res.is_ok(), || tag(c, format!("{act:?}: {}", res.as_ref().err().cloned().unwrap_or_default())));
     res.map_err(|e| format!("step error: {e}"))
+}
+
+/// Fog exports leave out units inside transports. Put back the cargo the engine had at the end
+/// of the previous turn when its transport is still in the record and the cargo isn't.
+fn restore_cargo(s: &mut State, prev: Option<&State>) {
+    let Some(p) = prev else { return };
+    for u in p.units.values() {
+        let Some(t) = u.carried_by else { continue };
+        if s.units.contains_key(&u.id) || !s.units.get(&t).is_some_and(|tr| tr.owner == u.owner) {
+            continue;
+        }
+        s.units.insert(u.id, u.clone());
+        let tr = s.units.get_mut(&t).unwrap();
+        if !tr.cargo.contains(&u.id) {
+            tr.cargo.push(u.id);
+        }
+    }
 }

@@ -28,7 +28,7 @@ struct Report {
     checks: BTreeMap<String, (u64, u64)>,
     /// This game has fog of war (its turn files carry a `fog_array` grid): cargo shows as
     /// "?" and the next player's funds in NextTurn as 0.
-    fog: bool,
+    pub fog: bool,
     examples: BTreeMap<String, Vec<String>>,
     max_examples: usize,
     turns: u64,
