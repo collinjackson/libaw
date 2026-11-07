@@ -79,7 +79,8 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
         let step = if co == "Rachel" { 30 } else { 20 };
         let cur_disp = u.hp.display_hi();
         let funds = s.player(next).map(|p| p.funds).unwrap_or(0);
-        let per_hp = info.cost as i64 / 10;
+        // At the owner's price (game-1759750: Colin's repairs cost him 80%).
+        let per_hp = owner_price(s, next, &u.kind) / 10;
         let mut add_disp = 0u8;
         for k in (1..=(step / 10)).rev() {
             let k = k as u8;
@@ -224,12 +225,19 @@ fn set_hp(s: &mut State, id: UnitId, hp: u8) {
     }
 }
 
+/// What a `kind` costs its owner `pid` now (CO price: Colin 80%, Kanbei 120%, ...).
+pub fn owner_price(s: &State, pid: PlayerId, kind: &str) -> i64 {
+    let cost = tables().unit(kind).cost as i64;
+    s.player(pid).map(|p| co::price(cost, &p.co, &p.power)).unwrap_or(cost)
+}
+
 /// One attack with its counterattack. Ammo is spent by whichever side uses its primary.
 /// Charge CO power meters after a fight. AWBW: the side that loses HP gains the funds value
 /// of the displayed HP it lost; the other side gains half of that. Meters stored x10, capped
 /// at the super power's cost; no charge while a power is on.
 pub fn charge(s: &mut State, att: &Unit, att_lost: u8, def: &Unit, def_lost: u8) {
-    let value = |u: &Unit, lost: u8| tables().unit(&u.kind).cost as i64 * lost as i64; // x10 /10
+    // At the owner's price (game-1759750: a Colin Infantry, 800 to him, charges 80%).
+    let value = |u: &Unit, lost: u8| owner_price(s, u.owner, &u.kind) * lost as i64; // x10 /10
     let (a_val, d_val) = (value(att, att_lost), value(def, def_lost));
     for (owner, gain) in [(att.owner, a_val + d_val / 2), (def.owner, d_val + a_val / 2)] {
         if let Some(p) = s.player_mut(owner) {
@@ -699,7 +707,7 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                 Then::Repair { target } => {
                     let t = s.unit_at(target.0, target.1).cloned().ok_or("no repair target")?;
                     let info = tables().unit(&t.kind);
-                    let cost = info.cost as i64 / 10;
+                    let cost = owner_price(s, t.owner, &t.kind) / 10;
                     let afford = s.player(t.owner).is_some_and(|p| p.funds >= cost);
                     let tm = s.units.get_mut(&t.id).unwrap();
                     tm.fuel = info.fuel as i32;
