@@ -593,7 +593,7 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     let me = s.units.remove(unit).unwrap();
                     let info = tables().unit(&t.kind);
                     let sum = display(hp_now(&me)) as u32 + display(hp_now(&t)) as u32;
-                    let refund = sum.saturating_sub(10) as i64 * info.cost as i64 / 10;
+                    let refund = sum.saturating_sub(10) as i64 * owner_price(s, t.owner, &t.kind) / 10;
                     let tm = s.units.get_mut(&t.id).unwrap();
                     tm.hp = Hp::exact((sum.min(10) * 10) as u8);
                     tm.fuel = (tm.fuel + me.fuel).min(info.fuel as i32);
