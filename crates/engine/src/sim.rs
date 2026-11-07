@@ -94,7 +94,10 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
         let new_disp = (cur_disp + add_disp).min(10);
         let m = s.units.get_mut(id).unwrap();
         if add_disp > 0 {
-            m.hp = Hp::from_display(new_disp);
+            // An uncertain display (a range spanning several values) stays a range: each end
+            // moves up by the same repair.
+            let lo_disp = (u.hp.display_lo().max(1) + add_disp).min(10);
+            m.hp = Hp { lo: Hp::from_display(lo_disp).lo, hi: Hp::from_display(new_disp).hi };
         } else if cur_disp == 10 {
             // Topping off a 9.x unit is free in AWBW only to a whole display point; leave as is.
         }

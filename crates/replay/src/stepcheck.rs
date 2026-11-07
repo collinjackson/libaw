@@ -87,6 +87,20 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
         "Fire" if a["attacker"].is_object() && a["defender"].is_object() => {
             (id(&a["attacker"]["units_id"]), Then::Attack { target: pos(&a["defender"], "units_x", "units_y") })
         }
+        // Sonja hides the whole defender ("?", game-1746729): take the attack the engine offers
+        // from where the attacker stands; with several, the fire search's meters judge.
+        "Fire" if a["attacker"].is_object() && a["defender"].as_str() == Some("?") => {
+            let aid = id(&a["attacker"]["units_id"]);
+            let end = match mover {
+                Some((m, end)) if m == aid => end,
+                _ => { let u = s.units.get(&aid)?; (u.x, u.y) }
+            };
+            let target = awbw_engine::actions::legal_actions(s).into_iter().find_map(|x| match x {
+                Action::Move { unit, path, then: Then::Attack { target } } if unit == aid && path.last() == Some(&end) => Some(target),
+                _ => None,
+            })?;
+            (aid, Then::Attack { target })
+        }
         "AttackSeam" => {
             (id(&a["attacker"]["units_id"]), Then::AttackSeam { target: pos(a, "seamX", "seamY") })
         }
@@ -250,11 +264,16 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
     };
     let fire = if fire["attacker"].is_object() { Some(fire) } else { None };
     if let Some(f) = fire {
-        let (aid, did) = (num(&f["attacker"]["units_id"]) as UnitId, num(&f["defender"]["units_id"]) as UnitId);
+        let aid = num(&f["attacker"]["units_id"]) as UnitId;
+        let did = match (&f["defender"], act) {
+            (d, _) if d.is_object() => num(&d["units_id"]) as UnitId,
+            (_, Action::Move { then: Then::Attack { target }, .. }) => s.unit_at(target.0, target.1).map(|u| u.id).unwrap_or(0),
+            _ => 0,
+        };
         let (ah, dh) = (num(&f["attacker"]["units_hit_points"]), num(&f["defender"]["units_hit_points"]));
         let hidden = |side: &str, id: UnitId| {
             let v = &f[side]["units_hit_points"];
-            v.as_str() == Some("?")
+            v.as_str() == Some("?") || f[side].as_str() == Some("?")
                 || (num(v) == 0 && s.units.get(&id).is_some_and(|u| awbw_engine::combat::co_of(s, u.owner) == "Sonja") && r.next_alive.contains(&id))
         };
         let (ahid, dhid) = (hidden("attacker", aid), hidden("defender", did));
