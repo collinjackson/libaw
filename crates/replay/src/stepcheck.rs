@@ -95,10 +95,17 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
                 Some((m, end)) if m == aid => end,
                 _ => { let u = s.units.get(&aid)?; (u.x, u.y) }
             };
-            let target = awbw_engine::actions::legal_actions(s).into_iter().find_map(|x| match x {
+            let targets: Vec<Pos> = awbw_engine::actions::legal_actions(s).into_iter().filter_map(|x| match x {
                 Action::Move { unit, path, then: Then::Attack { target } } if unit == aid && path.last() == Some(&end) => Some(target),
                 _ => None,
-            })?;
+            }).collect();
+            // Prefer a target some roll of which gives the recorded meters and attacker HP
+            // (game-1750218: the first offered target was the wrong Infantry).
+            let fits: Vec<Pos> = targets.iter().copied().filter(|t| fire_fits(s, aid, end, *t, a)).collect();
+            // Among those, prefer a unit the turn shows was hit: a later Fire's defender, or
+            // gone by the next turn file (game-1750218: two 10 HP Infantry in a Battleship's range).
+            let hit = |t: &Pos| s.unit_at(t.0, t.1).is_some_and(|u| HIT.with(|h| h.borrow().contains(&u.id)));
+            let target = fits.iter().copied().find(hit).or(fits.first().copied()).or(targets.first().copied())?;
             (aid, Then::Attack { target })
         }
         "AttackSeam" => {
@@ -169,6 +176,13 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
     // Sonja hides her units' HP in fire records ("?", or 0 in some fog exports): such a side
     // matches any result, with its death settled by the next turn file.
     r.maybe_supplied.clear();
+    HIT.with(|h| {
+        let next_ids: std::collections::HashSet<UnitId> = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as UnitId).collect();
+        let mut h = h.borrow_mut();
+        h.clear();
+        h.extend(actions.iter().filter(|a| a["action"] == "Fire" && a["defender"].is_object()).map(|a| num(&a["defender"]["units_id"]) as UnitId));
+        h.extend(s.units.keys().copied().filter(|id| !next_ids.contains(id)));
+    });
     r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as UnitId).collect();
     let mut i = 0;
     while i < actions.len() {
@@ -413,4 +427,38 @@ fn restore_cargo(s: &mut State, prev: Option<&State>) {
             tr.cargo.push(u.id);
         }
     }
+}
+
+/// Whether attacking `target` from `end` can give the record's meters and attacker HP for
+/// some pair of rolls (HP at the top of its range; used only to choose a hidden target).
+fn fire_fits(s: &State, aid: UnitId, end: Pos, target: Pos, f: &Value) -> bool {
+    let Some(u) = s.units.get(&aid) else { return false };
+    let path = if (u.x, u.y) == end { vec![end] } else { vec![(u.x, u.y), end] };
+    let act = Action::Move { unit: aid, path, then: Then::Attack { target } };
+    let ah = num(&f["attacker"]["units_hit_points"]);
+    let meters: Vec<(PlayerId, i64)> = ["attacker", "defender"].iter()
+        .filter_map(|k| { let c = &f["copValues"][*k]; c["copValue"].is_number().then(|| (num(&c["playerId"]) as PlayerId, num(&c["copValue"]))) })
+        .collect();
+    for k1 in 0..=9 {
+        for k2 in 0..=9 {
+            let mut t = s.clone();
+            // Teleport the attacker: the path is only for this check.
+            if let Some(m) = t.units.get_mut(&aid) { m.x = end.0; m.y = end.1; }
+            let act = match &act { Action::Move { unit, then, .. } => Action::Move { unit: *unit, path: vec![end], then: then.clone() }, a => a.clone() };
+            let mut n = 0;
+            let mut luck = |lo: i32, hi: i32| { n += 1; (lo + if n == 1 { k1 } else { k2 }).min(hi) };
+            if awbw_engine::sim::step(&mut t, &act, &mut luck).is_err() { continue; }
+            let shown = t.units.get(&aid).and_then(|u| u.hp.display()).map(|d| d as i64).unwrap_or(0);
+            if shown == ah && meters.iter().all(|(p, m)| t.player(*p).is_none_or(|pl| pl.meter == *m)) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+thread_local! {
+    /// Units this turn's records show were hit (later Fire defenders, or gone by the next
+    /// turn file): the tie-break for a Fire whose defender is hidden.
+    static HIT: std::cell::RefCell<std::collections::HashSet<UnitId>> = Default::default();
 }
