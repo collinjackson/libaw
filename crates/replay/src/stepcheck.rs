@@ -166,6 +166,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
     }
     // Sonja hides her units' HP in fire records ("?", or 0 in some fog exports): such a side
     // matches any result, with its death settled by the next turn file.
+    r.maybe_supplied.clear();
     r.next_alive = items(&next["gameState"]["units"]).into_iter().map(|u| num(&u["units_id"]) as UnitId).collect();
     let mut i = 0;
     while i < actions.len() {
@@ -236,6 +237,21 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
         };
         // `i` now points at the record that carries the result (the Fire after its Move).
         step(&mut s, &act, &actions[i], r, c)?;
+        // Older exports don't record an APC's Supply after its move: assume it supplied, and
+        // let the compare accept either outcome (as the replay checker does).
+        if let Action::Move { unit, then: Then::Wait, .. } = &act {
+            if let Some(apc) = s.units.get(unit).filter(|u| u.kind == "APC").cloned() {
+                for o in s.units.values_mut() {
+                    if o.owner == apc.owner && o.id != apc.id && o.carried_by.is_none()
+                        && (o.x as i32 - apc.x as i32).abs() + (o.y as i32 - apc.y as i32).abs() == 1 {
+                        let info = awbw_engine::data::tables().unit(&o.kind);
+                        r.maybe_supplied.entry(o.id).or_insert((o.fuel, o.ammo));
+                        o.fuel = info.fuel as i32;
+                        o.ammo = info.ammo as i32;
+                    }
+                }
+            }
+        }
         i += 1;
     }
     Err("ran out of actions".into())
