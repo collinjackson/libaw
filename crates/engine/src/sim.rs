@@ -570,6 +570,14 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     m.x = end.0;
                     m.y = end.1;
                     m.carried_by = Some(t);
+                    // A transport loading into another brings its own cargo to the tile (one
+                    // level, as AWBW does; game-1752274: Infantry in an APC loaded into a Lander).
+                    for c in s.units[unit].cargo.clone() {
+                        if let Some(cu) = s.units.get_mut(&c) {
+                            cu.x = end.0;
+                            cu.y = end.1;
+                        }
+                    }
                     return Ok(());
                 }
                 Then::Join => {
