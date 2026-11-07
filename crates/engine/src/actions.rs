@@ -258,7 +258,6 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
 pub fn builds(s: &State) -> Vec<(Pos, String)> {
     let me = s.current;
     let Some(p) = s.player(me) else { return vec![] };
-    let mult = co::price_multiplier(&p.co, &p.power);
     let mut out = vec![];
     for (&pos, b) in &s.buildings {
         if b.owner != Some(me) || s.unit_at(pos.0, pos.1).is_some() {
@@ -274,7 +273,7 @@ pub fn builds(s: &State) -> Vec<(Pos, String)> {
         };
         for (name, info) in &tables().units {
             if classes.contains(&info.move_type.as_str())
-                && ((info.cost as f64 * mult).round() as i64) <= p.funds
+                && co::price(info.cost as i64, &p.co, &p.power) <= p.funds
             {
                 out.push((pos, name.clone()));
             }

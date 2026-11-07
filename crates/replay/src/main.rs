@@ -284,8 +284,8 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 r.check("legal.build", offered.contains(&((nu.x, nu.y), nu.kind.clone())), || {
                     tag(c, format!("{} at {:?} not generated", nu.kind, (nu.x, nu.y)))
                 });
-                let cost = (tables().unit(&nu.kind).cost as f64
-                    * awbw_engine::co::price_multiplier(&co_of(s, nu.owner), &s.player(nu.owner).map(|p| p.power.clone()).unwrap_or_default())).round() as i64;
+                let cost = awbw_engine::co::price(tables().unit(&nu.kind).cost as i64,
+                    &co_of(s, nu.owner), &s.player(nu.owner).map(|p| p.power.clone()).unwrap_or_default());
                 let funds = s.player(nu.owner).map(|p| p.funds).unwrap_or(0);
                 r.check("build.affordable", cost <= funds, || {
                     tag(c, format!("{} costs {cost}, funds {funds}", nu.kind))

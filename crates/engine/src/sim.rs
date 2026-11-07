@@ -335,8 +335,8 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
             });
         }
     }
-    if e.funds_mult != 1.0 {
-        if let Some(p) = s.player_mut(pid) { p.funds = (p.funds as f64 * e.funds_mult).floor() as i64; }
+    if e.funds_pct != 100 {
+        if let Some(p) = s.player_mut(pid) { p.funds = p.funds * e.funds_pct / 100; }
     }
     let mine: Vec<UnitId> = s.units.values().filter(|u| s.allied(u.owner, pid)).map(|u| u.id).collect();
     let theirs: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).map(|u| u.id).collect();
@@ -351,8 +351,8 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
         let u = s.units.get_mut(&id).unwrap();
         if e.loss != 0 {
             u.hp = crate::state::Hp { lo: bump(u.hp.lo, -e.loss * 10), hi: bump(u.hp.hi, -e.loss * 10) };
-            if e.loss_fuel != 1.0 {
-                u.fuel = (u.fuel as f64 * e.loss_fuel).ceil() as i32;
+            if e.loss_fuel_pct != 100 {
+                u.fuel = (u.fuel * e.loss_fuel_pct + 99) / 100; // ceil, fuel >= 0
             }
         }
     }
@@ -509,7 +509,7 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
         Action::Build { at, kind } => {
             let me = s.current;
             let p = s.player(me).ok_or("no player")?;
-            let price = (tables().unit(kind).cost as f64 * co::price_multiplier(&p.co, &p.power)).round() as i64;
+            let price = co::price(tables().unit(kind).cost as i64, &p.co, &p.power);
             if price > p.funds || s.unit_at(at.0, at.1).is_some() {
                 return Err(format!("can't build {kind} at {at:?}"));
             }
