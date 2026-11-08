@@ -140,6 +140,16 @@ pub struct State {
     /// receives it): enemy units may be missing, so "no units left" doesn't end the game.
     #[serde(default)]
     pub partial: bool,
+    /// Units no one may build in this game (AWBW's per-game unit bans). Default: Stealth and
+    /// Black Bomb, which AWBW games ban unless the creator allows them (Collin, 2026-11-08: a
+    /// balance rule, not strategy; if a game allows them the bot may build them). The
+    /// generator leaves them out; the simulator applies a recorded build either way.
+    #[serde(default = "default_bans")]
+    pub banned: Vec<String>,
+}
+
+pub fn default_bans() -> Vec<String> {
+    vec!["Stealth".into(), "Black Bomb".into()]
 }
 
 impl State {

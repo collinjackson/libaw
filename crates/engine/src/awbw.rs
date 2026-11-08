@@ -147,6 +147,7 @@ pub fn state_from(turn: &Value) -> State {
         powers: false,
         seams: false,
         dives: false,
+        banned: crate::state::default_bans(),
         deletes: false,
         fog: gs["fog_array"].is_array() || gs["fog_array"].is_object(),
         partial: gs["fog_array"].is_array() || gs["fog_array"].is_object(),

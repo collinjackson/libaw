@@ -60,7 +60,7 @@ impl Agent {
                 Ok(v)
             }
             Agent::Http { url, bot, agent } => {
-                let body = json!({"player_id": s.current, "seed": seed, "game": game, "bot": bot, "powers": s.powers, "state": to_turn_json(s, template)});
+                let body = json!({"player_id": s.current, "seed": seed, "game": game, "bot": bot, "powers": s.powers, "banned": s.banned, "state": to_turn_json(s, template)});
                 let mut r = agent.post(format!("{url}/act")).send_json(&body).map_err(|e| format!("http: {e}"))?;
                 r.body_mut().read_json::<Value>().map_err(|e| format!("bad json: {e}"))
             }
@@ -89,6 +89,11 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     s.deletes = true;
     // MATCH_POWERS=1: CO powers on (default No CO, as against Carson's bots). Bots are told
     // through the request's "powers" field.
+    // MATCH_BANS: comma list of unbuildable units (default Stealth,Black Bomb as on AWBW;
+    // empty allows everything). Bots are told through the request's "banned" field.
+    if let Ok(v) = std::env::var("MATCH_BANS") {
+        s.banned = v.split(',').map(str::trim).filter(|x| !x.is_empty()).map(String::from).collect();
+    }
     if std::env::var("MATCH_POWERS").is_ok() {
         s.powers = true;
     }

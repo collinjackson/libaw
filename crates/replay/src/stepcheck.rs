@@ -170,6 +170,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
     s.seams = true;
     s.dives = true;
     s.deletes = true;
+    s.banned.clear(); // turn files don't record a game's bans; check what was played
     if r.fog {
         restore_cargo(&mut s, prev);
     }

@@ -273,6 +273,7 @@ pub fn builds(s: &State) -> Vec<(Pos, String)> {
         };
         for (name, info) in &tables().units {
             if classes.contains(&info.move_type.as_str())
+                && !s.banned.iter().any(|b| b == name)
                 && co::price(info.cost as i64, &p.co, &p.power) <= p.funds
             {
                 out.push((pos, name.clone()));
