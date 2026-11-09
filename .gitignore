@@ -5,3 +5,5 @@ site/api/maps/
 site/api/pkg/
 .venv/
 __pycache__/
+.venv-ml/
+.cache-ml/
