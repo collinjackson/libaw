@@ -631,6 +631,13 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                 }
                 None => (path, then),
             };
+            // A dived Sub or hidden Stealth can be attacked only if it was already revealed
+            // before this unit moved.
+            if let Then::Attack { target } = then {
+                if s.unit_at(target.0, target.1).is_some_and(|t| crate::fog::concealed(s, t, u.owner)) {
+                    return Err("target is hidden".into());
+                }
+            }
             let cost = path_cost(s, &u, path)?;
             let end = *path.last().unwrap_or(&(u.x, u.y));
             {

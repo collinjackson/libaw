@@ -121,6 +121,8 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
             "Sub" => matches!(u.kind.as_str(), "Cruiser" | "Sub"),
             _ => false,
         }))
+        // ... and only once it is revealed, as the board stands before this unit moves.
+        .filter(|d| !crate::fog::concealed(s, d, u.owner))
         .filter(|d| {
             let dd = dist(from, (d.x, d.y));
             dd >= minr && dd <= maxr as u32

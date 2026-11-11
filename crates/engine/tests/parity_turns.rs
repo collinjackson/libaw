@@ -5,7 +5,7 @@
 use awbw_engine::actions::{Action, Pos, Then};
 use awbw_engine::data::tables;
 use awbw_engine::rules::{can_unload_from, movement_range};
-use awbw_engine::{sim, Building, Hp, State, Unit, UnitId};
+use awbw_engine::{fog, sim, Building, Hp, State, Unit, UnitId};
 
 fn state() -> State {
     let turn: serde_json::Value = serde_json::from_str(include_str!(
@@ -266,4 +266,65 @@ fn a_missile_with_nothing_to_hit_is_not_fired_and_floors_at_a_tenth() {
     s.units.get_mut(&ids[0]).unwrap().hp = Hp::exact(20);
     assert!(sim::power_effects(&mut s, me, "S"));
     assert_eq!(s.units[&ids[0]].hp, Hp::exact(1));
+}
+
+/// A game without fog: my Fighter at `start`, an enemy hidden Stealth two tiles along the
+/// row, nothing else on the board. Returns the state, the Fighter's id and the three tiles
+/// from the Fighter onwards (the Stealth is on the middle one).
+fn hidden_stealth_board(gap: u16) -> (State, UnitId, [Pos; 3]) {
+    let mut s = state();
+    (s.fog, s.partial) = (false, false);
+    let me = s.current;
+    let foe = s.players.iter().find(|p| p.id != me).unwrap().id;
+    let id = with_co(&mut s, "Andy", "N").id;
+    s.units.retain(|k, _| *k == id);
+    let y = s.height / 2;
+    let x = 3;
+    let tiles = [(x + 1, y), (x + 2, y), (x + 3, y)];
+    let u = s.units.get_mut(&id).unwrap();
+    (u.kind, u.x, u.y, u.fuel, u.ammo, u.moved, u.hp) = ("Fighter".into(), x + 2 - gap, y, 99, 9, false, Hp::exact(100));
+    s.units.insert(7000, Unit {
+        id: 7000, owner: foe, kind: "Stealth".into(), x: tiles[1].0, y: tiles[1].1, hp: Hp::exact(100), fuel: 60, ammo: 6,
+        moved: false, stunned: false, carried_by: None, cargo: vec![], dived: true,
+    });
+    for t in tiles {
+        s.buildings.remove(&t);
+    }
+    (s, id, tiles)
+}
+
+#[test]
+fn hidden_units_are_out_of_sight_without_fog_too() {
+    // Two tiles away: unseen, and walking into it is a trap.
+    let (mut s, id, tiles) = hidden_stealth_board(2);
+    let me = s.current;
+    let view = fog::player_view(&s, me);
+    assert!(!view.units.contains_key(&7000) && view.partial);
+    let start = (s.units[&id].x, s.units[&id].y);
+    sim::step(&mut s, &Action::Move { unit: id, path: vec![start, tiles[0], tiles[1], tiles[2]], then: Then::Wait }, &mut |l: i32, h: i32| (l + h) / 2).unwrap();
+    let u = &s.units[&id];
+    assert_eq!(((u.x, u.y), u.moved, u.fuel), (tiles[0], true, 98), "stopped one short, having walked one tile");
+
+    // It can't be attacked by moving up to it either: it wasn't revealed before the move.
+    let (mut s, id, tiles) = hidden_stealth_board(2);
+    let start = (s.units[&id].x, s.units[&id].y);
+    assert!(awbw_engine::actions::attack_targets(&s, &s.units[&id], tiles[0], true).is_empty());
+    let attack = Action::Move { unit: id, path: vec![start, tiles[0]], then: Then::Attack { target: tiles[1] } };
+    assert!(sim::step(&mut s, &attack, &mut |l: i32, h: i32| (l + h) / 2).is_err());
+}
+
+#[test]
+fn a_unit_beside_a_hidden_unit_or_a_property_under_it_reveals_it() {
+    // Already next to it: seen, attackable, and it blocks the path like any enemy.
+    let (mut s, id, tiles) = hidden_stealth_board(1);
+    let me = s.current;
+    assert!(fog::player_view(&s, me).units.contains_key(&7000));
+    assert_eq!(awbw_engine::actions::attack_targets(&s, &s.units[&id], tiles[0], false), vec![tiles[1]]);
+    let through = Action::Move { unit: id, path: vec![tiles[0], tiles[1], tiles[2]], then: Then::Wait };
+    assert!(sim::step(&mut s, &through, &mut |l: i32, h: i32| (l + h) / 2).is_err());
+
+    // Two tiles away, but it is over one of my properties: seen.
+    let (mut s, _, tiles) = hidden_stealth_board(2);
+    s.buildings.insert(tiles[1], Building { terrain: building_id("City"), owner: Some(me), capture: 20 });
+    assert!(fog::player_view(&s, me).units.contains_key(&7000));
 }

@@ -92,15 +92,27 @@ pub fn vision(s: &State, pid: PlayerId) -> Vec<u8> {
     out
 }
 
-/// Fog trap: if `path` (from the mover's view) runs into an enemy unit, the length of the
-/// prefix the unit actually walks: up to the tile before the enemy, backed off past
-/// friendly units it can't stop on. None when the path is clear (or there's no fog).
-pub fn trap(s: &State, u: &Unit, path: &[(u16, u16)]) -> Option<usize> {
-    if !s.fog {
-        return None;
+/// Is this dived Sub or hidden Stealth out of `pid`'s sight? With or without fog, it shows
+/// only to a team with an uncarried unit next to it, or when it stands on a property of
+/// theirs.
+pub fn concealed(s: &State, u: &Unit, pid: PlayerId) -> bool {
+    if !u.dived || s.allied(u.owner, pid) {
+        return false;
     }
+    let beside = s.units.values().any(|o| s.allied(o.owner, pid) && o.carried_by.is_none()
+        && (o.x as i32 - u.x as i32).abs() + (o.y as i32 - u.y as i32).abs() <= 1);
+    let on_theirs = s.buildings.get(&(u.x, u.y)).is_some_and(|b| b.owner.is_some_and(|o| s.allied(o, pid)));
+    !beside && !on_theirs
+}
+
+/// Trap: if `path` (from the mover's view) runs into an enemy unit it couldn't see, the
+/// length of the prefix the unit actually walks: up to the tile before the enemy, backed
+/// off past friendly units it can't stop on. None when the path is clear. In fog any enemy
+/// unit on a planned path was unseen; without fog only a dived Sub or hidden Stealth can be
+/// (five recorded traps in games without fog, e.g. game-1692796 turn 60).
+pub fn trap(s: &State, u: &Unit, path: &[(u16, u16)]) -> Option<usize> {
     let hit = path.iter().skip(1).position(|&(x, y)| {
-        s.unit_at(x, y).is_some_and(|o| !s.allied(o.owner, u.owner))
+        s.unit_at(x, y).is_some_and(|o| !s.allied(o.owner, u.owner) && (s.fog || concealed(s, o, u.owner)))
     })? + 1;
     let mut k = hit; // path[..k] is walked; path[k - 1] is the stop tile
     while k > 1 && s.unit_at(path[k - 1].0, path[k - 1].1).is_some_and(|o| o.id != u.id) {
@@ -109,20 +121,25 @@ pub fn trap(s: &State, u: &Unit, path: &[(u16, u16)]) -> Option<usize> {
     Some(k)
 }
 
-/// What `pid` may know: enemy units outside its vision (and dived ones not next door) are
-/// gone, enemy cargo and funds are hidden. Bots in fog games plan on this.
+/// What `pid` may know. In fog: enemy units outside its vision are gone, enemy cargo and
+/// funds are hidden. With or without fog, dived Subs and hidden Stealths out of sight are
+/// gone too (`concealed`). Bots plan on this.
 pub fn player_view(s: &State, pid: PlayerId) -> State {
     let mut v = s.clone();
     if !s.fog {
+        let unseen: Vec<UnitId> = s.units.values().filter(|u| concealed(s, u, pid)).map(|u| u.id).collect();
+        for id in &unseen {
+            v.units.remove(id);
+        }
+        // With units missing, "no units left" no longer proves a player is out.
+        v.partial |= !unseen.is_empty();
         return v;
     }
     v.partial = true;
     let seen = vision(s, pid);
     let w = s.width as usize;
-    let near = |x: u16, y: u16| s.units.values().any(|o| s.allied(o.owner, pid) && o.carried_by.is_none()
-        && (o.x as i32 - x as i32).abs() + (o.y as i32 - y as i32).abs() <= 1);
     let hidden: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && (u.carried_by.is_some()
-        || seen[u.y as usize * w + u.x as usize] == 0 || (u.dived && !near(u.x, u.y)))).map(|u| u.id).collect();
+        || seen[u.y as usize * w + u.x as usize] == 0 || concealed(s, u, pid))).map(|u| u.id).collect();
     for id in &hidden {
         v.units.remove(id);
     }
