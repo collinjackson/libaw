@@ -50,6 +50,10 @@ fn rounding_follows_awbw_floating_point() {
     // falls just short, so AWBW deals 79 and the Infantry lives on 1 HP.
     let p = AttackParams { base: 75, att_value: 130, att_milli: 0, att_hp: 10, def_value: 110, def_terrain: 1, def_hp: 8, luck_min: 0, luck_max: 0 };
     assert_eq!(damage_range(&p), (79, 79));
+    // A 5 HP Neotank on a 5 HP Infantry in a city at best luck: 67 * 0.85 = 56.95 on paper,
+    // 56.949999999999996 in double precision. AWBW compares that with the double nearest
+    // to 56.95 and keeps 56 (its public damage calculator shows 53-56%).
+    assert_eq!(damage_range(&params(125, 5, 3, 5, 9)), (56, 56));
 }
 
 #[test]

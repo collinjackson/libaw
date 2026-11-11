@@ -179,8 +179,17 @@ pub fn damage_range(p: &AttackParams) -> (u32, u32) {
         if raw.is_nan() || raw <= 0.0 {
             return 0;
         }
-        // One decimal, halves up, then drop the fraction.
-        (((raw * 10.0 + 0.5).floor()) / 10.0).floor() as u32
+        // One decimal the way AWBW rounds it: the whole tenths below the
+        // value, one more when the value is at or above the double nearest to "those tenths
+        // and a half". Then drop the fraction.
+        let mut tenths = (raw * 10.0).floor();
+        if (tenths + 1.0) / 10.0 == raw {
+            tenths += 1.0; // the product is exactly the next tenth
+        }
+        if raw >= (tenths + 0.5) / 10.0 {
+            tenths += 1.0;
+        }
+        (tenths as u64 / 10) as u32
     };
     (f(p.luck_min), f(p.luck_max))
 }
