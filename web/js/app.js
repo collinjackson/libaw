@@ -153,6 +153,7 @@ function onMessage(m) {
   switch (m.type) {
     case 'state':
       ui.state = m.state;
+      ui.previews = new Map();   // damage previews hold for one state only
       if (m.state.current !== ui.me) { ui.legal = []; ui.selected = null; ui.mode = null; closeMenu(); }
       render();
       break;
@@ -274,6 +275,28 @@ function showInfo(t) {
       ${u.moved ? '<span>Status</span><span>moved</span>' : ''}</div>`;
   }
   $('info').innerHTML = html;
+  hoverPreview(x, y);
+}
+
+/** AWBW shows the damage % while the cursor is on a target: with a unit selected and this tile
+ * one of its targets, ask the server's `preview` for the shortest-path attack (once per state)
+ * and add the range to the tile panel, if the cursor is still there when it answers. */
+async function hoverPreview(x, y) {
+  if (ui.selected == null || !isMyTurn() || !ui.conn) return;
+  const k = L.key(x, y);
+  const acts = L.attackTargets(ui.legal, ui.selected).get(k);
+  if (!acts) return;
+  const a = [...acts].sort((p, q) => p.path.length - q.path.length)[0];
+  const ck = `${ui.selected}:${k}`;
+  ui.previews ??= new Map();
+  if (!ui.previews.has(ck)) {
+    ui.previews.set(ck, ui.conn.request({ type: 'preview', game: ui.game, action: a })
+      .then((p) => (p.type === 'preview' ? L.damageLabel(p) : null)).catch(() => null));
+  }
+  const label = await ui.previews.get(ck);
+  if (label && board.b.hoverKey === k) {
+    $('info').insertAdjacentHTML('afterbegin', `<div class="title preview">Attack: ${esc(label)}</div>`);
+  }
 }
 
 // ---------- play ----------

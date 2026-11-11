@@ -154,7 +154,7 @@
    "feature": "Damage preview (% before firing)",
    "awbw": true,
    "ours": "done",
-   "notes": "server preview request: the attack played on a copy at lowest and highest luck; shown in the Fire menu (AWBW shows it on hover)"
+   "notes": "server preview request: the attack played on a copy at lowest and highest luck; shown on hover over a target and in the Fire menu"
   },
   {
    "area": "Info",
