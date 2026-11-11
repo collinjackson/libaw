@@ -1,0 +1,28 @@
+name: Rules mismatch
+description: The engine does something AWBW doesn't (or the reverse)
+labels: [rules]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Where AWBW shows it
+      description: Game id and day/turn, or "damage chart", "wiki page", "tested in a private game"
+    validations:
+      required: true
+  - type: textarea
+    id: awbw
+    attributes:
+      label: What AWBW does
+      description: With numbers where there are any (HP, funds, tiles). Behaviour only, please; no AWBW source code.
+    validations:
+      required: true
+  - type: textarea
+    id: engine
+    attributes:
+      label: What the engine does
+      description: If you know. A rules case (docs/rules-cases.md) that fails is the best report.
+  - type: textarea
+    id: case
+    attributes:
+      label: Rules case JSON (optional)
+      render: json

@@ -1,0 +1,109 @@
+{
+ "title": "Artillery has no weapon against a B-Copter",
+ "source": "AWBW damage chart: Artillery vs B-Copter is blank",
+ "state": {
+  "width": 6,
+  "height": 1,
+  "terrain": [
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "buildings": [],
+  "units": {
+   "1": {
+    "id": 1,
+    "owner": 1,
+    "kind": "Artillery",
+    "x": 0,
+    "y": 0,
+    "hp": {
+     "lo": 100,
+     "hi": 100
+    },
+    "fuel": 50,
+    "ammo": 9,
+    "moved": false,
+    "stunned": false,
+    "carried_by": null,
+    "cargo": [],
+    "dived": false
+   },
+   "2": {
+    "id": 2,
+    "owner": 2,
+    "kind": "B-Copter",
+    "x": 2,
+    "y": 0,
+    "hp": {
+     "lo": 100,
+     "hi": 100
+    },
+    "fuel": 99,
+    "ammo": 6,
+    "moved": false,
+    "stunned": false,
+    "carried_by": null,
+    "cargo": [],
+    "dived": false
+   }
+  },
+  "players": [
+   {
+    "id": 1,
+    "team": "1",
+    "co": "Andy",
+    "funds": 0,
+    "eliminated": false,
+    "order": 0,
+    "power": "N",
+    "meter": 0,
+    "cop_cost": 0,
+    "scop_cost": 0,
+    "power_attack": 0
+   },
+   {
+    "id": 2,
+    "team": "2",
+    "co": "Andy",
+    "funds": 0,
+    "eliminated": false,
+    "order": 1,
+    "power": "N",
+    "meter": 0,
+    "cop_cost": 0,
+    "scop_cost": 0,
+    "power_attack": 0
+   }
+  ],
+  "current": 1,
+  "day": 5,
+  "funds_per_property": 1000,
+  "weather": "C",
+  "move_override": {},
+  "powers": false,
+  "seams": false,
+  "dives": false,
+  "deletes": false,
+  "fog": false,
+  "partial": false,
+  "banned": []
+ },
+ "action": {
+  "move": {
+   "unit": 1,
+   "then": {
+    "attack": [
+     2,
+     0
+    ]
+   }
+  }
+ },
+ "expect": {
+  "legal": false
+ }
+}
