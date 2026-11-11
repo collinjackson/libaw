@@ -127,14 +127,14 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8, co
         for dhp in def.hp.display_lo().max(1)..=def.hp.display_hi() {
             let p = AttackParams {
                 base: base as u32,
-                att_value: att_value(s, att, at),
+                att_value: att_value(s, att, at, counter),
+                att_milli: awbw_engine::combat::att_milli(s, att),
                 att_hp: ahp,
                 def_value: def_value(s, def, &att.kind),
                 def_terrain: stars(s, def, dt),
                 def_hp: dhp,
                 luck_min: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
                 luck_max: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).1,
-                scale_pct: if counter { awbw_engine::co::counter_pct(&co_of(s, att.owner)) } else { 100 },
             };
             let (dlo, dhi) = damage_range(&p);
             let cand = def.hp.intersect(Hp::from_display(dhp))?;
@@ -542,7 +542,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     tag(c, format!("{} {}hp ({}) -> {} {}hp ({}) on {}: recorded {}hp",
                         att.kind, att.hp.display_hi(), co_of(s, att.owner), def.kind, def.hp.display_hi(),
                         co_of(s, def.owner), tables().tile(s.terrain_at(def.x, def.y)).name, def_rec))
-                        + &format!(" [att {} on {} def {} hp {:?}->{:?}]", att_value(s, &att, s.terrain_at(att.x, att.y)),
+                        + &format!(" [att {} on {} def {} hp {:?}->{:?}]", att_value(s, &att, s.terrain_at(att.x, att.y), false),
                             tables().tile(s.terrain_at(att.x, att.y)).name, def_value(s, &def, &att.kind), att.hp, def.hp)
                 });
                 let new_def_hp = new_def.unwrap_or(Hp::from_display(def_rec));
@@ -817,7 +817,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         let want = awbw_engine::sim::seam_damage(s, &u).map(|d| (before - d).max(0));
                         r.check("seam.damage", want == Some(hp.max(0)), || tag(c, format!("{} {}hp ({}) on seam {before}: engine {want:?}, recorded {hp} [base {:?} att {} on {} at {:?}, power {}]",
                             u.kind, u.hp.display_hi(), co, awbw_engine::rules::base_damage_now(&u, "Neotank"),
-                            awbw_engine::combat::att_value(s, &u, s.terrain_at(u.x, u.y)),
+                            awbw_engine::combat::att_value(s, &u, s.terrain_at(u.x, u.y), false),
                             awbw_engine::data::tables().tile(s.terrain_at(u.x, u.y)).name, (u.x, u.y),
                             s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default())));
                     }

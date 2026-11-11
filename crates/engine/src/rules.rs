@@ -127,6 +127,15 @@ pub fn is_income_property(terrain: u16) -> bool {
     )
 }
 
+/// Properties Kindle's High Society counts: every kind a player can own, com towers and
+/// labs included (not only the ones that pay income).
+pub fn is_urban_property(terrain: u16) -> bool {
+    matches!(
+        tables().tile(terrain).building.as_deref(),
+        Some("City" | "Base" | "Airport" | "Port" | "HQ" | "ComTower" | "Lab")
+    )
+}
+
 /// Which unit classes a building repairs and resupplies.
 pub fn services(terrain: u16, kind: &str) -> bool {
     let mt = tables().unit(kind).move_type.as_str();
@@ -139,32 +148,41 @@ pub fn services(terrain: u16, kind: &str) -> bool {
     }
 }
 
-/// Combat: the range of damage (internal HP points) an attack can do, before rounding
-/// questions are settled. AWBW's formula:
-///   (B * ACO/100 + L) * (AHP/10) * (200 - (DCO + DTR*DHP)) / 100, L = luck 0..=9.
+/// Combat: the range of damage (internal HP points) an attack can do. AWBW's formula:
+///   (AHP/10) * (B * ACO/100 + L) * (200 - (DCO + DTR*DHP)) / 100, L = luck,
+/// worked out in double-precision floating point, rounded to one decimal and then cut to a
+/// whole point. So a raw x.95 or more counts as x+1, but only when the floating-point
+/// product itself reaches x.95: 97.5 * 0.82 comes out a hair under 79.95 and stays 79.
 pub struct AttackParams {
     pub base: u32,
+    /// Attack value in per cent, counterattack bonus included (see `combat::att_value`).
     pub att_value: u32,
+    /// Extra attack in thousandths of a per cent point (Colin's Power of Money: 3 per fund
+    /// held, i.e. +3% per 1000 funds, not rounded).
+    pub att_milli: u32,
     pub att_hp: u8,
     pub def_value: u32,
     pub def_terrain: u32,
     pub def_hp: u8,
     pub luck_min: i32,
     pub luck_max: i32,
-    /// Final multiplier in per cent (Sonja's counterattacks: 150).
-    pub scale_pct: u32,
 }
 
-/// Exact integer arithmetic (no floats; the proof-of-artifice zkVM plan wants none): one
-/// numerator over the denominator 100 * 10 * 100 * 100, floored. Same results as the old
-/// f64 floor(x + 1e-6): every replay check unchanged, and 0 differences over 2M random
-/// inputs (2026-11-07).
+/// AWBW's result depends on how double-precision arithmetic rounds each step, so this has
+/// to use f64 in AWBW's own order of operations: integer arithmetic gives 80 where AWBW
+/// (and game-1749614, turn 26) gives 79. IEEE 754 doubles are deterministic, so the same
+/// inputs give the same result everywhere.
 pub fn damage_range(p: &AttackParams) -> (u32, u32) {
     let f = |luck: i32| -> u32 {
-        let a = p.base as i64 * p.att_value as i64 + 100 * luck as i64; // x100
-        let d = 200 - (p.def_value as i64 + p.def_terrain as i64 * p.def_hp as i64); // x100
-        let num = a * p.att_hp as i64 * d * p.scale_pct as i64;
-        if num <= 0 { 0 } else { (num / (100 * 10 * 100 * 100)) as u32 }
+        let attack = p.att_value as f64 + p.att_milli as f64 / 1000.0;
+        let raw = (p.att_hp as f64 / 10.0) * (p.base as f64 * (attack / 100.0) + luck as f64);
+        let defence = 200 - (p.def_value as i64 + p.def_terrain as i64 * p.def_hp as i64);
+        let raw = raw * (defence as f64 / 100.0);
+        if raw.is_nan() || raw <= 0.0 {
+            return 0;
+        }
+        // One decimal, halves up, then drop the fraction.
+        (((raw * 10.0 + 0.5).floor()) / 10.0).floor() as u32
     };
     (f(p.luck_min), f(p.luck_max))
 }
@@ -203,11 +221,11 @@ pub fn uses_primary(att: &Unit, def_kind: &str) -> bool {
 /// machine gun can't hit it.
 pub fn mg_damage(att_kind: &str, def_kind: &str) -> Option<u8> {
     let row: &[(&str, u8)] = match att_kind {
-        "Mech" => &[("Recon", 18), ("APC", 20), ("Artillery", 15), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "B-Copter" => &[("Recon", 30), ("APC", 20), ("Artillery", 25), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "Tank" => &[("Recon", 40), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 30), ("Anti-Air", 5), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "Md.Tank" => &[("Recon", 45), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 35), ("Anti-Air", 7), ("Tank", 8), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "Neotank" | "Mega Tank" => &[("Recon", 65), ("APC", 65), ("Artillery", 65), ("Rocket", 75), ("Missile", 55), ("Anti-Air", 17), ("Tank", 10), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
+        "Mech" => &[("Recon", 18), ("APC", 20), ("Artillery", 32), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
+        "B-Copter" => &[("Recon", 30), ("APC", 20), ("Artillery", 25), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
+        "Tank" => &[("Recon", 40), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 30), ("Anti-Air", 5), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
+        "Md.Tank" => &[("Recon", 45), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 35), ("Anti-Air", 7), ("Tank", 8), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 8)],
+        "Neotank" | "Mega Tank" => &[("Recon", 65), ("APC", 65), ("Artillery", 65), ("Rocket", 75), ("Missile", 55), ("Anti-Air", 17), ("Tank", 10), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 10)],
         _ => &[],
     };
     row.iter().find(|(k, _)| *k == def_kind).map(|&(_, v)| v)

@@ -186,15 +186,22 @@ fn hp_now(u: &Unit) -> u8 {
 }
 
 /// Damage to a pipe seam (99 HP, kept in its building's capture field): what the attacker
-/// would do to a Neotank, without luck or terrain: base x attack% x displayed HP / 10,
-/// rounded down after rounding up to the next 0.05. Fits all 2241 corpus hits. None: it can't.
+/// would do to a Neotank with neutral defence, no terrain and no luck, by the same formula
+/// and rounding as any other attack. Fits all 2241 corpus hits. None: it can't.
 pub fn seam_damage(s: &State, att: &Unit) -> Option<i32> {
-    let base = base_damage_now(att, "Neotank")? as u64;
-    let av = att_value(s, att, s.terrain_at(att.x, att.y)) as u64;
-    let hp = att.hp.display_hi().max(1) as u64;
-    // AWBW rounds the raw damage up to the next 0.05 before flooring, so x.95 and above
-    // count as the next whole point (13 recorded hits at 0.96, 0.99, 1.95, 4.95).
-    Some(((base * av * hp + 50) / 1000) as i32)
+    let base = base_damage_now(att, "Neotank")? as u32;
+    let p = AttackParams {
+        base,
+        att_value: att_value(s, att, s.terrain_at(att.x, att.y), false),
+        att_milli: att_milli(s, att),
+        att_hp: att.hp.display_hi().max(1),
+        def_value: 100,
+        def_terrain: 0,
+        def_hp: 0,
+        luck_min: 0,
+        luck_max: 0,
+    };
+    Some(damage_range(&p).0 as i32)
 }
 
 /// Damage `att` does to `def` with a given luck roll (internal HP points).
@@ -204,14 +211,14 @@ pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8
     let dt = s.terrain_at(def.x, def.y);
     let p = AttackParams {
         base: base as u32,
-        att_value: att_value(s, att, at),
+        att_value: att_value(s, att, at, counter),
+        att_milli: att_milli(s, att),
         att_hp: display(hp_now(att)),
         def_value: def_value(s, def, &att.kind),
         def_terrain: stars(s, def, dt),
         def_hp: display(hp_now(def)),
         luck_min: roll,
         luck_max: roll,
-        scale_pct: if counter { co::counter_pct(&co_of(s, att.owner)) } else { 100 },
     };
     damage_range(&p).0.min(255) as u8
 }
@@ -329,7 +336,8 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
         missile(s, at, e.stun, e.missile_hp);
     }
     if let Some(p) = s.player_mut(pid) {
-        p.power_attack = if e.funds_attack { (3 * p.funds / 1000) as i32 } else { 0 };
+        // Colin's funds bonus is worked out at each attack (combat::att_milli), not here.
+        p.power_attack = 0;
     }
     if let Some(kind) = e.spawn {
         let info = crate::data::tables().unit(kind);

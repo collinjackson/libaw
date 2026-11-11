@@ -16,10 +16,10 @@ pub fn towers(s: &State, p: PlayerId) -> u32 {
         .count() as u32
 }
 
-/// Kindle's High Society: +3% attack per income property owned (fits game-1755277 better
-/// than counting cities only: 7 of 8 attacks vs 6 of 8).
+/// Kindle's High Society: +3% attack per property owned: HQ, cities, bases, airports,
+/// ports, com towers and labs (AWBW's rule for games started after 2024-08-13).
 fn kindle_count(s: &State, p: PlayerId) -> i32 {
-    s.buildings.values().filter(|b| b.owner == Some(p) && crate::rules::is_income_property(b.terrain)).count() as i32
+    s.buildings.values().filter(|b| b.owner == Some(p) && crate::rules::is_urban_property(b.terrain)).count() as i32
 }
 
 /// The owner's active power: "N", "Y" (CO power) or "S" (super power).
@@ -28,15 +28,33 @@ pub fn pw(s: &State, p: PlayerId) -> String {
 }
 
 /// Attack and defence values (100 = neutral) from COs' day-to-day abilities and com towers.
-pub fn att_value(s: &State, att: &Unit, att_terrain: u16) -> u32 {
+/// `counter`: the unit is striking back. Sonja's counterattacks (and Kanbei's under Samurai
+/// Spirit) multiply the CO's own day-to-day attack value by 1.5; com towers, the power
+/// bonus and luck are not multiplied.
+pub fn att_value(s: &State, att: &Unit, att_terrain: u16, counter: bool) -> u32 {
     let co = co_of(s, att.owner);
+    let power = pw(s, att.owner);
     let t = tables().tile(att_terrain);
     let stars = stars(s, att, att_terrain);
+    let counter_bonus = if counter {
+        (100 + co::d2d_attack_bonus(&co, &att.kind)) * (co::counter_pct(&co, &power) as i32 - 100) / 100
+    } else {
+        0
+    };
     let v = 100 + 10 * towers(s, att.owner) as i32 * tower_multiplier(s, att.owner)
-        + co::attack_bonus(&co, &pw(s, att.owner), &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars)
-        + s.player(att.owner).filter(|p| p.power != "N").map_or(0, |p| p.power_attack)
-        + if co == "Kindle" && pw(s, att.owner) == "S" { 3 * kindle_count(s, att.owner) } else { 0 };
+        + co::attack_bonus(&co, &power, &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars)
+        + counter_bonus
+        + if co == "Kindle" && power == "S" { 3 * kindle_count(s, att.owner) } else { 0 };
     v.max(0) as u32
+}
+
+/// Colin's Power of Money: +3% attack per 1000 funds he holds when the attack is made
+/// (not when the power was activated), in thousandths of a per cent point, unrounded.
+pub fn att_milli(s: &State, att: &Unit) -> u32 {
+    match s.player(att.owner) {
+        Some(p) if p.co == "Colin" && p.power == "S" => (3 * p.funds.max(0)) as u32,
+        _ => 0,
+    }
 }
 
 pub fn def_value(s: &State, def: &Unit, attacker_kind: &str) -> u32 {
@@ -46,7 +64,8 @@ pub fn def_value(s: &State, def: &Unit, attacker_kind: &str) -> u32 {
         let m = tower_multiplier(s, def.owner);
         v += 10 * towers(s, def.owner) as i32 * m;
         if is_indirect(attacker_kind) {
-            v += 20 * m;
+            // +20 against indirect fire, +40 under Tower Shield, +80 under Tower of Power.
+            v += match pw(s, def.owner).as_str() { "Y" => 40, "S" => 80, _ => 20 };
         }
     }
     v as u32

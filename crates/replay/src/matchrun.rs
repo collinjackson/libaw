@@ -167,7 +167,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         let ended = a == Action::EndTurn;
         if ended { this_turn = 0; }
         let label = awbw_engine::view::describe(&s, &a);
-        let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
+        let mut roll = |lo: i32, hi: i32| awbw_engine::co::roll_luck(lo, hi, &mut next);
         if let Err(e) = sim::step(&mut s, &a, &mut roll) {
             st[i].errors += 1;
             if first_error.is_none() { first_error = Some(format!("referee: {e} on {a:?}")); }

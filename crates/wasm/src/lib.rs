@@ -87,7 +87,7 @@ pub fn act(state: &str, action: &str, seed: u32) -> String {
     let a = match action_from_contract(&s, &v) { Ok(a) => a, Err(e) => return err(e) };
     let label = describe(&s, &a);
     let mut next = rng(seed);
-    let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
+    let mut roll = |lo: i32, hi: i32| awbw_engine::co::roll_luck(lo, hi, &mut next);
     if let Err(e) = sim::step(&mut s, &a, &mut roll) {
         return err(e);
     }
@@ -115,7 +115,7 @@ pub fn bot_turn(state: &str, level: &str, seed: u32) -> String {
             _ => (baseline::random(&s, &mut next), vec![]),
         };
         let label = describe(&s, &a);
-        let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
+        let mut roll = |lo: i32, hi: i32| awbw_engine::co::roll_luck(lo, hi, &mut next);
         if sim::step(&mut s, &a, &mut roll).is_err() {
             let _ = sim::end_turn(&mut s);
         }

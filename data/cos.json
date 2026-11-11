@@ -113,7 +113,7 @@
       "Carrier",
       "Missile",
       "Piperunner",
-      "Missile"
+      "Rocket"
      ],
      "PowerIncrease": -0.1,
      "RangeIncrease": -1
@@ -668,7 +668,7 @@
       "Neotank",
       "Piperunner",
       "Recon",
-      "Missile",
+      "Rocket",
       "Sub",
       "Tank"
      ],

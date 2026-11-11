@@ -42,7 +42,19 @@ def cos():
     for name, c in load(SRC / "COs.json").items():
         out[name] = {"id": c.get("AWBWID"), "d2d": c.get("DayToDayPower") or {},
                      "cop": c.get("NormalPower") or {}, "scop": c.get("SuperPower") or {}}
-    return out
+    return fix_rockets(out)
+
+
+def fix_rockets(cos):
+    """The replay player's table lists Missile twice where Rocket belongs (Max's and Sensei's
+    weakened units). AWBW's Rockets get the same -10% attack, and Max's -1 range."""
+    for co in cos.values():
+        for part in ("d2d", "cop", "scop"):
+            for e in co[part].get("PowerIncreases") or []:
+                au = e.get("AffectedUnits") or []
+                if au.count("Missile") == 2 and "Rocket" not in au:
+                    au[len(au) - 1 - au[::-1].index("Missile")] = "Rocket"
+    return cos
 
 
 def units():
