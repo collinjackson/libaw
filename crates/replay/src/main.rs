@@ -1015,7 +1015,12 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     for u in items(&a["unitReplace"]["units"]) {
         let id = num(&u["units_id"]) as u32;
         if let Some(m) = opt_num(&u["units_movement_points"]) {
-            s.move_override.insert(id, m as u32);
+            // Sami's record lists whatever stands on a foot soldier's tile, so a loaded
+            // transport shows its passenger's bonus. It keeps its own movement.
+            let sami_transport = co_of(s, pid) == "Sami" && s.units.get(&id).is_some_and(|x| !is_foot(&x.kind));
+            if !sami_transport {
+                s.move_override.insert(id, m as u32);
+            }
         }
         let Some(su) = s.units.get_mut(&id) else { continue };
         if !u["units_hit_points"].is_null() {

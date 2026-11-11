@@ -90,14 +90,12 @@ pub fn movement_range(s: &State, u: &Unit) -> u32 {
     }
     let mut m = tables().unit(&u.kind).r#move as u32;
     let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
-    // Day-to-day movement changes.
-    if co == "Sami" && matches!(u.kind.as_str(), "APC" | "T-Copter" | "Lander" | "Black Boat") {
+    // Day-to-day movement changes. Sami's and Sensei's transports move one further, and no
+    // more under Sami's powers: the +2 a Power record shows for a loaded transport is the
+    // bonus of the foot soldier it carries (all 41 recorded transport moves under Victory
+    // March stay within +1).
+    if matches!(co, "Sami" | "Sensei") && matches!(u.kind.as_str(), "APC" | "T-Copter" | "Lander" | "Black Boat") {
         m += 1;
-        // Victory March adds one more (a Lander and a Black Boat at +2 in the records;
-        // her CO power leaves them at +1).
-        if s.player(u.owner).is_some_and(|p| p.power == "S") {
-            m += 1;
-        }
     }
     // Drake's naval units move one further (Landers and Black Boats in 3 league games).
     if co == "Drake" && matches!(tables().unit(&u.kind).move_type.as_str(), "S" | "L") {
@@ -284,6 +282,13 @@ pub fn capacity(kind: &str) -> usize {
         "Lander" | "Cruiser" | "Carrier" | "Black Boat" => 2,
         _ => 0,
     }
+}
+
+/// Can this transport unload while standing on `terrain`? APCs, T-Copters, Landers and
+/// Black Boats can't from sea or reef (none of about 3,900 recorded unloads is); Cruisers
+/// and Carriers unload anywhere.
+pub fn can_unload_from(transport: &str, terrain: u16) -> bool {
+    matches!(transport, "Cruiser" | "Carrier") || tables().tile(terrain).kind != "Sea"
 }
 
 /// Can transport `t` carry unit kind `l`?

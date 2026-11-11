@@ -243,6 +243,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
         }
     }
     for &c in &u.cargo {
+        if !can_unload_from(&u.kind, s.terrain_at(to.0, to.1)) {
+            break;
+        }
         let Some(cu) = s.units.get(&c) else { continue };
         for p in adj(to) {
             let free = s.unit_at(p.0, p.1).is_none_or(|o| o.id == u.id);

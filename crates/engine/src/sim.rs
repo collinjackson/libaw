@@ -24,10 +24,22 @@ pub fn remove_unit(s: &mut State, id: UnitId) {
     }
 }
 
-/// Start of `next`'s turn: income, then repairs/resupply on owned properties, fuel burn.
+/// Start of `next`'s turn: their power ends, then income, repairs/resupply on owned
+/// properties, fuel burn.
 pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
     s.current = next;
     s.day = day;
+    // A power lasts until its owner's next turn, and so does weather it set (Olaf's snow,
+    // Drake's rain), unless another player's active power has since set the same weather.
+    // It gives way to clear weather: the records don't carry a game's own weather setting.
+    let sets = |co: &str, power: &str| if power == "N" { None } else { co::instant(co, power).and_then(|e| e.weather) };
+    let mine = s.player(next).and_then(|p| sets(&p.co, &p.power));
+    if mine == Some(s.weather) && !s.players.iter().any(|p| p.id != next && sets(&p.co, &p.power) == Some(s.weather)) {
+        s.weather = 'C';
+    }
+    if let Some(p) = s.player_mut(next) {
+        p.power = "N".into();
+    }
     for u in s.units.values_mut() {
         if u.stunned && u.owner == next {
             u.moved = true; // sits this turn out
@@ -632,7 +644,9 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                 Then::AttackSeam { target } => {
                     let u = s.units[unit].clone();
                     let d = seam_damage(s, &u).ok_or("can't hit a seam")?;
-                    if uses_primary(&u, "Neotank") {
+                    // A unit that carries ammo spends one on every seam attack, even at 0
+                    // (the record then shows -1: game-1751864 turn 32).
+                    if tables().unit(&u.kind).ammo > 0 {
                         s.units.get_mut(unit).unwrap().ammo -= 1;
                     }
                     let b = s.buildings.get_mut(target).ok_or("no seam")?;
@@ -653,11 +667,21 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                 Then::Capture => {
                     let u = s.units[unit].clone();
                     let amt = capture_amount(s, &u, display(hp_now(&u)));
+                    let (prev, kind) = {
+                        let b = s.buildings.get(&end).ok_or("no building")?;
+                        (b.owner, tables().tile(b.terrain).building.clone())
+                    };
+                    let hq = kind.as_deref() == Some("HQ");
+                    // On a map without HQs a player's last lab stands in for one: losing it
+                    // eliminates them (four recorded games end this way, e.g. game-1724140).
+                    let owns = |p: PlayerId, what: &str| s.buildings.values()
+                        .filter(|x| x.owner == Some(p) && tables().tile(x.terrain).building.as_deref() == Some(what))
+                        .count();
+                    let last_lab = kind.as_deref() == Some("Lab")
+                        && prev.is_some_and(|p| owns(p, "HQ") == 0 && owns(p, "Lab") <= 1);
                     let b = s.buildings.get_mut(&end).ok_or("no building")?;
                     b.capture -= amt;
                     if b.capture <= 0 {
-                        let prev = b.owner;
-                        let hq = tables().tile(b.terrain).building.as_deref() == Some("HQ");
                         b.capture = CAPTURE_POINTS;
                         b.owner = Some(u.owner);
                         if hq {
@@ -667,7 +691,7 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                             let w = s.width as usize;
                             s.terrain[end.1 as usize * w + end.0 as usize] = city;
                         }
-                        if let (true, Some(p)) = (hq, prev) {
+                        if let (true, Some(p)) = (hq || last_lab, prev) {
                             eliminate(s, p, u.owner);
                         }
                     }
@@ -734,6 +758,10 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     if s.unit_at(to.0, to.1).is_some_and(|o| o.id != *unit) {
                         return Ok(());
                     }
+                    let carrier = &s.units[unit];
+                    if !can_unload_from(&carrier.kind, s.terrain_at(carrier.x, carrier.y)) {
+                        return Err("transport can't unload from sea or reef".into());
+                    }
                     let t = s.units.get_mut(unit).unwrap();
                     t.cargo.retain(|x| x != cargo);
                     if in_place_drop {
@@ -758,9 +786,6 @@ pub fn end_turn(s: &mut State) -> Result<(), String> {
     let next = order[(i + 1) % order.len()];
     let day = if i + 1 == order.len() { s.day + 1 } else { s.day };
     s.move_override.clear();
-    if let Some(p) = s.player_mut(next) {
-        p.power = "N".into(); // a power lasts until its owner's next turn
-    }
     start_turn(s, next, day);
     apc_supply(s, next);
     Ok(())
