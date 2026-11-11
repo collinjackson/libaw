@@ -466,8 +466,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
         for id in hit {
             let u = s.units.get_mut(&id).unwrap();
             // Can't kill: a unit pushed to the floor shows 1 HP, internal 1-10 as far as we know.
-            let floor_hi = u.hp.hi.min(10);
-            u.hp = crate::state::Hp { lo: bump(u.hp.lo, -e.urban_loss * 10), hi: bump(u.hp.hi, -e.urban_loss * 10).max(floor_hi) };
+            u.hp = crate::state::Hp { lo: bump(u.hp.lo, -e.urban_loss * 10), hi: bump(u.hp.hi, -e.urban_loss * 10) };
         }
     }
     if e.drain {
