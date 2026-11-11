@@ -88,39 +88,33 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
             continue;
         }
         let info = tables().unit(&u.kind);
-        let step = if co == "Rachel" { 30 } else { 20 };
-        let cur_disp = u.hp.display_hi();
         let funds = s.player(next).map(|p| p.funds).unwrap_or(0);
         // At the owner's price (game-1759750: Colin's repairs cost him 80%).
         let per_hp = owner_price(s, next, &u.kind) / 10;
-        let mut add_disp = 0u8;
-        for k in (1..=(step / 10)).rev() {
-            let k = k as u8;
-            if cur_disp + k <= 10 && per_hp * k as i64 <= funds {
-                add_disp = k;
-                break;
-            }
-        }
-        if cur_disp < 10 && add_disp == 0 && cur_disp + 1 > 10 {
-            add_disp = 0;
-        }
-        let new_disp = (cur_disp + add_disp).min(10);
+        // AWBW's repair, on the 0-100 scale: 80 or more (Rachel: 70 or more) goes to exactly
+        // 100; anything lower gains exactly 20 (Rachel 30) and keeps its fraction (74 -> 94).
+        // The price is per displayed point restored: nothing for a 9.x unit, 1 from display
+        // 9, otherwise 2 (Rachel 3 from 7.0 down). All or nothing: when that isn't affordable
+        // there is no repair, only the resupply.
+        let rachel = co == "Rachel";
+        let top = u.hp.hi;
+        let points: u8 = if top > 90 { 0 } else if top > 80 { 1 } else if top > 70 || !rachel { 2 } else { 3 };
+        let cost = per_hp * points as i64;
+        let full_from = if rachel { 70 } else { 80 };
+        let heal = |h: u8| if h >= full_from { 100 } else { (h + points * 10).min(100) };
+        let repaired = u.hp.lo < 100 && cost <= funds;
         let m = s.units.get_mut(id).unwrap();
-        if add_disp > 0 {
-            // An uncertain display (a range spanning several values) stays a range: each end
-            // moves up by the same repair.
-            let lo_disp = (u.hp.display_lo().max(1) + add_disp).min(10);
-            m.hp = Hp { lo: Hp::from_display(lo_disp).lo, hi: Hp::from_display(new_disp).hi };
-        } else if cur_disp == 10 {
-            // Topping off a 9.x unit is free in AWBW only to a whole display point; leave as is.
+        if repaired {
+            // An uncertain HP stays a range: each end is repaired the same way.
+            m.hp = Hp { lo: heal(u.hp.lo.max(1)), hi: heal(u.hp.hi) };
         }
         m.fuel = info.fuel as i32;
         m.ammo = info.ammo as i32;
         // Its cargo is not resupplied there (53 recorded cases of carried units on ports
         // and airports keeping their fuel), unlike cargo of a unit an APC supplies.
-        if add_disp > 0 {
+        if repaired {
             if let Some(p) = s.player_mut(next) {
-                p.funds -= per_hp * add_disp as i64;
+                p.funds -= cost;
             }
         }
     }

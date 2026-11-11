@@ -156,3 +156,51 @@ fn seam_attacks_spend_ammo_even_when_empty() {
     assert_eq!(s.units[&u.id].ammo, -1);
     assert_eq!(s.buildings[&target].capture, 98); // the machine gun's 1%
 }
+
+/// The player to move starts a turn with one unit of `kind` at exactly `hp` on a city of
+/// theirs and `funds` in hand (no income). Returns its HP afterwards and what its repair cost.
+fn repair(co: &str, kind: &str, hp: u8, funds: i64) -> (Hp, i64) {
+    let run = |hp: u8| {
+        let mut s = state();
+        let me = s.current;
+        let id = with_co(&mut s, co, "N").id;
+        let city = building_id("City");
+        let at = *s.buildings.iter().find(|(_, b)| b.owner == Some(me)).unwrap().0;
+        s.buildings.get_mut(&at).unwrap().terrain = city;
+        place(&mut s, id, at);
+        let u = s.units.get_mut(&id).unwrap();
+        (u.kind, u.hp, u.fuel) = (kind.into(), Hp::exact(hp), 1);
+        s.funds_per_property = 0;
+        s.player_mut(me).unwrap().funds = funds;
+        let day = s.day;
+        sim::start_turn(&mut s, me, day);
+        assert_eq!(s.units[&id].fuel, tables().unit(kind).fuel as i32, "resupplied either way");
+        (s.units[&id].hp, s.player(me).unwrap().funds)
+    };
+    let ((after, left), (_, left_if_healthy)) = (run(hp), run(100));
+    (after, left_if_healthy - left)
+}
+
+#[test]
+fn property_repairs_keep_exact_hp() {
+    let rich = 100_000;
+    // A chip-damaged unit is topped up to exactly 10.0 for free.
+    assert_eq!(repair("Andy", "Tank", 95, rich), (Hp::exact(100), 0));
+    // From display 9: one point's price.
+    assert_eq!(repair("Andy", "Infantry", 85, rich), (Hp::exact(100), 100));
+    // 8.0 goes to exactly 10.0; 7.9 gains exactly 2.0. Both pay for two points.
+    assert_eq!(repair("Andy", "Infantry", 80, rich), (Hp::exact(100), 200));
+    assert_eq!(repair("Andy", "Infantry", 79, rich), (Hp::exact(99), 200));
+    assert_eq!(repair("Andy", "Infantry", 34, rich), (Hp::exact(54), 200));
+    // Rachel: 7.0 and up to 10.0, otherwise +3.0.
+    assert_eq!(repair("Rachel", "Infantry", 75, rich), (Hp::exact(100), 200));
+    assert_eq!(repair("Rachel", "Infantry", 70, rich), (Hp::exact(100), 300));
+    assert_eq!(repair("Rachel", "Infantry", 69, rich), (Hp::exact(99), 300));
+}
+
+#[test]
+fn property_repairs_are_all_or_nothing() {
+    // Two points of a Tank cost 1400: with 1000 there is no repair at all.
+    assert_eq!(repair("Andy", "Tank", 50, 1000), (Hp::exact(50), 0));
+    assert_eq!(repair("Andy", "Tank", 50, 1400), (Hp::exact(70), 1400));
+}

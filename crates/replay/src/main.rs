@@ -882,7 +882,9 @@ fn check_repairs(s: &State, before: &BTreeMap<UnitId, Unit>, a: &Value, r: &mut 
             r.skip("repair: hidden HP (Sonja)");
             continue;
         }
-        let ours = u.hp != b.hp;
+        // Repaired as the record sees it: the displayed HP changed. (Topping a 9.x unit up to
+        // 10.0 changes nothing on display, and AWBW lists every full-HP unit it services.)
+        let ours = (u.hp.display_lo(), u.hp.display_hi()) != (b.hp.display_lo(), b.hp.display_hi());
         let theirs = rec.get(id);
         if r.fog && ours && theirs.is_none() {
             // Fog games' repair lists are incomplete (and repeat entries); the next turn's
