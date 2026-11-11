@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- A bare spectator for libaw-server: open this file in a browser, enter the server and game id.
+     Draws the board as text (unit initials, colored by player); no art. docs/socket-api.md -->
+<meta charset="utf-8">
+<title>libaw spectator</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 16px; background: #fafafa; color: #222; }
+  #board { border-collapse: collapse; margin-top: 12px; }
+  #board td { width: 26px; height: 26px; text-align: center; font: 11px ui-monospace, monospace; border: 1px solid #ddd; }
+  .p0 { color: #c0392b; font-weight: bold } .p1 { color: #2471a3; font-weight: bold }
+  .p2 { color: #b7950b; font-weight: bold } .p3 { color: #1e8449; font-weight: bold }
+  .prop { background: #eee } #log { margin-top: 12px; max-height: 240px; overflow: auto; font: 12px ui-monospace, monospace }
+</style>
+<label>Server <input id="url" value="ws://127.0.0.1:8765" size="24"></label>
+<label>Game <input id="game" size="8"></label>
+<button id="go">Watch</button>
+<span id="status"></span>
+<table id="board"></table>
+<div id="log"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+$('go').onclick = () => {
+  const ws = new WebSocket($('url').value);
+  const game = $('game').value.trim();
+  let order = [];
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'spectate', game }));
+  ws.onmessage = ({ data }) => {
+    const m = JSON.parse(data);
+    if (m.type === 'joined') order = m.info.players.map((p) => p.id);
+    if (m.type === 'state') draw(m.state, order);
+    if (m.type === 'event') log(`day ${m.day}, player ${m.by}: ${m.label}`);
+    if (m.type === 'game_over') log(`game over: ${m.reason}, winner team ${m.winner}`);
+    if (m.type === 'error') log(`error: ${m.message}`);
+    $('status').textContent = m.type === 'state' ? `day ${m.day}, player ${m.current} to move` : $('status').textContent;
+  };
+};
+function log(line) { const d = document.createElement('div'); d.textContent = line; $('log').prepend(d); }
+function draw(s, order) {
+  const cls = (owner) => `p${Math.max(0, order.indexOf(owner))}`;
+  const props = new Map(s.buildings.map(([x, y, b]) => [`${x},${y}`, b]));
+  const units = new Map(Object.values(s.units).filter((u) => u.carried_by == null).map((u) => [`${u.x},${u.y}`, u]));
+  const t = $('board'); t.replaceChildren();
+  for (let y = 0; y < s.height; y++) {
+    const tr = t.insertRow();
+    for (let x = 0; x < s.width; x++) {
+      const td = tr.insertCell(); const k = `${x},${y}`;
+      const b = props.get(k), u = units.get(k);
+      if (b) td.className = 'prop';
+      if (u) { td.innerHTML = `<span class="${cls(u.owner)}">${u.kind.slice(0, 2)}</span>`; td.title = `${u.kind} ${Math.ceil(u.hp.hi / 10)} HP`; }
+      else if (b && b.owner != null) { td.innerHTML = `<span class="${cls(b.owner)}">■</span>`; }
+    }
+  }
+}
+</script>
