@@ -1,0 +1,426 @@
+{
+ "about": "UI feature parity with AWBW's game page. AWBW column: what AWBW offers, from public use of the site. Ours: what web/ does today. Edit this file; parity.html renders it.",
+ "updated": "2026-11-11",
+ "features": [
+  {
+   "area": "Board",
+   "feature": "Map render (terrain, buildings, units)",
+   "awbw": true,
+   "ours": "done",
+   "notes": "SVG board from the libaw state; placeholder art in web/assets"
+  },
+  {
+   "area": "Board",
+   "feature": "Terrain joins (roads, rivers, pipes, shoal edges)",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "joined from neighbours; no river mouths, cliffs or animated sea"
+  },
+  {
+   "area": "Board",
+   "feature": "Army colours",
+   "awbw": true,
+   "ours": "done",
+   "notes": "8 team colours by turn order, CSS variables"
+  },
+  {
+   "area": "Board",
+   "feature": "Unit HP numbers",
+   "awbw": true,
+   "ours": "done",
+   "notes": "shown under 10 HP, AWBW style"
+  },
+  {
+   "area": "Board",
+   "feature": "Moved units greyed",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "Board",
+   "feature": "Capture progress on properties",
+   "awbw": true,
+   "ours": "done",
+   "notes": "points left out of 20"
+  },
+  {
+   "area": "Board",
+   "feature": "Loaded transport marker",
+   "awbw": true,
+   "ours": "done",
+   "notes": "dot on the transport; cargo listed in the tile panel"
+  },
+  {
+   "area": "Board",
+   "feature": "Dived sub / hidden stealth marker",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "small marker; no distinct sprite"
+  },
+  {
+   "area": "Board",
+   "feature": "Zoom levels",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "board scales to the window only"
+  },
+  {
+   "area": "Board",
+   "feature": "Movement and attack animations",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "state updates are instant"
+  },
+  {
+   "area": "Board",
+   "feature": "Unit sprite art",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "original placeholder SVGs (CC0 proposal); no idle animation"
+  },
+  {
+   "area": "Moving",
+   "feature": "Movement range highlight",
+   "awbw": true,
+   "ours": "done",
+   "notes": "from the server's legal actions"
+  },
+  {
+   "area": "Moving",
+   "feature": "Attack targets highlight",
+   "awbw": true,
+   "ours": "done",
+   "notes": "targets reachable this turn"
+  },
+  {
+   "area": "Moving",
+   "feature": "Choose the path (drag / click route)",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "the server's path is used"
+  },
+  {
+   "area": "Moving",
+   "feature": "Action menu (Wait, Fire, Capture, Join, Load, Supply...)",
+   "awbw": true,
+   "ours": "done",
+   "notes": "only legal choices appear"
+  },
+  {
+   "area": "Moving",
+   "feature": "Fire: pick target",
+   "awbw": true,
+   "ours": "done",
+   "notes": "click a red tile; asks where to fire from when several squares work"
+  },
+  {
+   "area": "Moving",
+   "feature": "Unload: pick cargo and tile",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "Moving",
+   "feature": "Repair (Black Boat), Launch (silo), Hit pipe seam",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "wired through the same picker, not tried in a real game yet"
+  },
+  {
+   "area": "Moving",
+   "feature": "Dive / hide, surface / unhide",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "Moving",
+   "feature": "Delete unit",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "Moving",
+   "feature": "Cancel / back out of a move",
+   "awbw": true,
+   "ours": "done",
+   "notes": "Esc or click elsewhere; nothing is sent until an action is picked"
+  },
+  {
+   "area": "Info",
+   "feature": "Damage preview (% before firing)",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "needs the engine's damage range in the browser (crates/wasm) or a server request"
+  },
+  {
+   "area": "Info",
+   "feature": "Terrain info and defense stars",
+   "awbw": true,
+   "ours": "done",
+   "notes": "tile panel on hover"
+  },
+  {
+   "area": "Info",
+   "feature": "Unit info (HP, fuel, ammo, move, range, vision)",
+   "awbw": true,
+   "ours": "done",
+   "notes": "tile panel on hover"
+  },
+  {
+   "area": "Info",
+   "feature": "Enemy threat / range overlay",
+   "awbw": true,
+   "ours": "missing",
+   "notes": ""
+  },
+  {
+   "area": "Info",
+   "feature": "Unit list / army overview",
+   "awbw": true,
+   "ours": "missing",
+   "notes": ""
+  },
+  {
+   "area": "Info",
+   "feature": "Funds and property counts",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "Info",
+   "feature": "Income per turn",
+   "awbw": true,
+   "ours": "missing",
+   "notes": ""
+  },
+  {
+   "area": "Info",
+   "feature": "Fog of war shading",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "the server sends only what the seat sees; shading is an approximation of vision"
+  },
+  {
+   "area": "CO",
+   "feature": "CO name",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "CO",
+   "feature": "CO portrait",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "no art (names are identifiers; what to show is the client's choice)"
+  },
+  {
+   "area": "CO",
+   "feature": "Power meter with stars",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "bar with a COP mark; no star segments"
+  },
+  {
+   "area": "CO",
+   "feature": "Activate CO power / super",
+   "awbw": true,
+   "ours": "done",
+   "notes": "buttons enabled when legal"
+  },
+  {
+   "area": "CO",
+   "feature": "Active power indicator",
+   "awbw": true,
+   "ours": "done",
+   "notes": "COP / SCOP badge"
+  },
+  {
+   "area": "CO",
+   "feature": "CO ability descriptions",
+   "awbw": true,
+   "ours": "missing",
+   "notes": ""
+  },
+  {
+   "area": "Turn",
+   "feature": "End turn",
+   "awbw": true,
+   "ours": "done",
+   "notes": "button or E"
+  },
+  {
+   "area": "Turn",
+   "feature": "Turn change banner",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "Turn",
+   "feature": "Day counter and weather",
+   "awbw": true,
+   "ours": "done",
+   "notes": ""
+  },
+  {
+   "area": "Turn",
+   "feature": "Game over screen",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "banner and log line"
+  },
+  {
+   "area": "Turn",
+   "feature": "Resign",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "the server supports it; no button yet"
+  },
+  {
+   "area": "Turn",
+   "feature": "Draw offers",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "not in protocol v1"
+  },
+  {
+   "area": "Turn",
+   "feature": "Turn timers / clocks",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "not in protocol v1"
+  },
+  {
+   "area": "History",
+   "feature": "Event log",
+   "awbw": true,
+   "ours": "done",
+   "notes": "labels from the server"
+  },
+  {
+   "area": "History",
+   "feature": "Replay viewer (step through turns)",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "the event stream plus the seed can rebuild one"
+  },
+  {
+   "area": "History",
+   "feature": "Download replay",
+   "awbw": true,
+   "ours": "missing",
+   "notes": ""
+  },
+  {
+   "area": "Social",
+   "feature": "Spectating",
+   "awbw": true,
+   "ours": "done",
+   "notes": "Watch, or ?spectate=1"
+  },
+  {
+   "area": "Social",
+   "feature": "Player names",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "the name a client sends on hello"
+  },
+  {
+   "area": "Social",
+   "feature": "Game chat",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "not in protocol v1"
+  },
+  {
+   "area": "Lobby",
+   "feature": "Game list",
+   "awbw": true,
+   "ours": "done",
+   "notes": "list / join / watch"
+  },
+  {
+   "area": "Lobby",
+   "feature": "Create a game from a position",
+   "awbw": true,
+   "ours": "done",
+   "notes": "bundled skirmish map and test states"
+  },
+  {
+   "area": "Lobby",
+   "feature": "Map browser and CO / country picks",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "protocol v1 starts from a position"
+  },
+  {
+   "area": "Lobby",
+   "feature": "Invite links",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "?server=&game=&seat= in the URL"
+  },
+  {
+   "area": "Lobby",
+   "feature": "Private games / passwords / accounts",
+   "awbw": true,
+   "ours": "missing",
+   "notes": "not in protocol v1"
+  },
+  {
+   "area": "Build",
+   "feature": "Build menu with prices",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "base prices; CO price changes (Colin, Kanbei, Hachi) not shown"
+  },
+  {
+   "area": "Build",
+   "feature": "Banned units respected",
+   "awbw": true,
+   "ours": "done",
+   "notes": "only legal builds are listed"
+  },
+  {
+   "area": "Settings",
+   "feature": "Sound and music",
+   "awbw": true,
+   "ours": "missing",
+   "notes": ""
+  },
+  {
+   "area": "Settings",
+   "feature": "Animation speed",
+   "awbw": true,
+   "ours": "missing",
+   "notes": ""
+  },
+  {
+   "area": "Settings",
+   "feature": "Keyboard shortcuts",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "Esc cancels, E ends the turn"
+  },
+  {
+   "area": "Settings",
+   "feature": "Themes",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "light and dark"
+  },
+  {
+   "area": "Settings",
+   "feature": "Phone layout",
+   "awbw": true,
+   "ours": "partial",
+   "notes": "single column under 860 px; no touch-specific controls"
+  }
+ ]
+}

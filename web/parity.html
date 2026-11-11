@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>libaw UI parity</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .wrap { max-width: 980px; margin: 0 auto; padding: 18px 16px 40px; }
+    .sum { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 18px; }
+    .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; min-width: 120px; box-shadow: var(--shadow); }
+    .tile b { display: block; font-size: 22px; }
+    .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); margin: 6px 0 18px; }
+    .bar i { display: block; }
+    .s-done { background: var(--ok); } .s-partial { background: #e8b52e; } .s-missing { background: var(--line); }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+    th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    tr.area td { background: var(--bg); font-weight: 700; }
+    .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .pill.done { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+    .pill.partial { background: #e8b52e33; color: #a07a0c; }
+    .pill.missing { background: var(--line); color: var(--muted); }
+    .filters { display: flex; gap: 8px; margin-bottom: 10px; }
+    .filters button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">◆</span> libaw <small>UI parity with AWBW</small></div>
+    <div class="turninfo"><a href="index.html">Back to play</a></div>
+  </header>
+  <div class="wrap">
+    <p class="muted" id="about"></p>
+    <div class="sum" id="sum"></div>
+    <div class="bar" id="bar"></div>
+    <div class="filters" id="filters"></div>
+    <table><thead><tr><th>Feature</th><th>Ours</th><th>Notes</th></tr></thead><tbody id="rows"></tbody></table>
+  </div>
+  <script type="module">
+    const data = await fetch('parity.json').then((r) => r.json());
+    const fs = data.features;
+    const count = (s) => fs.filter((f) => f.ours === s).length;
+    const score = (count('done') + count('partial') / 2) / fs.length;
+    document.getElementById('about').textContent = `${data.about} Updated ${data.updated}.`;
+    document.getElementById('sum').innerHTML = [
+      ['Parity', `${Math.round(score * 100)}%`], ['Done', count('done')], ['Partial', count('partial')], ['Missing', count('missing')], ['Tracked', fs.length],
+    ].map(([k, v]) => `<div class="tile"><span class="muted">${k}</span><b>${v}</b></div>`).join('');
+    document.getElementById('bar').innerHTML = ['done', 'partial', 'missing']
+      .map((s) => `<i class="s-${s}" style="width:${(100 * count(s)) / fs.length}%"></i>`).join('');
+    let filter = 'all';
+    const draw = () => {
+      const tb = document.getElementById('rows');
+      let area = null, html = '';
+      for (const f of fs) {
+        if (filter !== 'all' && f.ours !== filter) continue;
+        if (f.area !== area) { area = f.area; html += `<tr class="area"><td colspan="3">${area}</td></tr>`; }
+        html += `<tr><td>${f.feature}</td><td><span class="pill ${f.ours}">${f.ours}</span></td><td class="muted">${f.notes || ''}</td></tr>`;
+      }
+      tb.innerHTML = html;
+      document.getElementById('filters').innerHTML = ['all', 'done', 'partial', 'missing']
+        .map((s) => `<button data-f="${s}" class="${s === filter ? 'on' : ''}">${s}</button>`).join('');
+      document.querySelectorAll('#filters button').forEach((b) => (b.onclick = () => { filter = b.dataset.f; draw(); }));
+    };
+    draw();
+  </script>
+</body>
+</html>

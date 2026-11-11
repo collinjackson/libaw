@@ -50,3 +50,9 @@ the engine disagrees (replays live in a separate data repo):
   effects, `rules.rs` movement, combat and terrain helpers, `data/` tables).
 - `crates/replay`: the replay checker (`awbw-replay`).
 - `crates/wasm`: the engine for the browser.
+
+## Web client
+
+`web/` is a browser client for the socket API, with original placeholder art. `web/play_flakbot.sh`
+starts a local game against FlakBot's engine. `web/parity.html` tracks UI parity with AWBW. See
+[web/README.md](web/README.md).

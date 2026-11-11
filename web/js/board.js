@@ -1,0 +1,138 @@
+// Draws a libaw state as one SVG, using the symbols in assets/sprites.svg (inlined into the
+// page once). Team colours come from CSS classes .p0 .. .p7 on each unit/building group, by
+// the player's place in turn order; neutral buildings get .pn.
+import { key, displayHp, unitsByTile, buildingsByTile, terrainAt } from './logic.js';
+
+export const TILE = 40;
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function el(name, attrs = {}, parent) {
+  const e = document.createElementNS(SVGNS, name);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function use(id, x, y, parent, extra = {}) {
+  return el('use', { href: `#${id}`, x: x * TILE, y: y * TILE, width: TILE, height: TILE, ...extra }, parent);
+}
+
+export class Board {
+  constructor(svg, terrainMap) {
+    this.svg = svg;
+    this.tmap = terrainMap;
+    this.onTile = () => {};
+    this.onHover = () => {};
+    svg.addEventListener('click', (e) => { const t = this.tileOf(e); if (t) this.onTile(t[0], t[1], e); });
+    svg.addEventListener('mousemove', (e) => {
+      const t = this.tileOf(e);
+      const k = t && key(t[0], t[1]);
+      if (k !== this.hoverKey) { this.hoverKey = k; this.onHover(t); this.drawCursor(t); }
+    });
+    svg.addEventListener('mouseleave', () => { this.hoverKey = null; this.onHover(null); this.drawCursor(null); });
+  }
+
+  tileOf(e) {
+    const r = this.svg.getBoundingClientRect();
+    if (!this.state) return null;
+    const sx = this.state.width * TILE / r.width, sy = this.state.height * TILE / r.height;
+    const x = Math.floor((e.clientX - r.left) * sx / TILE), y = Math.floor((e.clientY - r.top) * sy / TILE);
+    return x >= 0 && y >= 0 && x < this.state.width && y < this.state.height ? [x, y] : null;
+  }
+
+  /** order: player ids in turn order (colour index). marks: {move: Set, attack: Set, pick: Set}. */
+  draw(state, { order = [], visible = null, marks = {}, selected = null, mirrorOdd = true } = {}) {
+    this.state = state;
+    const s = this.svg;
+    s.replaceChildren();
+    s.setAttribute('viewBox', `0 0 ${state.width * TILE} ${state.height * TILE}`);
+    s.style.aspectRatio = `${state.width} / ${state.height}`;
+    const cls = (owner) => (owner == null ? 'pn' : `p${Math.max(0, order.indexOf(owner)) % 8}`);
+    const terrain = el('g', { class: 'terrain' }, s);
+    const name = (x, y) => this.tmap[terrainAt(state, x, y)] ?? { base: 'plain' };
+    const isWaterish = (x, y) => x >= 0 && y >= 0 && x < state.width && y < state.height &&
+      ['sea', 'reef', 'bridge-h', 'bridge-v'].includes(name(x, y).base);
+    const joins = (x, y, kind) => {
+      if (x < 0 || y < 0 || x >= state.width || y >= state.height) return false;
+      const d = name(x, y);
+      if (d.kind === kind) return true;
+      if (kind === 'road' && d.base?.startsWith('bridge')) return true;
+      if (kind === 'river' && d.base?.startsWith('bridge')) return false;
+      return false;
+    };
+    const blds = buildingsByTile(state);
+    for (let y = 0; y < state.height; y++) {
+      for (let x = 0; x < state.width; x++) {
+        const d = name(x, y);
+        use(`t-${d.base ?? 'plain'}`, x, y, terrain);
+        if (d.base === 'shoal') {
+          for (const [side, dx, dy] of [['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]])
+            if (isWaterish(x + dx, y + dy)) use(`t-shoal-${side}`, x, y, terrain);
+        }
+        if (d.kind) {
+          use(`t-${d.kind}-c`, x, y, terrain);
+          // Arms toward neighbours of the same kind (the id's own directions as a fallback).
+          for (const [side, dx, dy] of [['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]])
+            if (joins(x + dx, y + dy, d.kind) || (d.arms?.includes(side) && !this.anyNeighbourKind(state, x, y, d.kind)))
+              use(`t-${d.kind}-${side}`, x, y, terrain);
+        }
+        const b = blds.get(key(x, y));
+        const bname = d.building;
+        if (bname) {
+          const g = el('g', { class: `bld ${cls(b?.owner ?? null)}` }, terrain);
+          use(`t-bld-${bname}`, x, y, g);
+          if (b && b.capture < 20) {
+            el('rect', { x: x * TILE + TILE - 17, y: y * TILE + 1, width: 16, height: 12, rx: 3, class: 'capbg' }, g);
+            el('text', { x: x * TILE + TILE - 9, y: y * TILE + 10.5, class: 'cap' }, g).textContent = b.capture;
+          }
+        }
+      }
+    }
+    // Fog: shade what this player can't see.
+    if (visible) {
+      const fog = el('g', { class: 'fog' }, s);
+      for (let y = 0; y < state.height; y++)
+        for (let x = 0; x < state.width; x++) if (!visible.has(key(x, y))) use('o-fog', x, y, fog);
+    }
+    // Highlights.
+    const hl = el('g', { class: 'marks' }, s);
+    for (const [kind, set] of Object.entries(marks))
+      for (const k of set ?? []) {
+        const [x, y] = k.split(',').map(Number);
+        el('rect', { x: x * TILE + 1, y: y * TILE + 1, width: TILE - 2, height: TILE - 2, rx: 6, class: `mark ${kind}` }, hl);
+      }
+    // Units.
+    const units = el('g', { class: 'units' }, s);
+    for (const u of unitsByTile(state).values()) {
+      const idx = order.indexOf(u.owner);
+      const g = el('g', { class: `unit ${cls(u.owner)}${u.moved ? ' moved' : ''}${selected === u.id ? ' selected' : ''}`, 'data-id': u.id }, units);
+      const flip = mirrorOdd && idx % 2 === 1;
+      const id = `u-${u.kind.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+      if (flip) {
+        const fg = el('g', { transform: `translate(${(2 * u.x + 1) * TILE} 0) scale(-1 1)` }, g);
+        use(id, u.x, u.y, fg);
+      } else use(id, u.x, u.y, g);
+      const hp = displayHp(u);
+      if (hp < 10) {
+        el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);
+        el('text', { x: u.x * TILE + TILE - 8, y: u.y * TILE + TILE - 4, class: 'hp' }, g).textContent = hp;
+      }
+      if (u.cargo?.length) el('circle', { cx: u.x * TILE + 6, cy: u.y * TILE + TILE - 6, r: 4, class: 'cargo' }, g);
+      if (u.dived) el('text', { x: u.x * TILE + 3, y: u.y * TILE + 11, class: 'tag' }, g).textContent = '▼';
+    }
+    this.cursorLayer = el('g', { class: 'cursor' }, s);
+  }
+
+  anyNeighbourKind(state, x, y, kind) {
+    return [[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dx, dy]) => {
+      const nx = x + dx, ny = y + dy;
+      return nx >= 0 && ny >= 0 && nx < state.width && ny < state.height && this.tmap[terrainAt(state, nx, ny)]?.kind === kind;
+    });
+  }
+
+  drawCursor(t) {
+    if (!this.cursorLayer) return;
+    this.cursorLayer.replaceChildren();
+    if (t) use('o-cursor', t[0], t[1], this.cursorLayer);
+  }
+}

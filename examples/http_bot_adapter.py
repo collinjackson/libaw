@@ -23,7 +23,7 @@ async def main(url, game, bot_url, player=None, label=None):
         async def send(**msg):
             await ws.send(json.dumps(msg))
 
-        await send(type="hello", name="contract-adapter")
+        await send(type="hello", name=label or "contract-adapter")
         join = {"type": "join", "game": game, "format": "awbw"}
         if player:
             join["player"] = int(player)
