@@ -69,7 +69,9 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
         if info.move_type == "A" {
             burn = (burn - co::air_fuel_decrease(&co)).max(0);
         }
-        if burn > 0 && u.carried_by.is_none() && day > 1 {
+        // Out of fuel in the air or at sea, the unit is lost, even when it burned nothing
+        // this turn (an Eagle copter that ended its move on 0).
+        if u.carried_by.is_none() && day > 1 {
             u.fuel = (u.fuel - burn).max(0);
             if u.fuel == 0 && matches!(info.move_type.as_str(), "A" | "S" | "L") {
                 crashed.push(*id);
@@ -268,10 +270,13 @@ pub fn spend_power(s: &mut State, pid: PlayerId, kind: &str) {
         let cost = if kind == "S" { p.scop_cost } else { p.cop_cost };
         p.meter = (p.meter - cost).max(0);
         p.power = kind.to_string();
-        // Each use raises both costs by a fifth of the base (seen in the replays).
+        // Each use raises both costs by a fifth of the base (seen in the replays), up to the
+        // tenth use: they stop at three times the base.
         if let Some((c, sc)) = co::power_base(&p.co) {
-            p.cop_cost += c / 5;
-            p.scop_cost += sc / 5;
+            if p.cop_cost < 3 * c {
+                p.cop_cost += c / 5;
+                p.scop_cost += sc / 5;
+            }
         }
     }
 }
@@ -431,9 +436,12 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
     let mine: Vec<UnitId> = s.units.values().filter(|u| s.allied(u.owner, pid)).map(|u| u.id).collect();
     let theirs: Vec<UnitId> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).map(|u| u.id).collect();
     let bump = |h: u8, n: i32| (h as i32 + n).clamp(1, 100) as u8;
+    // A heal reaches the caster's own units, not a teammate's. Andy's reaches units inside
+    // transports; Hawke's doesn't.
+    let hawke = co_of(s, pid) == "Hawke";
     for id in mine {
         let u = s.units.get_mut(&id).unwrap();
-        if e.gain != 0 {
+        if e.gain != 0 && u.owner == pid && !(hawke && u.carried_by.is_some()) {
             u.hp = crate::state::Hp { lo: bump(u.hp.lo, e.gain * 10), hi: bump(u.hp.hi, e.gain * 10) };
         }
     }
@@ -498,6 +506,17 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
     true
 }
 
+/// Sasha's War Bonds: funds worth half the damage she deals, at the victim's price to its
+/// owner (Kanbei 120%, Colin 80%, Hachi 90% or 50%).
+fn war_bonds(s: &mut State, sasha: PlayerId, victim: &Unit, lost: u8) {
+    if co_of(s, sasha) == "Sasha" && pw(s, sasha) == "S" {
+        let bonus = owner_price(s, victim.owner, &victim.kind) * lost as i64 / 20;
+        if let Some(p) = s.player_mut(sasha) {
+            p.funds += bonus;
+        }
+    }
+}
+
 pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(), String> {
     let att = s.units.get(&aid).cloned().ok_or("attacker gone")?;
     let def = s.unit_at(target.0, target.1).cloned().ok_or("no target")?;
@@ -530,7 +549,9 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
             }
             let left = hp_now(&def).saturating_sub(dmg);
             set_hp(s, def.id, left);
-            charge(s, &att, att_lost, &def, display(hp_now(&def)) - display(left));
+            let def_lost = display(hp_now(&def)) - display(left);
+            war_bonds(s, att.owner, &def, def_lost);
+            charge(s, &att, att_lost, &def, def_lost);
             return Ok(());
         }
     }
@@ -542,11 +563,8 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     let left = hp_now(&def).saturating_sub(dmg);
     set_hp(s, def.id, left);
     let def_lost = display(hp_now(&def)) - display(left);
-    // Sasha's War Bonds: funds worth half the damage dealt (her counters pay too, below).
-    if co_of(s, att.owner) == "Sasha" && pw(s, att.owner) == "S" {
-        let bonus = tables().unit(&def.kind).cost as i64 * def_lost as i64 / 20;
-        if let Some(p) = s.player_mut(att.owner) { p.funds += bonus; }
-    }
+    // Sasha's War Bonds (her counters pay too, below).
+    war_bonds(s, att.owner, &def, def_lost);
     if left == 0 {
         charge(s, &att, 0, &def, def_lost);
         return Ok(());
@@ -556,8 +574,14 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     let can_counter = dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind)
         && base_damage_now(&def, &att.kind).is_some();
     if can_counter {
-        let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
-        let dmg = damage(s, &def, &att, luck(lo, hi), true);
+        // A dived Sub or hidden Stealth takes nothing from a counter by a unit that can't
+        // hit it; the defender still fires (and spends its ammo).
+        let dmg = if att.dived && !can_hit_hidden(&def.kind, &att.kind) {
+            0
+        } else {
+            let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
+            damage(s, &def, &att, luck(lo, hi), true)
+        };
         if uses_primary(&def, &att.kind) {
             s.units.get_mut(&def.id).unwrap().ammo -= 1;
         }
@@ -565,10 +589,7 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
         set_hp(s, aid, after);
         let att_lost = display(hp_now(&att)) - display(after);
         // War Bonds pays on her counters too (game-1752437, during the opponent's turn).
-        if co_of(s, def.owner) == "Sasha" && pw(s, def.owner) == "S" {
-            let bonus = tables().unit(&att.kind).cost as i64 * att_lost as i64 / 20;
-            if let Some(p) = s.player_mut(def.owner) { p.funds += bonus; }
-        }
+        war_bonds(s, def.owner, &att, att_lost);
         charge(s, &att, att_lost, &def, def_lost);
         return Ok(());
     }

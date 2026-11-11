@@ -284,6 +284,16 @@ pub fn capacity(kind: &str) -> usize {
     }
 }
 
+/// Can `attacker` damage a dived Sub or hidden Stealth of kind `hidden`? Only Cruisers and
+/// Subs hit a dived Sub, only Fighters and Stealths a hidden Stealth. Counterattacks too.
+pub fn can_hit_hidden(attacker: &str, hidden: &str) -> bool {
+    match hidden {
+        "Stealth" => matches!(attacker, "Fighter" | "Stealth"),
+        "Sub" => matches!(attacker, "Cruiser" | "Sub"),
+        _ => false,
+    }
+}
+
 /// Can this transport unload while standing on `terrain`? APCs, T-Copters, Landers and
 /// Black Boats can't from sea or reef (none of about 3,900 recorded unloads is); Cruisers
 /// and Carriers unload anywhere.

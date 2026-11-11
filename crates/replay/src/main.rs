@@ -1050,9 +1050,10 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         let players: Vec<u32> = items(&h["players"]).into_iter().map(|p| num(p) as u32).collect();
         let n = (num(&h["hp"]).abs() as i32 * 10) * sign;
         let fuel = h["units_fuel"].as_f64().unwrap_or(1.0);
-        // Losses skip units inside transports; heals reach them (Andy's Hyper Upgrade healed
-        // an Infantry riding a Black Boat, game-1754919 turn 28).
-        for u in s.units.values_mut().filter(|u| players.contains(&u.owner) && (sign > 0 || u.carried_by.is_none())) {
+        // Losses skip units inside transports; Andy's heals reach them (Hyper Upgrade healed
+        // an Infantry riding a Black Boat, game-1754919 turn 28), Hawke's don't.
+        let reaches_cargo = sign > 0 && co_of(s, pid) != "Hawke";
+        for u in s.units.values_mut().filter(|u| players.contains(&u.owner) && (reaches_cargo || u.carried_by.is_none())) {
             let f = |v: u8| (v as i32 + n).clamp(1, 100) as u8; // a power never kills
             u.hp = Hp { lo: f(u.hp.lo), hi: f(u.hp.hi) };
             if fuel != 1.0 {

@@ -95,6 +95,10 @@ pub fn bonus_terrain(u: &Unit, terrain: u16, kind: &str) -> String {
     if name.starts_with("Missile Silo") {
         return "Silo".into();
     }
+    // Pipes are buildings in the terrain table, but Kindle's urban bonus is for properties.
+    if kind == "Building" && !crate::rules::is_urban_property(terrain) {
+        return "Pipe".into();
+    }
     kind.to_string()
 }
 

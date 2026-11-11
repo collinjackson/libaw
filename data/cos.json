@@ -58,7 +58,8 @@
      "AffectedUnits": [
       "Artillery",
       "Rocket",
-      "Missile"
+      "Missile",
+      "Piperunner"
      ],
      "RangeIncrease": 1
     }
@@ -78,7 +79,8 @@
      "AffectedUnits": [
       "Artillery",
       "Rocket",
-      "Missile"
+      "Missile",
+      "Piperunner"
      ],
      "RangeIncrease": 1
     }

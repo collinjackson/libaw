@@ -116,11 +116,7 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
     s.units.values()
         // A hidden Stealth can be hit by Fighters and Stealths, a dived Sub by Cruisers and
         // Subs (game-1692796: a Fighter on a hidden Stealth).
-        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && (!d.dived || match d.kind.as_str() {
-            "Stealth" => matches!(u.kind.as_str(), "Fighter" | "Stealth"),
-            "Sub" => matches!(u.kind.as_str(), "Cruiser" | "Sub"),
-            _ => false,
-        }))
+        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && (!d.dived || can_hit_hidden(&u.kind, &d.kind)))
         // ... and only once it is revealed, as the board stands before this unit moves.
         .filter(|d| !crate::fog::concealed(s, d, u.owner))
         .filter(|d| {
