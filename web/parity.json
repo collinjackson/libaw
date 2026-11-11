@@ -279,8 +279,8 @@
    "area": "Turn",
    "feature": "Resign",
    "awbw": true,
-   "ours": "missing",
-   "notes": "the server supports it; no button yet"
+   "ours": "done",
+   "notes": "Resign button with a confirm; the server sends game_over to everyone"
   },
   {
    "area": "Turn",

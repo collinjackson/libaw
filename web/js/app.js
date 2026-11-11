@@ -214,6 +214,7 @@ function render() {
   const cur = s.players.find((p) => p.id === s.current);
   setTurnInfo(`<b>Day ${s.day}</b> · ${myTurn ? '<b>your turn</b>' : `${esc(playerName(s.current))} to move`}${cur ? ` · ${esc(cur.co)}` : ''}${ui.spectator ? ' · watching' : ''}${ui.over ? ' · <b>game over</b>' : ''}`);
   $('btn-end').disabled = !myTurn;
+  $('btn-resign').disabled = !(ui.game && ui.me != null && !ui.over);
   const pw = L.powersNow(ui.legal);
   $('btn-power').disabled = !myTurn || !pw.some((a) => a.power === 'Y');
   $('btn-super').disabled = !myTurn || !pw.some((a) => a.power === 'S');
@@ -427,6 +428,11 @@ async function main() {
   $('btn-refresh').onclick = refreshGames;
   $('btn-leave').onclick = () => { resetGame(); $('players-card').hidden = true; render(); refreshGames(); };
   $('btn-end').onclick = () => act({ type: 'end_turn' });
+  // Resigning is final: ask first. The server answers with game_over to every seat and spectator.
+  $('btn-resign').onclick = async () => {
+    if (!ui.game || !window.confirm('Resign this game? This cannot be undone.')) return;
+    try { await ui.conn.request({ type: 'resign', game: ui.game }); } catch (e) { console.warn('resign failed', e); }
+  };
   $('btn-power').onclick = () => act({ type: 'power', power: 'Y' });
   $('btn-super').onclick = () => act({ type: 'power', power: 'S' });
   document.addEventListener('keydown', (e) => {
