@@ -1005,6 +1005,16 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     let targets: Vec<(u16, u16)> = a["missileCoords"].as_array().map(|v| v.iter().filter_map(|c| {
         Some((opt_num(&c["x"])? as u16, opt_num(&c["y"])? as u16))
     }).collect()).unwrap_or_default();
+    // The server aims missiles; the record says where. Compare the engine's own aim when the
+    // board is fully known (no fog, every displayed HP certain).
+    if !targets.is_empty() {
+        if r.fog || s.units.values().any(|u| u.carried_by.is_none() && u.hp.display().is_none()) {
+            r.skip("power: missile aim not compared (fog or uncertain HP)");
+        } else {
+            let ours = awbw_engine::sim::missile_targets(s, pid, &kind);
+            r.check("power.missile_aim", ours == targets, || tag(c, format!("{} {kind}: engine aims {ours:?}, recorded {targets:?}", co_of(s, pid))));
+        }
+    }
     let modelled = awbw_engine::sim::power_effects_at(&mut pred, pid, &kind, if targets.is_empty() { None } else { Some(&targets) });
     // Older records: a movement change for all the player's units ("global").
     if let Some(d) = opt_num(&a["global"]["units_movement_points"]) {

@@ -204,3 +204,66 @@ fn property_repairs_are_all_or_nothing() {
     assert_eq!(repair("Andy", "Tank", 50, 1000), (Hp::exact(50), 0));
     assert_eq!(repair("Andy", "Tank", 50, 1400), (Hp::exact(70), 1400));
 }
+
+/// A board with only these enemy units on it (kind, x, y), the player to move as `co`.
+fn missile_board(co: &str, enemies: &[(&str, u16, u16)]) -> (State, Vec<UnitId>) {
+    let mut s = state();
+    let me = s.current;
+    with_co(&mut s, co, "N");
+    let foe = s.players.iter().find(|p| p.id != me).unwrap().id;
+    s.player_mut(foe).unwrap().co = "Andy".into();
+    s.units.clear();
+    let mut ids = vec![];
+    for (i, &(kind, x, y)) in enemies.iter().enumerate() {
+        let id = 1000 + i as UnitId;
+        s.units.insert(id, Unit {
+            id, owner: foe, kind: kind.into(), x, y, hp: Hp::exact(100), fuel: 50, ammo: 0,
+            moved: false, stunned: false, carried_by: None, cargo: vec![], dived: false,
+        });
+        ids.push(id);
+    }
+    for b in s.buildings.values_mut() {
+        b.capture = 20;
+    }
+    (s, ids)
+}
+
+#[test]
+fn rachels_missiles_are_all_aimed_before_any_lands() {
+    // Three Infantry in one corner, two expensive tanks far away. The foot-soldier missile
+    // and the HP missile both pick the Infantry, the value missile picks the tanks.
+    let far = (state().width - 3, state().height - 3);
+    let (mut s, ids) = missile_board("Rachel", &[
+        ("Infantry", 2, 2), ("Infantry", 3, 2), ("Infantry", 2, 3),
+        ("Md.Tank", far.0, far.1), ("Neotank", far.0 + 1, far.1),
+    ]);
+    let me = s.current;
+    assert!(sim::power_effects(&mut s, me, "S"));
+    let hp: Vec<Hp> = ids.iter().map(|id| s.units[id].hp).collect();
+    assert_eq!(hp, [Hp::exact(40), Hp::exact(40), Hp::exact(40), Hp::exact(70), Hp::exact(70)]);
+}
+
+#[test]
+fn von_bolt_aims_at_the_most_value_and_stuns_it() {
+    let far = (state().width - 3, state().height - 3);
+    let (mut s, ids) = missile_board("Von Bolt", &[
+        ("Infantry", 2, 2), ("Infantry", 3, 2), ("Infantry", 2, 3),
+        ("Md.Tank", far.0, far.1), ("Neotank", far.0 + 1, far.1),
+    ]);
+    let me = s.current;
+    assert!(sim::power_effects(&mut s, me, "S"));
+    let hit: Vec<(u8, bool)> = ids.iter().map(|id| (s.units[id].hp.hi, s.units[id].stunned)).collect();
+    assert_eq!(hit, [(100, false), (100, false), (100, false), (70, true), (70, true)]);
+}
+
+#[test]
+fn a_missile_with_nothing_to_hit_is_not_fired_and_floors_at_a_tenth() {
+    let (mut s, _) = missile_board("Von Bolt", &[]);
+    let me = s.current;
+    assert!(sim::power_effects(&mut s, me, "S"));
+    // A 2.0 HP unit loses 1.9, not 1.0.
+    let (mut s, ids) = missile_board("Von Bolt", &[("Md.Tank", 4, 4)]);
+    s.units.get_mut(&ids[0]).unwrap().hp = Hp::exact(20);
+    assert!(sim::power_effects(&mut s, me, "S"));
+    assert_eq!(s.units[&ids[0]].hp, Hp::exact(1));
+}

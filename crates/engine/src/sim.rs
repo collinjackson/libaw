@@ -291,8 +291,9 @@ fn missile(s: &mut State, at: (u16, u16), stun: bool, hp: i32) {
         .map(|u| u.id).collect();
     for id in hit {
         let u = s.units.get_mut(&id).unwrap();
-        let floor_hi = u.hp.hi.min(10);
-        u.hp = crate::state::Hp { lo: (u.hp.lo as i32 - hp * 10).max(1) as u8, hi: ((u.hp.hi as i32 - hp * 10).max(1) as u8).max(floor_hi) };
+        // AWBW leaves a unit with no less than exactly 0.1 HP.
+        let hit = |h: u8| (h as i32 - hp * 10).max(1) as u8;
+        u.hp = crate::state::Hp { lo: hit(u.hp.lo), hi: hit(u.hp.hi) };
         if stun {
             u.stunned = true;
             u.moved = true;
@@ -300,26 +301,87 @@ fn missile(s: &mut State, at: (u16, u16), stun: bool, hp: i32) {
     }
 }
 
-/// Where AWBW isn't telling us: aim each missile at the 2-tile diamond where it takes the
-/// most enemy value (cost x HP it removes). AWBW's own targeting may differ; ballpark.
-fn aim_missile(s: &State, pid: PlayerId) -> (u16, u16) {
-    let (mut best, mut at) = (-1i64, (0u16, 0u16));
-    let enemies: Vec<&crate::state::Unit> = s.units.values().filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none()).collect();
-    for c in &enemies {
-        for dx in -2i32..=2 {
+/// What AWBW's missile aim adds up over a blast (see `aim_missile`).
+#[derive(Clone, Copy, PartialEq)]
+enum Aim {
+    /// Rachel's first missile: HP taken, foot soldiers counting four times (eight while
+    /// capturing).
+    Foot,
+    /// Rachel's second and Von Bolt's: value destroyed.
+    Value,
+    /// Rachel's third: HP taken.
+    Hp,
+    /// Sturm's meteor: the value of the units in the blast, centred on an enemy unit.
+    Sturm,
+}
+
+/// Where AWBW aims a power's missile. It scores every tile of the map, rows top to bottom,
+/// by what the 2-tile blast would do: enemy units count for, the caster's side against. A
+/// unit showing h HP loses 3, or h - 1 from 3 or less, or 0.1 at 1; value is its owner's
+/// price. The strictly highest score wins (by value and HP aims, ties go to the blast with
+/// more unit value in it); nothing is fired if no tile scores above zero.
+/// Reproduces all 33 recorded Rachel missiles and all 16 of Von Bolt's.
+fn aim_missile(s: &State, pid: PlayerId, aim: Aim) -> Option<(u16, u16)> {
+    // Per tile holding an uncarried unit: (score, tie-break value, is an enemy), in tenths.
+    let mut tiles: std::collections::BTreeMap<(i32, i32), (i64, i64, bool)> = Default::default();
+    for u in s.units.values().filter(|u| u.carried_by.is_none()) {
+        let enemy = !s.allied(u.owner, pid);
+        let sign = if enemy { 1 } else { -1 };
+        let h = u.hp.display_hi() as i64;
+        let loss = if h <= 1 { 1 } else if h <= 3 { (h - 1) * 10 } else { 30 };
+        let price = owner_price(s, u.owner, &u.kind);
+        let (score, value) = match aim {
+            Aim::Value => (price * loss, price * h),
+            Aim::Sturm => (price * h, price * h),
+            Aim::Hp => (loss, h),
+            Aim::Foot => {
+                let capturing = enemy && s.buildings.get(&(u.x, u.y)).is_some_and(|b| b.capture < CAPTURE_POINTS);
+                let weight = if h <= 1 { 1 } else { (if is_foot(&u.kind) { 4 } else { 1 }) * (if capturing { 2 } else { 1 }) };
+                (weight * loss, h)
+            }
+        };
+        tiles.insert((u.x as i32, u.y as i32), (sign * score, sign * value, enemy));
+    }
+    let mut best: Option<((u16, u16), i64, i64)> = None;
+    for y in 0..s.height as i32 {
+        for x in 0..s.width as i32 {
+            if aim == Aim::Sturm && !tiles.get(&(x, y)).is_some_and(|t| t.2) {
+                continue;
+            }
+            let (mut score, mut value) = (0i64, 0i64);
             for dy in -2i32..=2 {
-                if dx.abs() + dy.abs() > 2 { continue; }
-                let (x, y) = (c.x as i32 + dx, c.y as i32 + dy);
-                if x < 0 || y < 0 { continue; }
-                // Missiles hit every unit in range, the caster's own too (Rachel and Von Bolt,
-                // 8 recorded uses): count own units' loss against the target.
-                let v: i64 = s.units.values().filter(|u| u.carried_by.is_none() && (u.x as i32 - x).abs() + (u.y as i32 - y).abs() <= 2)
-                    .map(|u| (if s.allied(u.owner, pid) { -1 } else { 1 }) * crate::data::tables().unit(&u.kind).cost as i64 * ((u.hp.hi as i64 - 1).min(30)) / 100).sum();
-                if v > best { best = v; at = (x as u16, y as u16); }
+                let r = 2 - dy.abs();
+                for dx in -r..=r {
+                    if let Some(t) = tiles.get(&(x + dx, y + dy)) {
+                        score += t.0;
+                        value += t.1;
+                    }
+                }
+            }
+            let (top, top_value) = best.map_or((0, 0), |b| (b.1, b.2));
+            let tie_broken = score == top && matches!(aim, Aim::Value | Aim::Hp) && value > top_value;
+            if score > 0 && (score > top || tie_broken) {
+                best = Some(((x as u16, y as u16), score, value));
             }
         }
     }
-    at
+    best.map(|b| b.0)
+}
+
+/// The targets of a power's missiles when the engine aims them itself, all chosen on the
+/// board as it stands before any lands (Rachel's three can stack on one tile).
+fn aim_missiles(s: &State, pid: PlayerId, count: usize) -> Vec<(u16, u16)> {
+    let aims: &[Aim] = match co_of(s, pid).as_str() {
+        "Rachel" => &[Aim::Foot, Aim::Value, Aim::Hp],
+        "Sturm" => &[Aim::Sturm],
+        _ => &[Aim::Value],
+    };
+    aims.iter().take(count).filter_map(|&a| aim_missile(s, pid, a)).collect()
+}
+
+/// Where this power's missiles would land on the board as it stands (AWBW's aim).
+pub fn missile_targets(s: &State, pid: PlayerId, kind: &str) -> Vec<(u16, u16)> {
+    co::instant(&co_of(s, pid), kind).map_or(vec![], |e| aim_missiles(s, pid, e.missiles as usize))
 }
 
 /// The player to move activates a power. Missiles land on `targets` when given (the server
@@ -337,8 +399,11 @@ pub fn use_power(s: &mut State, kind: &str, targets: Option<&[(u16, u16)]>) -> R
 /// As `power_effects`, with missile targets given (the replay checker passes AWBW's).
 pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Option<&[(u16, u16)]>) -> bool {
     let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
-    for k in 0..e.missiles as usize {
-        let at = match targets { Some(t) => match t.get(k) { Some(&p) => p, None => break }, None => aim_missile(s, pid) };
+    let aimed = match targets {
+        Some(t) => t.iter().copied().take(e.missiles as usize).collect(),
+        None => aim_missiles(s, pid, e.missiles as usize),
+    };
+    for at in aimed {
         missile(s, at, e.stun, e.missile_hp);
     }
     if let Some(p) = s.player_mut(pid) {
