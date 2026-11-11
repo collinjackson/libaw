@@ -145,3 +145,30 @@ fn seats_tokens_and_spectators() {
     assert_eq!(over.1["winner"], "1");
     assert_eq!(over.1["reason"], "resign");
 }
+
+#[test]
+fn preview_shows_the_luck_range_and_changes_nothing() {
+    let mut st = last_stand();
+    st["units"]["2"] = json!({"id": 2, "owner": 2, "kind": "Tank", "x": 3, "y": 0, "hp": {"lo": 100, "hi": 100}, "fuel": 70,
+        "ammo": 9, "moved": false, "stunned": false, "carried_by": null, "cargo": [], "dived": false});
+    let mut hub = Hub::new();
+    let g = hub.handle(1, &json!({"type": "create", "state": st, "name": "p"}))[0].1["game"].as_str().unwrap().to_string();
+    let j = hub.handle(2, &json!({"type": "join", "game": g, "player": 1}));
+    let turn = &j.iter().find(|(_, v)| v["type"] == "turn").expect("player 1 moves").1;
+    let attack = turn["legal"].as_array().unwrap().iter()
+        .find(|a| a.to_string().contains("attack") && a.to_string().contains("[3,0]") || a.to_string().contains("\"target\":[3,0]"))
+        .expect("an attack on the Tank at (3, 0)").clone();
+    let before = hub.handle(2, &json!({"type": "state", "game": g}))[0].1["state"].clone();
+    let p = &hub.handle(2, &json!({"type": "preview", "game": g, "action": attack, "id": 7}))[0].1;
+    assert_eq!(p["type"], "preview", "{p}");
+    assert_eq!(p["id"], 7);
+    assert_eq!(p["defender_hp"], 100);
+    // Tank on Tank on Plains, no CO effects: 49% at luck 0, 57% at luck 9 (tests/cases/tank-vs-tank-plains-min-luck.json).
+    assert_eq!(p["low_luck"]["defender_hp"], 51, "{p}");
+    assert_eq!(p["high_luck"]["defender_hp"], 43, "{p}");
+    assert!(p["low_luck"]["attacker_hp"].as_u64().unwrap() < 100, "the defender counters");
+    let after = hub.handle(2, &json!({"type": "state", "game": g}))[0].1["state"].clone();
+    assert_eq!(before, after, "a preview changes nothing");
+    let wait = turn["legal"].as_array().unwrap().iter().find(|a| !a.to_string().contains("attack")).unwrap().clone();
+    assert_eq!(hub.handle(2, &json!({"type": "preview", "game": g, "action": wait}))[0].1["type"], "error");
+}

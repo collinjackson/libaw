@@ -6,7 +6,7 @@
 //! `Hub::handle` is the whole protocol as a pure function of (message in) -> (messages out), so
 //! it is tested without sockets; `serve` only moves frames between sockets and the hub.
 
-use awbw_engine::actions::{legal_actions, Action};
+use awbw_engine::actions::{legal_actions, Action, Then};
 use awbw_engine::awbw::{action_from_contract, action_to_contract, state_from, to_turn_json};
 use awbw_engine::{fog, sim, view, Hp, PlayerId, State};
 use futures_util::{SinkExt, StreamExt};
@@ -233,6 +233,7 @@ impl Hub {
                 }
             }
             "act" => self.act(conn, msg),
+            "preview" => self.preview(conn, msg),
             "resign" => self.resign(conn, msg),
             "" => vec![err(conn, msg, "message has no type")],
             other => vec![err(conn, msg, format!("unknown message type {other:?}"))],
@@ -360,6 +361,39 @@ impl Hub {
             out.push((conn, m.clone()));
         }
         out
+    }
+
+    /// What an attack would do, before it's sent: the move-and-attack played on a copy of the
+    /// player's own view (fog hides nothing new) at the lowest and the highest luck roll. HP is
+    /// AWBW's internal 0-100; the client shows lost HP as a damage %. Changes nothing.
+    fn preview(&self, conn: ConnId, msg: &Value) -> Out {
+        let Some(g) = self.game(msg) else { return vec![err(conn, msg, "no such game")] };
+        let Some(seat) = g.seat_of_conn(conn) else { return vec![err(conn, msg, "you hold no seat in this game")] };
+        let me = seat.player;
+        if me != g.state.current || g.over.is_some() {
+            return vec![err(conn, msg, "not your turn")];
+        }
+        let v = fog::player_view(&g.state, me);
+        let a = match action_from_contract(&v, &msg["action"]) {
+            Ok(a) => a,
+            Err(e) => return vec![err(conn, msg, format!("illegal: {e}"))],
+        };
+        let Action::Move { unit, then: Then::Attack { target }, .. } = &a else {
+            return vec![err(conn, msg, "preview takes a move that attacks")];
+        };
+        let Some(def) = v.unit_at(target.0, target.1).map(|u| u.id) else { return vec![err(conn, msg, "no unit at the target")] };
+        let hp = |s: &State, id| s.units.get(&id).map_or(0, |u| u.hp.hi);
+        let run = |high: bool| -> Result<Value, String> {
+            let mut s = v.clone();
+            let mut roll = |lo: i32, hi: i32| if high { hi } else { lo };
+            sim::step(&mut s, &a, &mut roll)?;
+            Ok(json!({"attacker_hp": hp(&s, *unit), "defender_hp": hp(&s, def)}))
+        };
+        match (run(false), run(true)) {
+            (Ok(low), Ok(high)) => vec![(conn, with_id(json!({"type": "preview", "game": g.id, "target": [target.0, target.1],
+                "attacker_hp": hp(&v, *unit), "defender_hp": hp(&v, def), "low_luck": low, "high_luck": high}), msg))],
+            (Err(e), _) | (_, Err(e)) => vec![err(conn, msg, format!("referee refused: {e}"))],
+        }
     }
 
     fn act(&mut self, conn: ConnId, msg: &Value) -> Out {

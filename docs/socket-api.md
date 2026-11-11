@@ -114,3 +114,16 @@ accounts or passwords, so run it on a trusted network.
 - Accounts, passwords, private games; persistence (games live in memory); clocks and timeouts.
 - Lobby features: map lists, CO picks, creating a game from a map id instead of a position.
 - Replays as a download (the `event` stream plus the seed is enough to rebuild one).
+
+### `preview` (seat on move)
+
+`{"type": "preview", "game": G, "action": A}` where `A` is a legal move that attacks (from `turn`).
+The server plays it on a copy of the player's own view, once at the lowest luck roll and once at
+the highest, and changes nothing:
+
+```json
+{"type": "preview", "game": "g1", "target": [3, 0], "attacker_hp": 100, "defender_hp": 100,
+ "low_luck": {"attacker_hp": 86, "defender_hp": 51}, "high_luck": {"attacker_hp": 90, "defender_hp": 43}}
+```
+
+HP is AWBW's internal 0-100, so HP lost is the damage %: 49-57% dealt here, 10-14% taken on the counter.

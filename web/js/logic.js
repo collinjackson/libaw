@@ -136,3 +136,12 @@ export function simplePick(legal, acted) {
     { type: 'end_turn' }
   );
 }
+
+/** "deals 49–57%, counter 14–20%" from a server `preview` reply (HP is 0-100 internal, so lost HP is
+ * the damage %). The counter's range runs either way between the two luck runs, so it is sorted. */
+export function damageLabel(p) {
+  const range = (a, b) => { const [lo, hi] = [Math.min(a, b), Math.max(a, b)]; return lo === hi ? `${lo}%` : `${lo}–${hi}%`; };
+  const dealt = range(p.defender_hp - p.low_luck.defender_hp, p.defender_hp - p.high_luck.defender_hp);
+  const lost = range(p.attacker_hp - p.low_luck.attacker_hp, p.attacker_hp - p.high_luck.attacker_hp);
+  return lost === '0%' ? `deals ${dealt}` : `deals ${dealt}, counter ${lost}`;
+}

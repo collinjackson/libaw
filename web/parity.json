@@ -153,8 +153,8 @@
    "area": "Info",
    "feature": "Damage preview (% before firing)",
    "awbw": true,
-   "ours": "missing",
-   "notes": "needs the engine's damage range in the browser (crates/wasm) or a server request"
+   "ours": "done",
+   "notes": "server preview request: the attack played on a copy at lowest and highest luck; shown in the Fire menu (AWBW shows it on hover)"
   },
   {
    "area": "Info",

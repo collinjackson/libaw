@@ -308,11 +308,23 @@ function onTile(x, y) {
 /** Several legal actions point at one picked tile (e.g. firing from different squares). */
 function chooseAmong(acts, x, y) {
   ui.mode = null;
-  if (acts.length === 1) { act(acts[0]); return; }
+  if (acts.length === 1) { confirmFire(acts[0], x, y); return; }
   // Prefer the shortest path (fire from where it stands when it can), else let the player choose.
   const short = [...acts].sort((a, b) => a.path.length - b.path.length);
-  if (short[0].path.length === 1 || short.length <= 1) { act(short[0]); return; }
-  openMenu(x, y, short.map((a) => ({ label: `From ${a.path[a.path.length - 1].join(',')}`, run: () => act(a) })), 'Fire from');
+  if (short[0].path.length === 1 || short.length <= 1) { confirmFire(short[0], x, y); return; }
+  openMenu(x, y, short.map((a) => ({ label: `From ${a.path[a.path.length - 1].join(',')}`, run: () => confirmFire(a, x, y) })), 'Fire from');
+}
+
+/** An attack shows its damage range first (the server's `preview`: the move played on a copy at
+ * the lowest and highest luck); anything else, or a preview that fails, goes straight through. */
+async function confirmFire(a, x, y) {
+  if (a.then?.type !== 'attack') { act(a); return; }
+  let label = 'Fire';
+  try {
+    const p = await ui.conn.request({ type: 'preview', game: ui.game, action: a });
+    if (p.type === 'preview') label = `Fire: ${L.damageLabel(p)}`;
+  } catch { /* an older server without preview: fire without it */ }
+  openMenu(x, y, [{ label, run: () => act(a) }, { label: 'Cancel', run: () => { ui.mode = null; render(); } }], 'Attack');
 }
 
 function openMoveMenu(acts, x, y) {
