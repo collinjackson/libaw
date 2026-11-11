@@ -181,8 +181,8 @@
    "area": "Info",
    "feature": "Unit list / army overview",
    "awbw": true,
-   "ours": "missing",
-   "notes": ""
+   "ours": "partial",
+   "notes": "unit count and army value per player (fog: what you can see); no per-unit list yet"
   },
   {
    "area": "Info",
@@ -195,8 +195,8 @@
    "area": "Info",
    "feature": "Income per turn",
    "awbw": true,
-   "ours": "missing",
-   "notes": ""
+   "ours": "done",
+   "notes": "server sends each player's income (engine rule, CO bonus included); shown per player"
   },
   {
    "area": "Info",

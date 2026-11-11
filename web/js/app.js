@@ -153,6 +153,7 @@ function onMessage(m) {
   switch (m.type) {
     case 'state':
       ui.state = m.state;
+      ui.income = m.income ?? null;   // per player id, from the server (engine rule, CO bonus included)
       ui.previews = new Map();   // damage previews hold for one state only
       if (m.state.current !== ui.me) { ui.legal = []; ui.selected = null; ui.mode = null; closeMenu(); }
       render();
@@ -243,7 +244,7 @@ function renderPlayers() {
     const units = Object.values(s.units).filter((u) => u.owner === p.id).length;
     const scop = p.scop_cost || 0, cop = p.cop_cost || 0, meter = p.meter || 0;
     d.innerHTML = `<span class="sw"></span><span class="nm">${esc(playerName(p.id))}${p.id === ui.me ? ' <span class="badge">you</span>' : ''}${pw}${p.eliminated ? ' <span class="badge">out</span>' : ''}</span><span class="funds">${funds}</span>
-      <span class="sub">${props} properties · ${units} units${s.powers ? ` · meter ${meter.toLocaleString()}${scop ? ' / ' + scop.toLocaleString() : ''}` : ''}</span>
+      <span class="sub">${props} properties${ui.income?.[p.id] != null ? ` · +${Number(ui.income[p.id]).toLocaleString()} G/day` : ''} · ${units} units · army ${L.armyValue(s, p.id, ui.data.units).toLocaleString()} G${s.fog && p.id !== ui.me ? ' (seen)' : ''}${s.powers ? ` · meter ${meter.toLocaleString()}${scop ? ' / ' + scop.toLocaleString() : ''}` : ''}</span>
       ${s.powers && scop ? `<span class="meter"><i style="width:${Math.min(100, (100 * meter) / scop)}%"></i>${cop ? `<b style="left:${(100 * cop) / scop}%"></b>` : ''}</span>` : ''}`;
     box.append(d);
   });

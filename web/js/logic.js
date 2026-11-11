@@ -145,3 +145,13 @@ export function damageLabel(p) {
   const lost = range(p.attacker_hp - p.low_luck.attacker_hp, p.attacker_hp - p.high_luck.attacker_hp);
   return lost === '0%' ? `deals ${dealt}` : `deals ${dealt}, counter ${lost}`;
 }
+
+/** A side's army value as AWBW counts it: each unit's cost scaled by its shown HP (a 6 HP Tank is
+ * worth 60% of 7000). Units the seat can't see (fog) aren't in the state, so this is what's visible. */
+export function armyValue(state, playerId, units) {
+  let v = 0;
+  for (const u of Object.values(state.units)) {
+    if (u.owner === playerId) v += ((units[u.kind]?.cost ?? 0) * displayHp(u)) / 10;
+  }
+  return Math.round(v);
+}

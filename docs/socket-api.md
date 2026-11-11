@@ -127,3 +127,9 @@ the highest, and changes nothing:
 ```
 
 HP is AWBW's internal 0-100, so HP lost is the damage %: 49-57% dealt here, 10-14% taken on the counter.
+
+### `income` on `state`
+
+Every `state` message also carries `"income": {"<player id>": funds}`: what each player collects at
+their next turn start, by the engine's rule (income properties times funds per property plus the
+CO's bonus). Property owners are public, so it's the same for every seat, fog or not.

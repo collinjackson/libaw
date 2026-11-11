@@ -78,8 +78,14 @@ impl Game {
             (Format::Awbw, Some(t)) => to_turn_json(&v, t),
             _ => serde_json::to_value(&v).unwrap_or(Value::Null),
         };
+        // Income at each player's next turn start, by the engine's own rule (income properties x
+        // (funds per property + the CO's bonus, e.g. Sasha)). Property owners are public, fog or not.
+        let income: serde_json::Map<String, Value> = v.players.iter().map(|p| {
+            let n = v.buildings.values().filter(|b| b.owner == Some(p.id) && awbw_engine::rules::is_income_property(b.terrain)).count() as i64;
+            (p.id.to_string(), json!(n * (v.funds_per_property + awbw_engine::co::property_fund_increase(&p.co))))
+        }).collect();
         json!({"type": "state", "game": self.id, "format": fmt_name(format), "day": v.day,
-               "current": v.current, "seq": self.seq, "state": state})
+               "current": v.current, "seq": self.seq, "income": income, "state": state})
     }
 
     fn turn_msg(&self) -> Value {

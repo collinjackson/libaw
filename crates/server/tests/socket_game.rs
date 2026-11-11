@@ -158,7 +158,9 @@ fn preview_shows_the_luck_range_and_changes_nothing() {
     let attack = turn["legal"].as_array().unwrap().iter()
         .find(|a| a.to_string().contains("attack") && a.to_string().contains("[3,0]") || a.to_string().contains("\"target\":[3,0]"))
         .expect("an attack on the Tank at (3, 0)").clone();
-    let before = hub.handle(2, &json!({"type": "state", "game": g}))[0].1["state"].clone();
+    let st_msg = hub.handle(2, &json!({"type": "state", "game": g}))[0].1.clone();
+    assert_eq!(st_msg["income"]["1"], 0, "no properties, no income: {st_msg}");
+    let before = st_msg["state"].clone();
     let p = &hub.handle(2, &json!({"type": "preview", "game": g, "action": attack, "id": 7}))[0].1;
     assert_eq!(p["type"], "preview", "{p}");
     assert_eq!(p["id"], 7);
@@ -171,4 +173,20 @@ fn preview_shows_the_luck_range_and_changes_nothing() {
     assert_eq!(before, after, "a preview changes nothing");
     let wait = turn["legal"].as_array().unwrap().iter().find(|a| !a.to_string().contains("attack")).unwrap().clone();
     assert_eq!(hub.handle(2, &json!({"type": "preview", "game": g, "action": wait}))[0].1["type"], "error");
+}
+
+#[test]
+fn state_carries_each_players_income() {
+    let turn: Value = serde_json::from_slice(&std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/eval-harness/test-states/game-1729758-turn-042-D22-pid4151012.json")).unwrap()).unwrap();
+    let mut hub = Hub::new();
+    let out = hub.handle(1, &json!({"type": "create", "turn": turn}));
+    let game = out[0].1["game"].as_str().unwrap().to_string();
+    let sp = hub.handle(2, &json!({"type": "spectate", "game": game}));
+    let st = &sp.iter().find(|(_, v)| v["type"] == "state").unwrap().1;
+    let fpp = st["state"]["funds_per_property"].as_i64().unwrap();
+    for p in st["state"]["players"].as_array().unwrap() {
+        let inc = st["income"][p["id"].to_string()].as_i64().expect("income per player");
+        assert!(inc > 0 && inc % fpp == 0, "day-22 income {inc} should be a positive multiple of {fpp}");
+    }
 }
