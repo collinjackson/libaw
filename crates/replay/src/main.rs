@@ -333,16 +333,20 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     r.check("capt.is_building", false, || tag(c, format!("no building at {:?}", (x, y))));
                     continue;
                 };
-                let Some(dhp) = u.hp.display() else {
+                // With the capturer's HP uncertain (Sonja's, hidden) there's nothing to compare,
+                // but the record's points and owner still apply.
+                let mut flips = false;
+                if let Some(dhp) = u.hp.display() {
+                    let after = b.capture - capture_amount(s, &u, dhp);
+                    let want_left;
+                    (want_left, flips) = if after <= 0 { (CAPTURE_POINTS, true) } else { (after, false) };
+                    r.check("capt.points", left == want_left, || {
+                        tag(c, format!("{} {}hp ({}) on {} from {}: want {want_left}, recorded {left}",
+                            u.kind, dhp, co_of(s, u.owner), tables().tile(b.terrain).name, b.capture))
+                    });
+                } else {
                     r.skip("capt: hp uncertain");
-                    continue;
-                };
-                let after = b.capture - capture_amount(s, &u, dhp);
-                let (want_left, flips) = if after <= 0 { (CAPTURE_POINTS, true) } else { (after, false) };
-                r.check("capt.points", left == want_left, || {
-                    tag(c, format!("{} {}hp ({}) on {} from {}: want {want_left}, recorded {left}",
-                        u.kind, dhp, co_of(s, u.owner), tables().tile(b.terrain).name, b.capture))
-                });
+                }
                 let bm = s.buildings.get_mut(&(x, y)).unwrap();
                 bm.capture = left;
                 if flips || (left == CAPTURE_POINTS && b.capture != CAPTURE_POINTS) {
