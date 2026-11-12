@@ -1,4 +1,4 @@
-# awbw-engine vs AWBW rules: findings
+# libaw vs AWBW rules: findings
 
 Compiled 2026-11-11 from a rules review. Rules are described as behaviour;
 no AWBW source is included. Game ids refer to the cached public replays in

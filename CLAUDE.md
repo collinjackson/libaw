@@ -1,4 +1,4 @@
-# awbw-engine
+# libaw
 
 A clean-room Advance Wars By Web rules engine: `(state, action) -> state`, deterministic, no I/O.
 Written to be published: everything here must be fine to open-source. Bots, betting, analysis,

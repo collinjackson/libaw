@@ -3,7 +3,7 @@
 v1 adds several bots behind one API (`bots` in `/health`, `bot` in `/act`). A v0 client
 that sends no `bot` still gets `bot-a`.
 
-Written by the clean side (the awbw-engine author) without seeing the opponent's code. The
+Written by the clean side (the libaw author) without seeing the opponent's code. The
 wrapper on the evaluation VM implements this; the clean side talks to it only through this
 API and reads only `STATUS.json`.
 

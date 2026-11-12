@@ -1,9 +1,10 @@
-# awbw-engine
+# libaw
 
 A rules engine for [Advance Wars By Web](https://awbw.amarriner.com): `(state, action) -> state`,
 deterministic, no I/O. It is built clean-room from recorded AWBW games, AWBW's own pages and the
 AWBW wiki, and checked against every recorded turn we hold. Where the engine and AWBW disagree,
-AWBW is right and the engine has a bug.
+AWBW is right and the engine has a bug. (The Rust crate is still named `awbw-engine`; a rename
+is coming.)
 
 **How close it is:** across 1,092 recorded games, about 13 million rule checks (moves, legal
 actions, damage, counters, captures, funds, CO powers), 99.96% match AWBW. Some of what's left is
