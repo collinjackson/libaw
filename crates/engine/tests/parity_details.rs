@@ -5,7 +5,7 @@
 use awbw_engine::actions::{Action, Pos, Then};
 use awbw_engine::data::tables;
 use awbw_engine::rules::{base_damage_now, move_cost};
-use awbw_engine::{co, combat, sim, Hp, Player, PlayerId, State, Unit, UnitId};
+use awbw_engine::{co, combat, fog, sim, Hp, Player, PlayerId, State, Unit, UnitId};
 
 fn state() -> State {
     let turn: serde_json::Value = serde_json::from_str(include_str!(
@@ -314,4 +314,43 @@ fn with_three_players_a_rout_frees_the_losers_properties() {
     sim::step(&mut s, &Action::Move { unit: last, path: vec![(4, 4)], then: Then::Delete }, &mut avg).unwrap();
     assert!(s.player(me).unwrap().eliminated);
     assert_ne!(s.current, me, "the turn has passed on");
+}
+
+#[test]
+fn in_fog_properties_out_of_sight_look_neutral_except_hqs() {
+    let (mut s, me, foe) = board("Andy", "N", "Andy");
+    s.fog = true;
+    add(&mut s, unit(1, me, "Infantry", (0, 0)));
+    // Two of the other player's properties, far from my only unit: a city mid-capture and an HQ.
+    let far: Vec<Pos> = s.buildings.iter()
+        .filter(|(k, b)| b.owner == Some(foe) && k.0 + k.1 > 8)
+        .map(|(k, _)| *k).take(2).collect();
+    assert_eq!(far.len(), 2);
+    let kind = |k: &str| *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some(k) && !t.name.starts_with("Neutral")).unwrap().0;
+    (s.buildings.get_mut(&far[0]).unwrap().terrain, s.buildings.get_mut(&far[0]).unwrap().capture) = (kind("City"), 7);
+    s.buildings.get_mut(&far[1]).unwrap().terrain = kind("HQ");
+    let view = fog::player_view(&s, me);
+    let city = &view.buildings[&far[0]];
+    assert_eq!((city.owner, city.capture), (None, 20));
+    assert!(tables().tile(city.terrain).name.starts_with("Neutral"));
+    assert_eq!(view.terrain_at(far[0].0, far[0].1), city.terrain);
+    assert_eq!(view.buildings[&far[1]].owner, Some(foe), "an HQ keeps its owner");
+    // My own properties are always in sight.
+    for (k, b) in s.buildings.iter().filter(|(_, b)| b.owner == Some(me)) {
+        assert_eq!(view.buildings[k].owner, Some(me));
+        assert_eq!(view.buildings[k].terrain, b.terrain);
+    }
+}
+
+#[test]
+fn an_enemy_sonjas_units_do_not_show_their_hp() {
+    for fog_on in [false, true] {
+        let (mut s, me, foe) = board("Andy", "N", "Sonja");
+        s.fog = fog_on;
+        let (here, there) = land_pair(&s);
+        add(&mut s, unit(1, me, "Infantry", here));
+        let hers = add(&mut s, Unit { hp: Hp::exact(40), ..unit(2, foe, "Tank", there) });
+        assert_eq!(fog::player_view(&s, me).units[&hers].hp, Hp { lo: 1, hi: 100 }, "fog {fog_on}");
+        assert_eq!(fog::player_view(&s, foe).units[&hers].hp, Hp::exact(40), "her own view");
+    }
 }

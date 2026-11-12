@@ -122,10 +122,16 @@ pub fn trap(s: &State, u: &Unit, path: &[(u16, u16)]) -> Option<usize> {
 }
 
 /// What `pid` may know. In fog: enemy units outside its vision are gone, enemy cargo and
-/// funds are hidden. With or without fog, dived Subs and hidden Stealths out of sight are
-/// gone too (`concealed`). Bots plan on this.
+/// funds are hidden, and properties out of sight look neutral and untouched (only an HQ
+/// keeps its owner). With or without fog, dived Subs and hidden Stealths out of sight are
+/// gone too (`concealed`), and an enemy Sonja's units don't show their HP. Bots plan on this.
 pub fn player_view(s: &State, pid: PlayerId) -> State {
     let mut v = s.clone();
+    // An enemy Sonja's units show "?" for HP: anything from 0.1 to 10.
+    let sonja: Vec<PlayerId> = s.players.iter().filter(|p| p.co == "Sonja" && !s.allied(p.id, pid)).map(|p| p.id).collect();
+    for u in v.units.values_mut().filter(|u| sonja.contains(&u.owner)) {
+        u.hp = Hp { lo: 1, hi: 100 };
+    }
     if !s.fog {
         let unseen: Vec<UnitId> = s.units.values().filter(|u| concealed(s, u, pid)).map(|u| u.id).collect();
         for id in &unseen {
@@ -150,6 +156,17 @@ pub fn player_view(s: &State, pid: PlayerId) -> State {
         if !s.allied(p.id, pid) {
             p.funds = 0;
         }
+    }
+    // Properties out of sight: who holds them and any capture under way can't be seen.
+    let unseen: Vec<(u16, u16)> = s.buildings.iter()
+        .filter(|(&(x, y), b)| seen[y as usize * w + x as usize] == 0
+            && matches!(tables().tile(b.terrain).building.as_deref(), Some("City" | "Base" | "Airport" | "Port" | "ComTower" | "Lab")))
+        .map(|(&k, _)| k).collect();
+    for k in unseen {
+        let b = v.buildings.get_mut(&k).unwrap();
+        (b.owner, b.capture) = (None, crate::rules::CAPTURE_POINTS);
+        b.terrain = crate::awbw::owned_tile(b.terrain, None);
+        v.terrain[k.1 as usize * w + k.0 as usize] = b.terrain;
     }
     v
 }
