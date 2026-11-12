@@ -42,7 +42,32 @@ def cos():
     for name, c in load(SRC / "COs.json").items():
         out[name] = {"id": c.get("AWBWID"), "d2d": c.get("DayToDayPower") or {},
                      "cop": c.get("NormalPower") or {}, "scop": c.get("SuperPower") or {}}
-    return out
+    return awbw_corrections(out)
+
+
+def awbw_corrections(cos):
+    """Where the replay player's table differs from AWBW.
+    It lists Missile twice where Rocket belongs (Max's and Sensei's weakened units): AWBW's
+    Rockets get the same -10% attack, and Max's -1 range. And Jake's powers lengthen every
+    indirect's range except Battleships and Carriers, so Piperunners too."""
+    # Drake since 2024-08: naval units defend at +10% (the table says +25%) and air units
+    # attack at -30% (the table says -20%). data/cos.json already had these by hand.
+    for e in cos.get("Drake", {}).get("d2d", {}).get("PowerIncreases") or []:
+        if e.get("DefenseIncrease") == 0.25:
+            e["DefenseIncrease"] = 0.1
+        if e.get("PowerIncrease") == -0.2:
+            e["PowerIncrease"] = -0.3
+    for part in ("cop", "scop"):
+        for e in cos.get("Jake", {}).get(part, {}).get("PowerIncreases") or []:
+            if e.get("RangeIncrease") and "Piperunner" not in e["AffectedUnits"]:
+                e["AffectedUnits"].append("Piperunner")
+    for co in cos.values():
+        for part in ("d2d", "cop", "scop"):
+            for e in co[part].get("PowerIncreases") or []:
+                au = e.get("AffectedUnits") or []
+                if au.count("Missile") == 2 and "Rocket" not in au:
+                    au[len(au) - 1 - au[::-1].index("Missile")] = "Rocket"
+    return cos
 
 
 def units():

@@ -116,11 +116,9 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
     s.units.values()
         // A hidden Stealth can be hit by Fighters and Stealths, a dived Sub by Cruisers and
         // Subs (game-1692796: a Fighter on a hidden Stealth).
-        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && (!d.dived || match d.kind.as_str() {
-            "Stealth" => matches!(u.kind.as_str(), "Fighter" | "Stealth"),
-            "Sub" => matches!(u.kind.as_str(), "Cruiser" | "Sub"),
-            _ => false,
-        }))
+        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && (!d.dived || can_hit_hidden(&u.kind, &d.kind)))
+        // ... and only once it is revealed, as the board stands before this unit moves.
+        .filter(|d| !crate::fog::concealed(s, d, u.owner))
         .filter(|d| {
             let dd = dist(from, (d.x, d.y));
             dd >= minr && dd <= maxr as u32
@@ -161,7 +159,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
             if capacity(&o.kind) > o.cargo.len() && can_carry(&o.kind, &u.kind) {
                 out.push(Then::Load);
             }
-            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.is_empty() && u.cargo.is_empty() {
+            // Transports may join while their cargo together still fits; it passes to the
+            // unit joined.
+            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.len() + u.cargo.len() <= capacity(&o.kind) {
                 out.push(Then::Join);
             }
             return out;
@@ -243,6 +243,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
         }
     }
     for &c in &u.cargo {
+        if !can_unload_from(&u.kind, s.terrain_at(to.0, to.1)) {
+            break;
+        }
         let Some(cu) = s.units.get(&c) else { continue };
         for p in adj(to) {
             let free = s.unit_at(p.0, p.1).is_none_or(|o| o.id == u.id);
@@ -258,6 +261,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
 pub fn builds(s: &State) -> Vec<(Pos, String)> {
     let me = s.current;
     let Some(p) = s.player(me) else { return vec![] };
+    if at_unit_limit(s, me) {
+        return vec![];
+    }
     let mut out = vec![];
     for (&pos, b) in &s.buildings {
         if b.owner != Some(me) || s.unit_at(pos.0, pos.1).is_some() {
