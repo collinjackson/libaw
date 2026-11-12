@@ -90,14 +90,12 @@ pub fn movement_range(s: &State, u: &Unit) -> u32 {
     }
     let mut m = tables().unit(&u.kind).r#move as u32;
     let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
-    // Day-to-day movement changes.
-    if co == "Sami" && matches!(u.kind.as_str(), "APC" | "T-Copter" | "Lander" | "Black Boat") {
+    // Day-to-day movement changes. Sami's and Sensei's transports move one further, and no
+    // more under Sami's powers: the +2 a Power record shows for a loaded transport is the
+    // bonus of the foot soldier it carries (all 41 recorded transport moves under Victory
+    // March stay within +1).
+    if matches!(co, "Sami" | "Sensei") && matches!(u.kind.as_str(), "APC" | "T-Copter" | "Lander" | "Black Boat") {
         m += 1;
-        // Victory March adds one more (a Lander and a Black Boat at +2 in the records;
-        // her CO power leaves them at +1).
-        if s.player(u.owner).is_some_and(|p| p.power == "S") {
-            m += 1;
-        }
     }
     // Drake's naval units move one further (Landers and Black Boats in 3 league games).
     if co == "Drake" && matches!(tables().unit(&u.kind).move_type.as_str(), "S" | "L") {
@@ -127,6 +125,26 @@ pub fn is_income_property(terrain: u16) -> bool {
     )
 }
 
+/// Properties Kindle's High Society counts: every kind a player can own, com towers and
+/// labs included (not only the ones that pay income).
+pub fn is_urban_property(terrain: u16) -> bool {
+    matches!(
+        tables().tile(terrain).building.as_deref(),
+        Some("City" | "Base" | "Airport" | "Port" | "HQ" | "ComTower" | "Lab")
+    )
+}
+
+/// A league game's capture limit: 70% of the map's income properties, rounded down (what
+/// the public pages of seven recorded league games show).
+pub fn league_capture_limit(s: &State) -> u32 {
+    (s.buildings.values().filter(|b| is_income_property(b.terrain)).count() * 7 / 10) as u32
+}
+
+/// Has this player reached the game's unit limit? Carried units count.
+pub fn at_unit_limit(s: &State, pid: PlayerId) -> bool {
+    s.unit_limit.is_some_and(|n| s.units.values().filter(|u| u.owner == pid).count() as u32 >= n)
+}
+
 /// Which unit classes a building repairs and resupplies.
 pub fn services(terrain: u16, kind: &str) -> bool {
     let mt = tables().unit(kind).move_type.as_str();
@@ -139,32 +157,50 @@ pub fn services(terrain: u16, kind: &str) -> bool {
     }
 }
 
-/// Combat: the range of damage (internal HP points) an attack can do, before rounding
-/// questions are settled. AWBW's formula:
-///   (B * ACO/100 + L) * (AHP/10) * (200 - (DCO + DTR*DHP)) / 100, L = luck 0..=9.
+/// Combat: the range of damage (internal HP points) an attack can do. AWBW's formula:
+///   (AHP/10) * (B * ACO/100 + L) * (200 - (DCO + DTR*DHP)) / 100, L = luck,
+/// worked out in double-precision floating point, rounded to one decimal and then cut to a
+/// whole point. So a raw x.95 or more counts as x+1, but only when the floating-point
+/// product itself reaches x.95: 97.5 * 0.82 comes out a hair under 79.95 and stays 79.
 pub struct AttackParams {
     pub base: u32,
+    /// Attack value in per cent, counterattack bonus included (see `combat::att_value`).
     pub att_value: u32,
+    /// Extra attack in thousandths of a per cent point (Colin's Power of Money: 3 per fund
+    /// held, i.e. +3% per 1000 funds, not rounded).
+    pub att_milli: u32,
     pub att_hp: u8,
     pub def_value: u32,
     pub def_terrain: u32,
     pub def_hp: u8,
     pub luck_min: i32,
     pub luck_max: i32,
-    /// Final multiplier in per cent (Sonja's counterattacks: 150).
-    pub scale_pct: u32,
 }
 
-/// Exact integer arithmetic (no floats; the proof-of-artifice zkVM plan wants none): one
-/// numerator over the denominator 100 * 10 * 100 * 100, floored. Same results as the old
-/// f64 floor(x + 1e-6): every replay check unchanged, and 0 differences over 2M random
-/// inputs (2026-11-07).
+/// AWBW's result depends on how double-precision arithmetic rounds each step, so this has
+/// to use f64 in AWBW's own order of operations: integer arithmetic gives 80 where AWBW
+/// (and game-1749614, turn 26) gives 79. IEEE 754 doubles are deterministic, so the same
+/// inputs give the same result everywhere.
 pub fn damage_range(p: &AttackParams) -> (u32, u32) {
     let f = |luck: i32| -> u32 {
-        let a = p.base as i64 * p.att_value as i64 + 100 * luck as i64; // x100
-        let d = 200 - (p.def_value as i64 + p.def_terrain as i64 * p.def_hp as i64); // x100
-        let num = a * p.att_hp as i64 * d * p.scale_pct as i64;
-        if num <= 0 { 0 } else { (num / (100 * 10 * 100 * 100)) as u32 }
+        let attack = p.att_value as f64 + p.att_milli as f64 / 1000.0;
+        let raw = (p.att_hp as f64 / 10.0) * (p.base as f64 * (attack / 100.0) + luck as f64);
+        let defence = 200 - (p.def_value as i64 + p.def_terrain as i64 * p.def_hp as i64);
+        let raw = raw * (defence as f64 / 100.0);
+        if raw.is_nan() || raw <= 0.0 {
+            return 0;
+        }
+        // One decimal the way AWBW rounds it: the whole tenths below the
+        // value, one more when the value is at or above the double nearest to "those tenths
+        // and a half". Then drop the fraction.
+        let mut tenths = (raw * 10.0).floor();
+        if (tenths + 1.0) / 10.0 == raw {
+            tenths += 1.0; // the product is exactly the next tenth
+        }
+        if raw >= (tenths + 0.5) / 10.0 {
+            tenths += 1.0;
+        }
+        (tenths as u64 / 10) as u32
     };
     (f(p.luck_min), f(p.luck_max))
 }
@@ -203,11 +239,11 @@ pub fn uses_primary(att: &Unit, def_kind: &str) -> bool {
 /// machine gun can't hit it.
 pub fn mg_damage(att_kind: &str, def_kind: &str) -> Option<u8> {
     let row: &[(&str, u8)] = match att_kind {
-        "Mech" => &[("Recon", 18), ("APC", 20), ("Artillery", 15), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "B-Copter" => &[("Recon", 30), ("APC", 20), ("Artillery", 25), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "Tank" => &[("Recon", 40), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 30), ("Anti-Air", 5), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "Md.Tank" => &[("Recon", 45), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 35), ("Anti-Air", 7), ("Tank", 8), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
-        "Neotank" | "Mega Tank" => &[("Recon", 65), ("APC", 65), ("Artillery", 65), ("Rocket", 75), ("Missile", 55), ("Anti-Air", 17), ("Tank", 10), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1)],
+        "Mech" => &[("Recon", 18), ("APC", 20), ("Artillery", 32), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
+        "B-Copter" => &[("Recon", 30), ("APC", 20), ("Artillery", 25), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
+        "Tank" => &[("Recon", 40), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 30), ("Anti-Air", 5), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
+        "Md.Tank" => &[("Recon", 45), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 35), ("Anti-Air", 7), ("Tank", 8), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 8)],
+        "Neotank" | "Mega Tank" => &[("Recon", 65), ("APC", 65), ("Artillery", 65), ("Rocket", 75), ("Missile", 55), ("Anti-Air", 17), ("Tank", 10), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 10)],
         _ => &[],
     };
     row.iter().find(|(k, _)| *k == def_kind).map(|&(_, v)| v)
@@ -219,6 +255,11 @@ pub fn mg_damage(att_kind: &str, def_kind: &str) -> Option<u8> {
 pub fn base_damage_now(att: &Unit, def_kind: &str) -> Option<u8> {
     let info = tables().unit(&att.kind);
     if info.ammo > 0 && att.ammo == 0 {
+        // A Cruiser has no second weapon as AWBW counts them: out of ammo it can't fire at
+        // all, not even its guns at aircraft.
+        if att.kind == "Cruiser" {
+            return None;
+        }
         if secondary_target(&att.kind, def_kind) {
             return tables().base_damage(&att.kind, def_kind);
         }
@@ -266,6 +307,23 @@ pub fn capacity(kind: &str) -> usize {
         "Lander" | "Cruiser" | "Carrier" | "Black Boat" => 2,
         _ => 0,
     }
+}
+
+/// Can `attacker` damage a dived Sub or hidden Stealth of kind `hidden`? Only Cruisers and
+/// Subs hit a dived Sub, only Fighters and Stealths a hidden Stealth. Counterattacks too.
+pub fn can_hit_hidden(attacker: &str, hidden: &str) -> bool {
+    match hidden {
+        "Stealth" => matches!(attacker, "Fighter" | "Stealth"),
+        "Sub" => matches!(attacker, "Cruiser" | "Sub"),
+        _ => false,
+    }
+}
+
+/// Can this transport unload while standing on `terrain`? APCs, T-Copters, Landers and
+/// Black Boats can't from sea or reef (none of about 3,900 recorded unloads is); Cruisers
+/// and Carriers unload anywhere.
+pub fn can_unload_from(transport: &str, terrain: u16) -> bool {
+    matches!(transport, "Cruiser" | "Carrier") || tables().tile(terrain).kind != "Sea"
 }
 
 /// Can transport `t` carry unit kind `l`?

@@ -127,14 +127,14 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8, co
         for dhp in def.hp.display_lo().max(1)..=def.hp.display_hi() {
             let p = AttackParams {
                 base: base as u32,
-                att_value: att_value(s, att, at),
+                att_value: att_value(s, att, at, counter),
+                att_milli: awbw_engine::combat::att_milli(s, att),
                 att_hp: ahp,
                 def_value: def_value(s, def, &att.kind),
                 def_terrain: stars(s, def, dt),
                 def_hp: dhp,
                 luck_min: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
                 luck_max: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).1,
-                scale_pct: if counter { awbw_engine::co::counter_pct(&co_of(s, att.owner)) } else { 100 },
             };
             let (dlo, dhi) = damage_range(&p);
             let cand = def.hp.intersect(Hp::from_display(dhp))?;
@@ -542,7 +542,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     tag(c, format!("{} {}hp ({}) -> {} {}hp ({}) on {}: recorded {}hp",
                         att.kind, att.hp.display_hi(), co_of(s, att.owner), def.kind, def.hp.display_hi(),
                         co_of(s, def.owner), tables().tile(s.terrain_at(def.x, def.y)).name, def_rec))
-                        + &format!(" [att {} on {} def {} hp {:?}->{:?}]", att_value(s, &att, s.terrain_at(att.x, att.y)),
+                        + &format!(" [att {} on {} def {} hp {:?}->{:?}]", att_value(s, &att, s.terrain_at(att.x, att.y), false),
                             tables().tile(s.terrain_at(att.x, att.y)).name, def_value(s, &def, &att.kind), att.hp, def.hp)
                 });
                 let new_def_hp = new_def.unwrap_or(Hp::from_display(def_rec));
@@ -817,7 +817,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         let want = awbw_engine::sim::seam_damage(s, &u).map(|d| (before - d).max(0));
                         r.check("seam.damage", want == Some(hp.max(0)), || tag(c, format!("{} {}hp ({}) on seam {before}: engine {want:?}, recorded {hp} [base {:?} att {} on {} at {:?}, power {}]",
                             u.kind, u.hp.display_hi(), co, awbw_engine::rules::base_damage_now(&u, "Neotank"),
-                            awbw_engine::combat::att_value(s, &u, s.terrain_at(u.x, u.y)),
+                            awbw_engine::combat::att_value(s, &u, s.terrain_at(u.x, u.y), false),
                             awbw_engine::data::tables().tile(s.terrain_at(u.x, u.y)).name, (u.x, u.y),
                             s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default())));
                     }
@@ -882,7 +882,9 @@ fn check_repairs(s: &State, before: &BTreeMap<UnitId, Unit>, a: &Value, r: &mut 
             r.skip("repair: hidden HP (Sonja)");
             continue;
         }
-        let ours = u.hp != b.hp;
+        // Repaired as the record sees it: the displayed HP changed. (Topping a 9.x unit up to
+        // 10.0 changes nothing on display, and AWBW lists every full-HP unit it services.)
+        let ours = (u.hp.display_lo(), u.hp.display_hi()) != (b.hp.display_lo(), b.hp.display_hi());
         let theirs = rec.get(id);
         if r.fog && ours && theirs.is_none() {
             // Fog games' repair lists are incomplete (and repeat entries); the next turn's
@@ -1003,6 +1005,16 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     let targets: Vec<(u16, u16)> = a["missileCoords"].as_array().map(|v| v.iter().filter_map(|c| {
         Some((opt_num(&c["x"])? as u16, opt_num(&c["y"])? as u16))
     }).collect()).unwrap_or_default();
+    // The server aims missiles; the record says where. Compare the engine's own aim when the
+    // board is fully known (no fog, every displayed HP certain).
+    if !targets.is_empty() {
+        if r.fog || s.units.values().any(|u| u.carried_by.is_none() && u.hp.display().is_none()) {
+            r.skip("power: missile aim not compared (fog or uncertain HP)");
+        } else {
+            let ours = awbw_engine::sim::missile_targets(s, pid, &kind);
+            r.check("power.missile_aim", ours == targets, || tag(c, format!("{} {kind}: engine aims {ours:?}, recorded {targets:?}", co_of(s, pid))));
+        }
+    }
     let modelled = awbw_engine::sim::power_effects_at(&mut pred, pid, &kind, if targets.is_empty() { None } else { Some(&targets) });
     // Older records: a movement change for all the player's units ("global").
     if let Some(d) = opt_num(&a["global"]["units_movement_points"]) {
@@ -1015,7 +1027,12 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     for u in items(&a["unitReplace"]["units"]) {
         let id = num(&u["units_id"]) as u32;
         if let Some(m) = opt_num(&u["units_movement_points"]) {
-            s.move_override.insert(id, m as u32);
+            // Sami's record lists whatever stands on a foot soldier's tile, so a loaded
+            // transport shows its passenger's bonus. It keeps its own movement.
+            let sami_transport = co_of(s, pid) == "Sami" && s.units.get(&id).is_some_and(|x| !is_foot(&x.kind));
+            if !sami_transport {
+                s.move_override.insert(id, m as u32);
+            }
         }
         let Some(su) = s.units.get_mut(&id) else { continue };
         if !u["units_hit_points"].is_null() {
@@ -1033,9 +1050,10 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         let players: Vec<u32> = items(&h["players"]).into_iter().map(|p| num(p) as u32).collect();
         let n = (num(&h["hp"]).abs() as i32 * 10) * sign;
         let fuel = h["units_fuel"].as_f64().unwrap_or(1.0);
-        // Losses skip units inside transports; heals reach them (Andy's Hyper Upgrade healed
-        // an Infantry riding a Black Boat, game-1754919 turn 28).
-        for u in s.units.values_mut().filter(|u| players.contains(&u.owner) && (sign > 0 || u.carried_by.is_none())) {
+        // Losses skip units inside transports; Andy's heals reach them (Hyper Upgrade healed
+        // an Infantry riding a Black Boat, game-1754919 turn 28), Hawke's don't.
+        let reaches_cargo = sign > 0 && co_of(s, pid) != "Hawke";
+        for u in s.units.values_mut().filter(|u| players.contains(&u.owner) && (reaches_cargo || u.carried_by.is_none())) {
             let f = |v: u8| (v as i32 + n).clamp(1, 100) as u8; // a power never kills
             u.hp = Hp { lo: f(u.hp.lo), hi: f(u.hp.hi) };
             if fuel != 1.0 {

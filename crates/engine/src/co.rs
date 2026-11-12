@@ -74,6 +74,19 @@ pub fn luck(co: &str, power: &str) -> (i32, i32) {
     }
 }
 
+/// One luck roll for a range from `luck`, the way AWBW rolls it: good luck uniform in
+/// 0..=hi and, for COs with bad luck (lo < 0: Sonja, Flak, Jugger), bad luck uniform in
+/// 0..=-lo, rolled separately and subtracted. `rng` gives uniform u32s.
+pub fn roll_luck(lo: i32, hi: i32, rng: &mut dyn FnMut() -> u32) -> i32 {
+    let mut uniform = |max: i32| if max <= 0 { 0 } else { (rng() % (max as u32 + 1)) as i32 };
+    if lo < 0 {
+        let good = uniform(hi);
+        good - uniform(-lo)
+    } else {
+        lo + uniform(hi - lo)
+    }
+}
+
 /// Build price multiplier, with an active power's own value taking over (Hachi: 0.5).
 /// Unit price multiplier in per cent (Kanbei 120, Colin 80, Hachi 90, Hachi's super 50).
 pub fn price_pct(co: &str, power: &str) -> i64 {
@@ -93,10 +106,16 @@ pub fn air_fuel_decrease(co: &str) -> i32 {
     d2d(co).and_then(|d| d["AirFuelUsageDecrease"].as_i64()).unwrap_or(0) as i32
 }
 
-/// Counterattack damage multiplier (Sonja 1.5).
-/// Counterattack multiplier in per cent (Sonja: 150). Read from the CO data table once.
-pub fn counter_pct(co: &str) -> u32 {
-    d2d(co).and_then(|d| d["CounterAttackPower"].as_f64()).map(|v| (v * 100.0).round() as u32).unwrap_or(100)
+/// Counterattack multiplier in per cent, applied to the CO's own attack value: Sonja 150
+/// always, Kanbei 150 under Samurai Spirit. An active power's value takes over.
+pub fn counter_pct(co: &str, power: &str) -> u32 {
+    active(co, power).into_iter().rev().find_map(|d| d["CounterAttackPower"].as_f64())
+        .map(|v| (v * 100.0).round() as u32).unwrap_or(100)
+}
+
+/// The CO's flat day-to-day attack bonus for a unit kind (no terrain conditions, no power).
+pub fn d2d_attack_bonus(co: &str, kind: &str) -> i32 {
+    sum_field(co, "N", kind, None, "PowerIncrease")
 }
 
 /// Base power costs (CO power, super power) in meter units (funds of damage x 10), before
@@ -108,7 +127,7 @@ pub fn power_base(co: &str) -> Option<(i64, i64)> {
     Some(match co {
         "Adder" => (2, 5), "Andy" | "Grimm" | "Grit" | "Jake" | "Javier" | "Jess" | "Kindle"
         | "Max" | "Nell" | "Rachel" => (3, 6), "Drake" | "Lash" => (4, 7), "Eagle" => (3, 9),
-        "Hawke" => (5, 9), "Koal" | "Sonja" => (3, 5), "Olaf" => (3, 7), "Sami" => (3, 8),
+        "Hawke" => (5, 9), "Koal" | "Sonja" => (3, 5), "Olaf" | "Jugger" => (3, 7), "Sami" => (3, 8),
         "Sasha" => (2, 6), "Von Bolt" => (10, 10),
         "Colin" | "Sensei" => (2, 6), "Flak" => (3, 6), "Hachi" => (3, 5), "Kanbei" => (4, 7),
         "Sturm" => (6, 10),
@@ -183,7 +202,9 @@ pub fn moves_apply(kind: &str, moves_for: &str) -> bool {
     match moves_for {
         "foot" => foot,
         "vehicle" => ground && !foot,
-        "direct" => !foot && u.range[0] <= 1 && u.range[1] == 1,
+        // Max's powers: every unit that isn't an indirect, a foot soldier or a transport;
+        // the unarmed Black Bomb counts.
+        "direct" => (!foot && u.range[0] <= 1 && u.range[1] == 1) || kind == "Black Bomb",
         _ => true,
     }
 }
