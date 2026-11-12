@@ -174,6 +174,17 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
     if r.fog {
         restore_cargo(&mut s, prev);
     }
+    // HP the record hides ("?": Sonja's units, seen by her opponent): keep what the turns so far
+    // narrowed it to, rather than starting again from anything alive.
+    if let Some(p) = prev {
+        for u in s.units.values_mut() {
+            if u.hp.display().is_none() {
+                if let Some(h) = p.units.get(&u.id).and_then(|q| q.hp.intersect(u.hp)) {
+                    u.hp = h;
+                }
+            }
+        }
+    }
     // Sonja hides her units' HP in fire records ("?", or 0 in some fog exports): such a side
     // matches any result, with its death settled by the next turn file.
     r.maybe_supplied.clear();

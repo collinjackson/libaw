@@ -1168,12 +1168,13 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
         clean &= r.check("state.unit_pos", (u.x, u.y) == (ru.x, ru.y), || {
             tag(c, format!("{} {id} at {:?}, recorded {:?}", u.kind, (u.x, u.y), (ru.x, ru.y)))
         });
-        let rd = ru.hp.display_hi();
         if r.hidden_hp.contains(id) {
             r.skip("compare: HP hidden by Sonja this turn");
         } else
-        { clean &= r.check("state.unit_hp", rd >= u.hp.display_lo() && rd <= u.hp.display_hi(), || {
-            tag(c, format!("{} {id} hp {}..{}, recorded {rd}", u.kind, u.hp.display_lo(), u.hp.display_hi()))
+        { // The record's HP is a range too: one displayed value, or anything alive when hidden ("?").
+          clean &= r.check("state.unit_hp", ru.hp.intersect(u.hp).is_some(), || {
+            let shown = ru.hp.display().map_or("?".to_string(), |d| d.to_string());
+            tag(c, format!("{} {id} hp {}..{}, recorded {shown}", u.kind, u.hp.display_lo(), u.hp.display_hi()))
         }); }
         let alt = r.maybe_supplied.get(id).copied();
         let fuel_ok = u.fuel == ru.fuel || alt.is_some_and(|(f, _)| f - (tables().unit(&u.kind).fuel as i32 - u.fuel) == ru.fuel || f == ru.fuel);
