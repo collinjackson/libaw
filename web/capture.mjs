@@ -27,7 +27,8 @@ try { puppeteer = require('puppeteer'); } catch {
   puppeteer = require(join(root, 'puppeteer'));
 }
 
-const browser = await puppeteer.launch({ headless: true });
+// CHROME_ARGS: extra flags, e.g. "--no-sandbox" in a container.
+const browser = await puppeteer.launch({ headless: true, args: (process.env.CHROME_ARGS || '').split(' ').filter(Boolean) });
 const page = await browser.newPage();
 await page.setViewport({ width, height: Math.round(width * 0.75), deviceScaleFactor: 1 });
 const u = new URL(url); u.searchParams.set('capture', '1');
