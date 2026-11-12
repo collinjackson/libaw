@@ -18,8 +18,8 @@ function use(id, x, y, parent, extra = {}) {
 }
 
 export class Board {
-  /** art: optional art set (web/js/art.js), {unit(u, parent, box) -> true when it drew the unit};
-   *  without one, or when it declines, the unit is drawn from assets/sprites.svg. */
+  /** art: optional art set (web/js/art.js), {unit(u, parent, box), tile(id, entry, owner, parent,
+   *  box)}, each -> true when it drew; without one, or when it declines, libaw's own art is used. */
   constructor(svg, terrainMap, { art = null } = {}) {
     this.svg = svg;
     this.tmap = terrainMap;
@@ -67,6 +67,16 @@ export class Board {
     for (let y = 0; y < state.height; y++) {
       for (let x = 0; x < state.width; x++) {
         const d = name(x, y);
+        const b = blds.get(key(x, y));
+        if (this.art?.tile?.(terrainAt(state, x, y), d, d.building ? (b?.owner ?? null) : null, terrain,
+                            { x: x * TILE, y: y * TILE, size: TILE })) {
+          if (d.building && b && b.capture < 20) {
+            const g = el('g', { class: 'bld' }, terrain);
+            el('rect', { x: x * TILE + TILE - 17, y: y * TILE + 1, width: 16, height: 12, rx: 3, class: 'capbg' }, g);
+            el('text', { x: x * TILE + TILE - 9, y: y * TILE + 10.5, class: 'cap' }, g).textContent = b.capture;
+          }
+          continue;
+        }
         use(`t-${d.base ?? 'plain'}`, x, y, terrain);
         if (d.base === 'shoal') {
           for (const [side, dx, dy] of [['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]])
@@ -79,7 +89,6 @@ export class Board {
             if (joins(x + dx, y + dy, d.kind) || (d.arms?.includes(side) && !this.anyNeighbourKind(state, x, y, d.kind)))
               use(`t-${d.kind}-${side}`, x, y, terrain);
         }
-        const b = blds.get(key(x, y));
         const bname = d.building;
         if (bname) {
           const g = el('g', { class: `bld ${cls(b?.owner ?? null)}` }, terrain);
