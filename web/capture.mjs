@@ -1,7 +1,9 @@
 // Record web/replay.html as a GIF and/or MP4, frame by frame (renderAt(t)), so the file shows
 // exactly what the page does. Needs puppeteer (npm i -g puppeteer) and ffmpeg.
 //
-//   node web/capture.mjs 'http://127.0.0.1:8000/web/replay.html?sb=...' out/reel [--fps 15] [--width 720] [--gif] [--mp4]
+//   node web/capture.mjs 'http://127.0.0.1:8000/web/replay.html?sb=...' out/turn [--fps 15] [--width 720] [--gif] [--mp4] [--vf FILTERS]
+//
+// Any page that sets window.__replay = {duration, renderAt(t), ready} records the same way.
 //
 // Serve the repo root first (python3 -m http.server 8000 --bind 127.0.0.1).
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
@@ -12,7 +14,7 @@ import { createRequire } from 'module';
 
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-const [url, out] = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--fps', '--width'].includes(args[i - 1])));
+const [url, out] = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--fps', '--width', '--vf'].includes(args[i - 1])));
 if (!url || !out) { console.error('usage: node web/capture.mjs URL OUT_PREFIX [--fps 15] [--width 720] [--gif] [--mp4]'); process.exit(2); }
 const fps = Number(flag('--fps', 15)), width = Number(flag('--width', 720));
 const wantGif = args.includes('--gif') || !args.includes('--mp4'), wantMp4 = args.includes('--mp4');
@@ -44,14 +46,16 @@ for (let f = 0; f <= n; f++) {
 }
 await browser.close();
 const frames = join(dir, 'f%05d.png');
+// --vf FILTERS: an ffmpeg filter chain to run on the frames first (e.g. a palette or pixel look).
+const pre = flag('--vf', '') ? `${flag('--vf', '')},` : '';
 if (wantGif) {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(fps), '-i', frames, '-vf',
-    `split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
+    `${pre}split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
     '-loop', '0', `${out}.gif`]);
 }
 if (wantMp4) {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(fps), '-i', frames,
-    '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', `${out}.mp4`]);
+    '-vf', `${pre}pad=ceil(iw/2)*2:ceil(ih/2)*2`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', `${out}.mp4`]);
 }
 rmSync(dir, { recursive: true, force: true });
 console.log(JSON.stringify({ frames: n + 1, duration, gif: wantGif ? `${out}.gif` : null, mp4: wantMp4 ? `${out}.mp4` : null }));

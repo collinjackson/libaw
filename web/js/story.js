@@ -1,6 +1,6 @@
 // Pure helpers over a storyboard (docs/storyboard.md): apply its steps to the board, group them
-// into shots, pick the highlights, and lay out a timeline a viewer can render at any time t
-// (so a headless capture gets the same frames as the page). No DOM.
+// into shots, and lay out a timeline a viewer can render at any time t (so a headless capture
+// gets the same frames as the page). No DOM. Choosing which shots to show is the caller's.
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const bkey = (x, y) => `${x},${y}`;
@@ -51,14 +51,9 @@ export function statesOf(sb) {
   return out;
 }
 
-const value = (units, u, hpLost) => ((units?.[u.kind]?.cost ?? 0) * hpLost) / 10;
-
 /** Shots: a unit's move with what it did there (fire, capture, join), or one other step on its
- *  own. Each shot: {from, to (exclusive), kind, score, focus: [x, y], player, tiles}. score is
- *  the drama: army value destroyed on both sides (a kill counts 1.5x), completed captures (an HQ
- *  most), powers. data: {units: data/units.json (costs), terrain: data/terrain.json (to spot an HQ)}. */
-export function shots(sb, data, states = statesOf(sb)) {
-  const unitsData = data?.units ?? data;
+ *  own. Each shot: {from, to (exclusive), kind, focus: [x, y] or null, player, tiles}. */
+export function shots(sb) {
   const out = [];
   const steps = sb.steps;
   for (let i = 0; i < steps.length; i++) {
@@ -67,90 +62,40 @@ export function shots(sb, data, states = statesOf(sb)) {
     let j = i + 1;
     if (st.type === 'move' && j < steps.length && ['fire', 'capture', 'join'].includes(steps[j].type)) j++;
     const last = steps[j - 1];
-    const before = states[i];
-    let score = 0, focus = null;
+    let focus = null;
     const tiles = [];
     if (st.type === 'move') { tiles.push(...st.path); focus = st.path[st.path.length - 1]; }
     if (last.type === 'fire') {
-      for (const side of [last.attacker, last.defender]) {
-        if (!side) continue;
-        const u = before.units[side.unit_id];
-        if (!u) continue;
-        const lost = Math.max(0, Math.ceil(u.hp.hi / 10) - side.display_hp);
-        score += value(unitsData, u, lost) * (side.display_hp <= 0 ? 1.5 : 1);
-        tiles.push(side.at);
-      }
+      for (const side of [last.attacker, last.defender]) if (side) tiles.push(side.at);
       focus = last.defender?.at ?? focus;
     } else if (last.type === 'capture') {
       tiles.push(last.at); focus = last.at;
-      if (last.done) {
-        const b = before.buildings.find(([x, y]) => x === last.at[0] && y === last.at[1]);
-        const name = String(data?.terrain?.[b?.[2]?.terrain]?.name ?? '');
-        score += /HQ/i.test(name) ? 40000 : 4000;
-      } else score += 500;
-    } else if (last.type === 'power') {
-      score += last.super ? 9000 : 6000;
     } else if (last.type === 'build') {
       tiles.push([last.unit.x, last.unit.y]); focus = [last.unit.x, last.unit.y];
-      score += 100;
     }
-    score += focusBonus(sb.focus, last, before);
-    const dk = last.type === 'fire' && last.defender ? before.units[last.defender.unit_id]?.kind : null;
-    const sig = `${last.type}:${dk ?? ''}:${last.type === 'fire' ? (last.defender?.display_hp ?? 1) <= 0 : !!last.done}`;
-    out.push({ from: i, to: j, kind: last.type, score, focus, player: sb.player, tiles, sig });
+    out.push({ from: i, to: j, kind: last.type, focus, player: sb.player, tiles });
     i = j - 1;
   }
   return out;
 }
 
-/** sb.focus (optional, from whoever made the storyboard): what moved the game, as
- *  [{type: 'fire', kill: true, kind: 'Infantry', owner: 102, weight}, {type: 'capture', done, weight},
- *  {type: 'power', weight}, {type: 'build', kind, weight}]. A shot that matches one ranks by its
- *  weight ahead of any that don't, so a reel shows what the odds turned on, not just the loudest hit. */
-export function focusBonus(focus, last, before) {
-  let best = 0;
-  for (const f of focus ?? []) {
-    if (f.type !== last.type) continue;
-    if (last.type === 'fire') {
-      const d = last.defender;
-      const u = d && before.units[d.unit_id];
-      if (!u || (f.kind && u.kind !== f.kind) || (f.owner != null && u.owner !== f.owner)) continue;
-      if (f.kill && d.display_hp > 0) continue;
-    } else if (last.type === 'capture') {
-      if (f.done != null && !!last.done !== !!f.done) continue;
-    } else if (last.type === 'build') {
-      if (f.kind && last.unit.kind !== f.kind) continue;
-    }
-    best = Math.max(best, 1e5 * (f.weight ?? 1));
-  }
-  return best;
-}
-
-/** The n biggest shots, back in the order they happened. */
-export function highlights(sb, data, n = 3, perSig = 2) {
-  const all = shots(sb, data);
-  // At most perSig shots alike (three Infantry kills in a row make a dull reel).
-  const seen = new Map(), top = [];
-  for (const s of [...all].filter((s) => s.score > 0).sort((a, b) => b.score - a.score)) {
-    if ((seen.get(s.sig) ?? 0) >= perSig) continue;
-    seen.set(s.sig, (seen.get(s.sig) ?? 0) + 1);
-    top.push(s);
-    if (top.length >= n) break;
-  }
-  return top.sort((a, b) => a.from - b.from);
-}
-
 export const DUR = { tile: 0.14, fire: 1.1, capture: 0.9, power: 1.6, build: 0.5, join: 0.5, other: 0.2, hold: 0.6 };
 
 /** A timeline over the chosen shots (all of them for a full replay): segments
- *  {t0, t1, step index, phase} where phase is 'move' | 'fire' | 'capture' | 'power' | 'build' |
- *  'join' | 'hold' | 'other'. Steps between chosen shots are applied as a cut (no time). */
-export function timeline(sb, chosen) {
+ *  {t0, t1, step index, phase, shot} where phase is 'move' | 'fire' | 'capture' | 'power' |
+ *  'build' | 'join' | 'hold' | 'other'. Steps between chosen shots are applied as a cut (no time).
+ *  before(step, i, shot) -> [{phase, dur}]: extra segments a caller plays ahead of a step (its
+ *  own phases, drawn by the viewer's overlays). */
+export function timeline(sb, chosen, { before = null } = {}) {
   const segs = [];
   let t = 0;
   for (const sh of chosen) {
     for (let i = sh.from; i < sh.to; i++) {
       const st = sb.steps[i];
+      for (const x of (before ? before(st, i, sh) : null) ?? []) {
+        segs.push({ t0: t, t1: t + x.dur, step: i, phase: x.phase, shot: sh });
+        t += x.dur;
+      }
       const d = st.type === 'move' ? Math.max(1, st.path.length - 1) * DUR.tile : (DUR[st.type] ?? DUR.other);
       segs.push({ t0: t, t1: t + d, step: i, phase: st.type, shot: sh });
       t += d;

@@ -1,12 +1,12 @@
 # Storyboards: a turn as data for replay viewers
 
 A storyboard is one turn as plain JSON: the board at the turn's start, then the turn's actions as
-steps, with the results the game recorded (damage, captures). `web/replay.html` plays one as a whole
-turn or a highlight reel, and `web/capture.mjs` records that page as a GIF or MP4.
+steps, with the results the game recorded (damage, captures). `web/replay.html` plays one, and
+`web/capture.mjs` records that page (or any page built on `web/js/replay.js`) as a GIF or MP4.
 
     awbw-replay --storyboard TURN.json > turn.storyboard.json      # from an AWBW turn record
     python3 -m http.server 8000 --bind 127.0.0.1                    # from the repo root
-    open 'http://127.0.0.1:8000/web/replay.html?sb=PATH&mode=reel&art=libaw'
+    open 'http://127.0.0.1:8000/web/replay.html?sb=PATH&art=libaw&camera=1'
     node web/capture.mjs 'http://127.0.0.1:8000/web/replay.html?sb=PATH' out/reel --gif --mp4
 
 ## Format (version 1)
@@ -14,7 +14,7 @@ turn or a highlight reel, and `web/capture.mjs` records that page as a GIF or MP
     {"format": "libaw-storyboard", "version": 1, "day": 11, "player": 101,
      "names": {"101": "...", "102": "..."}, "countries": {"101": "os", "102": "bm"},
      "start": <state, as the socket API's "state" message carries it>,
-     "steps": [...], "captions": ["..."]?, "crawl": "..."?}
+     "steps": [...]}
 
 Steps, in order:
 
@@ -29,14 +29,13 @@ Steps, in order:
 | `end` | `next` (the next player) |
 | `other` | `action` (a record this version does not show) |
 
-`captions` (one per highlight) and `crawl` (a ticker line along the bottom) are optional extras a
-caller adds; without captions the viewer writes plain ones from the steps.
+Viewers ignore fields they don't know, so a caller can carry its own extras in a storyboard.
 
-## Highlights
+## Playing part of a turn
 
-`web/js/story.js` groups steps into shots (a unit's move with what it did there) and scores each:
-army value destroyed on both sides (a kill counts 1.5x), completed captures (an HQ most), powers.
-A reel plays the top three in the order they happened, zoomed to each.
+`web/js/story.js` groups steps into shots (a unit's move with what it did there) and lays out a
+timeline. `Replay` (web/js/replay.js) plays all shots by default; a caller can pass the shots it
+wants, add phases of its own ahead of a step (`before`) and draw them (`overlays`).
 
 ## Art
 

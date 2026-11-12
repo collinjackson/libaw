@@ -1,8 +1,9 @@
-// Plays a storyboard (docs/storyboard.md) on a Board: the whole turn, or a highlight reel. Time
-// based: renderAt(t) draws the frame at t seconds, so the page's playback and a headless capture
-// (frame by frame) show the same thing.
+// Plays a storyboard (docs/storyboard.md) on a Board: the whole turn, or the shots a caller
+// picks. Time based: renderAt(t) draws the frame at t seconds, so the page's playback and a
+// headless capture (frame by frame) show the same thing. Callers can add phases of their own
+// (timeline `before`) and draw them (`overlays`).
 import { Board, TILE } from './board.js';
-import { statesOf, shots, highlights, timeline, segmentAt, alongPath } from './story.js';
+import { statesOf, shots as allShots, timeline, segmentAt, alongPath } from './story.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const ease = (p) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
@@ -15,18 +16,22 @@ function el(name, attrs, parent) {
 }
 
 export class Replay {
-  /** opts: {data: {units, terrain, tmap}, art, mode: 'reel' | 'full', n: highlights in a reel,
-   *  camera: zoom to each shot (default on in a reel), onShot(shot, index)}. */
-  constructor(svg, sb, { data, art = null, mode = 'reel', n = 3, camera = mode === 'reel', onShot = () => {} } = {}) {
+  /** opts: {data: {units, terrain, tmap}, art, shots: which to play (default all, in order),
+   *  camera: zoom to each shot, before: timeline hook (story.timeline), overlays: {phase:
+   *  ({layer, box, p, seg, st, before, after, replay}) => void} to draw a caller's phases (or
+   *  replace a built-in one), onShot(shot, index)}. */
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, before = null, overlays = {}, onShot = () => {} } = {}) {
+    this.art = art;
     this.sb = sb;
     this.data = data;
     this.board = new Board(svg, data.tmap, { art });
     this.states = statesOf(sb);
     this.order = sb.start.players.map((p) => p.id);
-    this.shots = mode === 'reel' ? highlights(sb, data, n) : shots(sb, data, this.states);
-    this.tl = timeline(sb, this.shots);
+    this.shots = shots ?? allShots(sb);
+    this.tl = timeline(sb, this.shots, { before });
     this.duration = this.tl.duration;
     this.camera = camera;
+    this.overlays = overlays;
     this.onShot = onShot;
     this.lastShot = null;
   }
@@ -51,7 +56,11 @@ export class Replay {
     const st = this.sb.steps[seg.step];
     const before = this.states[seg.step], after = this.states[seg.step + 1];
     let state = after, fx = null;
-    if (seg.phase === 'move') {
+    const overlay = this.overlays[seg.phase];
+    if (overlay) {
+      state = before;
+      fx = () => overlay({ layer: this.fxLayer, box: this.boxFor(seg.shot).map((v) => v * TILE), p, seg, st, before, after, replay: this });
+    } else if (seg.phase === 'move') {
       state = JSON.parse(JSON.stringify(before));
       const u = state.units[st.unit_id];
       if (u) { [u.x, u.y] = alongPath(st.path, ease(p)); u.moved = false; }
@@ -67,7 +76,7 @@ export class Replay {
     } else if (seg.phase === 'build') {
       fx = () => this.flash(st.unit.x, st.unit.y, 1 - p, 'fx-build');
     }
-    // Units that acted keep their colour in a replay: greyed units make a dull reel.
+    // Units that acted keep their colour: a replay greyed out as it goes is hard to follow.
     const shown = { ...state, units: Object.fromEntries(Object.entries(state.units).map(([k, u]) => [k, { ...u, moved: false }])) };
     this.board.draw(shown, { order: this.order, mirrorOdd: true });
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
@@ -75,6 +84,9 @@ export class Replay {
     this.setCamera(seg, p);
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
   }
+
+  /** The phase playing at t ('move', 'fire', ...). */
+  phaseAt(t) { return segmentAt(this.tl, t)?.seg.phase ?? null; }
 
   setCamera(seg) {
     const [x, y, w, h] = this.boxFor(seg.shot);

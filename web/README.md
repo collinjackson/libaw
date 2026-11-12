@@ -21,8 +21,7 @@ localStorage, so a reload takes the seat back.
   `assets/LICENSE.md`). Team colours come from CSS variables.
 - `states/skirmish.json`: an original two-player map at day 1 (`states/make_skirmish.py [CO1] [CO2]`).
 - `parity.html` + `parity.json`: UI feature parity with AWBW's game page.
-- `replay.html` + `js/replay.js`, `js/story.js`, `js/art.js`: play a turn's storyboard, whole or as a
-  highlight reel, in libaw art or AWBW's (loaded from AWBW's site); `capture.mjs` records it as GIF/MP4.
-  See docs/storyboard.md.
+- `replay.html` + `js/replay.js`, `js/story.js`, `js/art.js`: play a turn's storyboard in libaw art or
+  AWBW's (loaded from AWBW's site); `capture.mjs` records it as GIF/MP4. See docs/storyboard.md.
 - `test/headless.mjs`: plays a game against a running server using the page's own modules
   (`node web/test/headless.mjs ws://127.0.0.1:8765`).

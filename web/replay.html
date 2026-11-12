@@ -7,18 +7,11 @@
 <link rel="stylesheet" href="style.css">
 <style>
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px system-ui, sans-serif; }
-  .stage { position: relative; max-width: 960px; margin: 16px auto; padding: 0 16px; }
+  .stage { max-width: 960px; margin: 16px auto; padding: 0 16px; }
   .screen { position: relative; overflow: hidden; border-radius: 12px; background: #10141c; }
   .screen svg { display: block; width: 100%; height: auto; }
-  .caption { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; padding: 0 24px; pointer-events: none; }
-  .caption span { display: inline-block; background: rgba(0,0,0,.78); color: #fff; font: 600 clamp(13px, 2.3vw, 20px)/1.35 system-ui, sans-serif;
-    padding: 6px 12px; border-radius: 6px; max-width: 90%; }
-  .crawl { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; background: #0b0d12; color: #e9edf5; overflow: hidden;
-    border-top: 2px solid #f2b53a; font: 600 15px/30px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
-  .crawl .tape { position: absolute; left: 0; top: 0; will-change: transform; }
-  .crawl .up { color: #6fdc8c; } .crawl .down { color: #ff7b72; }
-  .controls { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
-  .controls input[type=range] { flex: 1; }
+  .controls { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+  .controls input[type=range] { flex: 1; min-width: 120px; }
   .fx-hit { fill: #fff6b0; stroke: #ffb020; stroke-width: 3; }
   .fx-boom { fill: #ffb020; stroke: #e5603b; stroke-width: 4; }
   .fx-build { fill: none; stroke: #fff; stroke-width: 3; }
@@ -27,7 +20,7 @@
   .fx-cap { fill: #fff; stroke: #000; stroke-width: 3; paint-order: stroke; font: 900 15px system-ui, sans-serif; text-anchor: middle; }
   .fx-cap.done { fill: #f2b53a; font-size: 13px; }
   .fx-power-bar { fill: #000; }
-  .fx-power { fill: #f2b53a; font: 900 30px system-ui, sans-serif; text-anchor: middle; letter-spacing: .04em; }
+  .fx-power { fill: #f2b53a; font: 900 30px system-ui, sans-serif; text-anchor: middle; }
   body.capture .stage { margin: 0; padding: 0; max-width: none; } body.capture .controls, body.capture .meta { display: none; }
   body.capture .screen { border-radius: 0; }
 </style>
@@ -36,24 +29,20 @@
 <div id="sprites" hidden></div>
 <div class="stage">
   <p class="meta" id="meta">Loading…</p>
-  <div class="screen" id="screen">
-    <svg id="board"></svg>
-    <div class="caption" id="caption"><span hidden></span></div>
-    <div class="crawl" id="crawl" hidden><div class="tape" id="tape"></div></div>
-  </div>
+  <div class="screen" id="screen"><svg id="board"></svg></div>
   <div class="controls">
     <button id="btn-play">Play</button>
     <input id="scrub" type="range" min="0" max="1000" value="0">
-    <select id="mode"><option value="reel">Highlights</option><option value="full">Whole turn</option></select>
-    <select id="art"><option value="awbw">AWBW art</option><option value="libaw">libaw art</option></select>
+    <label><input id="camera" type="checkbox"> Follow the action</label>
+    <select id="art"><option value="libaw">libaw art</option><option value="awbw">AWBW art</option></select>
   </div>
 </div>
 <script type="module">
 import { Replay } from './js/replay.js';
 import { awbwArt } from './js/art.js';
 
-// ?sb=URL of a storyboard JSON (awbw-replay --storyboard TURN.json), &mode=reel|full, &art=awbw|libaw,
-// &capture=1 (no controls; window.__replay.renderAt(t) for a headless recorder).
+// ?sb=URL of a storyboard (awbw-replay --storyboard TURN.json), &art=libaw|awbw, &camera=1,
+// &capture=1 (no controls; window.__replay.renderAt(t) for web/capture.mjs).
 const q = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 if (q.get('capture')) document.body.classList.add('capture');
@@ -66,55 +55,26 @@ const [units, terrain, tmap, sprites, sb] = await Promise.all([
   fetch(q.get('sb')).then((r) => r.json()),
 ]);
 $('sprites').innerHTML = sprites;
-$('mode').value = q.get('mode') || 'reel';
-$('art').value = q.get('art') || 'awbw';
+$('art').value = q.get('art') || 'libaw';
+$('camera').checked = !!q.get('camera');
 const name = (id) => sb.names?.[id] ?? `Player ${id}`;
-
-// A plain caption per shot from the record, until a storyboard brings its own (sb.captions[i]).
-function caption(shot, i, rp) {
-  if (sb.captions?.[i]) return sb.captions[i];
-  const st = sb.steps[shot.to - 1], before = rp.states[shot.to - 1];
-  const kind = (id) => before.units[id]?.kind ?? 'unit';
-  const owner = (id) => name(before.units[id]?.owner);
-  if (st.type === 'fire' && st.defender) {
-    const d = st.defender, hp0 = Math.ceil((before.units[d.unit_id]?.hp.hi ?? 100) / 10);
-    return d.display_hp <= 0 ? `${owner(st.attacker.unit_id)}'s ${kind(st.attacker.unit_id)} destroys ${owner(d.unit_id)}'s ${kind(d.unit_id)}.`
-      : `${owner(st.attacker.unit_id)}'s ${kind(st.attacker.unit_id)} hits ${kind(d.unit_id)}: ${hp0} → ${d.display_hp} HP.`;
-  }
-  if (st.type === 'capture') return st.done ? `${name(sb.player)} captures it.` : `${name(sb.player)} is capturing: ${st.capture} left.`;
-  if (st.type === 'power') return `${name(st.player)} fires ${st.name}.`;
-  if (st.type === 'build') return `${name(sb.player)} builds a ${st.unit.kind}.`;
-  return '';
-}
 
 let rp, stop = null;
 function setup() {
   if (stop) stop();
   const art = $('art').value === 'awbw' ? awbwArt(sb.countries) : null;
-  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, mode: $('mode').value,
-    onShot: (shot, i) => { const s = $('caption').firstElementChild; const c = caption(shot, i, rp); s.textContent = c; s.hidden = !c; } });
-  $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${rp.shots.length} ${$('mode').value === 'reel' ? 'highlights' : 'shots'}, ${rp.duration.toFixed(1)} s`;
-  if (sb.crawl) { $('crawl').hidden = false; $('tape').innerHTML = (sb.crawl_html ?? escapeHtml(sb.crawl)) + '&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;'; $('tape').innerHTML += $('tape').innerHTML; }
-  rp.renderAt(0);
+  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked });
+  $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${sb.steps.length} steps, ${rp.duration.toFixed(1)} s`;
+  renderAt(0);
 }
-const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function crawlAt(t) {
-  const tape = $('tape'); if ($('crawl').hidden) return;
-  const half = tape.scrollWidth / 2 || 1;
-  tape.style.transform = `translateX(${-((t * 90) % half)}px)`;
-}
-function renderAt(t) { rp.renderAt(t); crawlAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); }
+function renderAt(t) { rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); }
 setup();
-$('mode').onchange = $('art').onchange = setup;
+$('art').onchange = $('camera').onchange = setup;
 $('scrub').oninput = () => { if (stop) { stop(); stop = null; $('btn-play').textContent = 'Play'; } renderAt((rp.duration * $('scrub').value) / 1000); };
 $('btn-play').onclick = () => {
   if (stop) { stop(); stop = null; $('btn-play').textContent = 'Play'; return; }
-  const from = (rp.duration * $('scrub').value) / 1000;
   $('btn-play').textContent = 'Pause';
-  const t0 = performance.now() - from * 1000;
-  let on = true; stop = () => { on = false; };
-  const tick = (now) => { if (!on) return; const t = (now - t0) / 1000; if (t >= rp.duration) { renderAt(rp.duration); stop = null; $('btn-play').textContent = 'Play'; return; } renderAt(t); requestAnimationFrame(tick); };
-  requestAnimationFrame(tick);
+  stop = rp.play({ from: (rp.duration * $('scrub').value) / 1000, onEnd: () => { stop = null; $('btn-play').textContent = 'Play'; } });
 };
 window.__replay = { get duration() { return rp.duration; }, renderAt, ready: true };
 </script>

@@ -17,7 +17,6 @@ const sb = {
     { type: 'end', next: 2 },
   ],
 };
-const data = { units: { Tank: { cost: 7000 }, Infantry: { cost: 1000 }, Mech: { cost: 3000 } }, terrain: { 34: { name: 'City' } } };
 
 const st = S.statesOf(sb);
 assert.equal(st.length, sb.steps.length + 1);
@@ -27,20 +26,17 @@ assert.equal(st[4].buildings[0][2].capture, 10);
 assert.equal(st[5].units[10].kind, 'Mech');
 assert.equal(sb.start.units[7].x, 1, 'applyStep leaves its input alone');
 
-const shots = S.shots(sb, data);
+const shots = S.shots(sb);
 assert.deepEqual(shots.map((s) => s.kind), ['fire', 'capture', 'build']);
-assert.equal(shots[0].score, 1000 * 10 / 10 * 1.5, 'a kill counts 1.5x its value');
-const hl = S.highlights(sb, data, 2);
-assert.deepEqual(hl.map((s) => s.kind), ['fire', 'capture'], 'top 2, in the order they happened');
-
+assert.deepEqual(shots[0].focus, [3, 1], 'a fight is framed on the defender');
+const hl = [shots[0], shots[1]];
 const tl = S.timeline(sb, hl);
 assert.ok(tl.duration > 2 && tl.duration < 5);
 assert.equal(S.segmentAt(tl, 0).seg.phase, 'move');
 assert.equal(S.segmentAt(tl, tl.duration).seg.phase, 'hold');
 assert.deepEqual(S.alongPath([[0, 0], [2, 0], [2, 2]], 0.5), [2, 0]);
-// A focus on the capture puts it first, ahead of the louder kill.
-const focused = S.highlights({ ...sb, focus: [{ type: 'capture', done: false, weight: 3 }] }, data, 1);
-assert.equal(focused[0].kind, 'capture');
-const kill = S.highlights({ ...sb, focus: [{ type: 'fire', kill: true, kind: 'Tank', weight: 9 }] }, data, 1);
-assert.equal(kill[0].kind, 'fire', 'a focus that matches nothing changes nothing');
+// A caller's own phase ahead of a fight.
+const extra = S.timeline(sb, hl, { before: (st) => (st.type === 'fire' ? [{ phase: 'cutaway', dur: 1 }] : []) });
+assert.equal(extra.duration, tl.duration + 1);
+assert.equal(extra.segs.find((s) => s.phase === 'cutaway').step, 1);
 console.log('story ok');
