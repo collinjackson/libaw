@@ -148,8 +148,9 @@ pub struct State {
     pub banned: Vec<String>,
     /// Units a player may have at most, carried ones included: at the limit the generator
     /// offers no builds and Sensei's powers spawn no further (the simulator applies a
-    /// recorded build either way). 50 is AWBW's default and every league game's setting;
-    /// the records don't carry it. None: no limit.
+    /// recorded build either way). The records don't carry the setting, and AWBW's custom
+    /// games can raise it (JuggerMaster's reach 60), so the default is no limit; league games
+    /// use `rules::LEAGUE_UNIT_LIMIT`.
     #[serde(default = "default_unit_limit")]
     pub unit_limit: Option<u32>,
     /// Capture limit: a player who owns at least this many income properties after
@@ -160,7 +161,7 @@ pub struct State {
 }
 
 pub fn default_unit_limit() -> Option<u32> {
-    Some(50)
+    None
 }
 
 pub fn default_bans() -> Vec<String> {

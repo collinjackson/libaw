@@ -346,7 +346,7 @@ fn no_builds_at_the_unit_limit() {
     assert!(at_unit_limit(&s, me) && awbw_engine::actions::builds(&s).is_empty());
     s.unit_limit = None;
     assert!(!awbw_engine::actions::builds(&s).is_empty());
-    assert_eq!(state().unit_limit, Some(50), "AWBW's default");
+    assert_eq!(state().unit_limit, None, "records don't carry the limit, so none by default");
 }
 
 #[test]

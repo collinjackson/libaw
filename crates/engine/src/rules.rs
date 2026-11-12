@@ -136,6 +136,9 @@ pub fn is_urban_property(terrain: u16) -> bool {
 
 /// A league game's capture limit: 70% of the map's income properties, rounded down (what
 /// the public pages of seven recorded league games show).
+/// AWBW's league games (and its default for new games): 50 units a player.
+pub const LEAGUE_UNIT_LIMIT: u32 = 50;
+
 pub fn league_capture_limit(s: &State) -> u32 {
     (s.buildings.values().filter(|b| is_income_property(b.terrain)).count() * 7 / 10) as u32
 }

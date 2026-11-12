@@ -102,6 +102,10 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     if let Ok(v) = std::env::var("MATCH_CAPTURE_LIMIT") {
         s.capture_limit = if v == "league" { Some(awbw_engine::rules::league_capture_limit(&s)) } else { v.parse().ok() };
     }
+    // MATCH_UNIT_LIMIT: "league" (AWBW's 50) or a number of units. Default: no limit.
+    if let Ok(v) = std::env::var("MATCH_UNIT_LIMIT") {
+        s.unit_limit = if v == "league" { Some(awbw_engine::rules::LEAGUE_UNIT_LIMIT) } else { v.parse().ok() };
+    }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }
@@ -274,6 +278,10 @@ pub fn suggest(args: &[String]) {
     let start: Value = serde_json::from_str(&std::fs::read_to_string(&args[0]).expect("turn file")).expect("json");
     let agent = Agent::parse(&args[1]);
     let mut s = state_from(&start);
+    // MATCH_UNIT_LIMIT: "league" (AWBW's 50) or a number of units. Default: no limit.
+    if let Ok(v) = std::env::var("MATCH_UNIT_LIMIT") {
+        s.unit_limit = if v == "league" { Some(awbw_engine::rules::LEAGUE_UNIT_LIMIT) } else { v.parse().ok() };
+    }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }
