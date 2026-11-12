@@ -528,7 +528,7 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     let def = s.unit_at(target.0, target.1).cloned().ok_or("no target")?;
     // Sonja's Counter Break: while her super lasts (through the opponent's turn), a defender
     // that can counter strikes first, without her x1.5 counter bonus; the attacker then fires
-    // with what's left, and there's no second counter.
+    // with what's left, as if countering, and there's no second counter.
     {
         let counter_break = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
             && dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind);
@@ -554,7 +554,9 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
             let att = s.units.get(&aid).cloned().unwrap();
             let def = s.units.get(&def.id).cloned().unwrap();
             let (lo, hi) = co::luck(&co_of(s, att.owner), &pw(s, att.owner));
-            let dmg = damage(s, &att, &def, luck(lo, hi), false);
+            // AWBW resolves the attacker's strike here as a counterattack, so an attacking
+            // Sonja, or Kanbei under Samurai Spirit, gets the x1.5 counter bonus on it.
+            let dmg = damage(s, &att, &def, luck(lo, hi), true);
             if uses_primary(&att, &def.kind) {
                 s.units.get_mut(&aid).unwrap().ammo -= 1;
             }

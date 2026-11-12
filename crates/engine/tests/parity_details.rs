@@ -354,3 +354,28 @@ fn an_enemy_sonjas_units_do_not_show_their_hp() {
         assert_eq!(fog::player_view(&s, foe).units[&hers].hp, Hp::exact(40), "her own view");
     }
 }
+
+#[test]
+fn striking_into_sonjas_super_counts_as_a_counterattack() {
+    // Kanbei under Samurai Spirit attacks a Sonja Tank while her Counter Break is on: she
+    // strikes first, then his strike gets his x1.5 counter bonus.
+    let (mut s, me, foe) = board("Kanbei", "S", "Sonja");
+    s.player_mut(foe).unwrap().power = "S".into();
+    let (here, there) = land_pair(&s);
+    let mine = add(&mut s, unit(1, me, "Tank", here));
+    let hers = add(&mut s, unit(2, foe, "Tank", there));
+    let before = s.clone();
+    sim::step(&mut s, &Action::Move { unit: mine, path: vec![here], then: Then::Attack { target: there } }, &mut avg).unwrap();
+    // Her first strike, at her average luck and without her own counter bonus.
+    let (lo, hi) = co::luck("Sonja", "S");
+    let first = sim::damage(&before, &before.units[&hers], &before.units[&mine], avg(lo, hi), false);
+    assert_eq!(s.units[&mine].hp, Hp::exact(100 - first));
+    // His strike with what is left, as a counterattack.
+    let mut after_first = before.clone();
+    after_first.units.get_mut(&mine).unwrap().hp = Hp::exact(100 - first);
+    let (lo, hi) = co::luck("Kanbei", "S");
+    let as_counter = sim::damage(&after_first, &after_first.units[&mine], &after_first.units[&hers], avg(lo, hi), true);
+    let as_attack = sim::damage(&after_first, &after_first.units[&mine], &after_first.units[&hers], avg(lo, hi), false);
+    assert!(as_counter > as_attack);
+    assert_eq!(s.units.get(&hers).map_or(0, |u| u.hp.hi), 100u8.saturating_sub(as_counter));
+}
