@@ -5,7 +5,7 @@
 use awbw_engine::actions::{Action, Pos, Then};
 use awbw_engine::data::tables;
 use awbw_engine::rules::{base_damage_now, move_cost};
-use awbw_engine::{co, combat, sim, Hp, PlayerId, State, Unit, UnitId};
+use awbw_engine::{co, combat, sim, Hp, Player, PlayerId, State, Unit, UnitId};
 
 fn state() -> State {
     let turn: serde_json::Value = serde_json::from_str(include_str!(
@@ -249,4 +249,69 @@ fn a_cruiser_out_of_ammo_cannot_fire_at_aircraft() {
     let cruiser = unit(1, 0, "Cruiser", (0, 0));
     assert!(base_damage_now(&cruiser, "B-Copter").is_some());
     assert!(base_damage_now(&Unit { ammo: 0, ..cruiser }, "B-Copter").is_none());
+}
+
+/// My full-HP Md.Tank beside a 1 HP enemy Infantry: attacking destroys it.
+fn kill_last_unit(s: &mut State, me: PlayerId, victim: PlayerId) {
+    let (here, there) = land_pair(s);
+    let tank = add(s, unit(901, me, "Md.Tank", here));
+    add(s, Unit { hp: Hp::exact(5), ..unit(902, victim, "Infantry", there) });
+    sim::step(s, &Action::Move { unit: tank, path: vec![here], then: Then::Attack { target: there } }, &mut avg).unwrap();
+    assert!(!s.units.contains_key(&902));
+}
+
+#[test]
+fn losing_the_last_unit_is_a_rout_on_any_day() {
+    let (mut s, me, foe) = board("Andy", "N", "Andy");
+    s.day = 1;
+    kill_last_unit(&mut s, me, foe);
+    assert!(s.player(foe).unwrap().eliminated);
+    assert_eq!(sim::winner(&s), Some(s.player(me).unwrap().team.clone()));
+}
+
+#[test]
+fn a_player_who_has_no_units_yet_is_not_out() {
+    let (mut s, me, _) = board("Andy", "N", "Andy");
+    s.day = 5;
+    add(&mut s, unit(1, me, "Infantry", (4, 4)));
+    assert_eq!(sim::winner(&s), None);
+}
+
+#[test]
+fn with_three_players_a_rout_frees_the_losers_properties() {
+    let (mut s, me, foe) = board("Andy", "N", "Andy");
+    // A third player, holding two of the second player's properties, one of them an HQ.
+    let third: PlayerId = s.players.iter().map(|p| p.id).max().unwrap() + 1;
+    let order = s.players.len() as u32;
+    s.players.push(Player { id: third, team: third.to_string(), order, ..s.player(foe).unwrap().clone() });
+    add(&mut s, unit(50, foe, "Infantry", (0, 0))); // the second player plays on
+    let held: Vec<Pos> = s.buildings.iter().filter(|(_, b)| b.owner == Some(foe)).map(|(k, _)| *k).take(2).collect();
+    let hq = *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some("HQ")).unwrap().0;
+    for (i, k) in held.iter().enumerate() {
+        let b = s.buildings.get_mut(k).unwrap();
+        b.owner = Some(third);
+        if i == 0 {
+            b.terrain = hq;
+        }
+    }
+    kill_last_unit(&mut s, me, third);
+    assert!(s.player(third).unwrap().eliminated);
+    assert_eq!(sim::winner(&s), None, "two players are still in");
+    for k in &held {
+        assert_eq!(s.buildings[k].owner, None);
+    }
+    let was_hq = tables().tile(s.buildings[&held[0]].terrain);
+    assert_eq!((was_hq.building.as_deref(), was_hq.name.starts_with("Neutral")), (Some("City"), true));
+
+    // Put out on their own turn (deleting their last unit), a player doesn't finish it.
+    let (mut s, me, foe) = board("Andy", "N", "Andy");
+    let third: PlayerId = s.players.iter().map(|p| p.id).max().unwrap() + 1;
+    let order = s.players.len() as u32;
+    s.players.push(Player { id: third, team: third.to_string(), order, ..s.player(foe).unwrap().clone() });
+    add(&mut s, unit(50, foe, "Infantry", (0, 0)));
+    add(&mut s, unit(51, third, "Infantry", (0, 1)));
+    let last = add(&mut s, unit(1, me, "Infantry", (4, 4)));
+    sim::step(&mut s, &Action::Move { unit: last, path: vec![(4, 4)], then: Then::Delete }, &mut avg).unwrap();
+    assert!(s.player(me).unwrap().eliminated);
+    assert_ne!(s.current, me, "the turn has passed on");
 }

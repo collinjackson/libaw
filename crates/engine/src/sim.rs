@@ -624,6 +624,42 @@ fn eliminate(s: &mut State, gone: PlayerId, by: PlayerId) {
 /// Apply one action for the player to move. The action should come from
 /// `actions::legal_actions`; this checks only what it needs to stay consistent.
 pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
+    let fielded: Vec<PlayerId> = s.players.iter().map(|p| p.id).filter(|&p| s.units.values().any(|u| u.owner == p)).collect();
+    apply(s, a, luck)?;
+    // AWBW checks for a rout whenever a unit is lost (in a fight, by deletion, out of fuel).
+    for p in fielded {
+        rout(s, p);
+    }
+    // A player put out during their own turn doesn't finish it.
+    if winner(s).is_none() && s.player(s.current).is_some_and(|p| p.eliminated) {
+        end_turn(s)?;
+    }
+    Ok(())
+}
+
+/// A player whose last unit has just been destroyed is out, on any day. (One who simply has
+/// no units, having built none, is not.) If the game goes on, their properties turn neutral,
+/// the HQ into a neutral city.
+fn rout(s: &mut State, pid: PlayerId) {
+    // A view with units missing proves nothing.
+    if s.partial || s.units.values().any(|u| u.owner == pid) || s.player(pid).is_none_or(|p| p.eliminated) {
+        return;
+    }
+    s.player_mut(pid).unwrap().eliminated = true;
+    if winner(s).is_some() {
+        return;
+    }
+    let w = s.width as usize;
+    let theirs: Vec<(u16, u16)> = s.buildings.iter().filter(|(_, b)| b.owner == Some(pid)).map(|(&k, _)| k).collect();
+    for k in theirs {
+        let b = s.buildings.get_mut(&k).unwrap();
+        (b.owner, b.capture) = (None, CAPTURE_POINTS);
+        b.terrain = crate::awbw::owned_tile(b.terrain, None);
+        s.terrain[k.1 as usize * w + k.0 as usize] = b.terrain;
+    }
+}
+
+fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
     match a {
         Action::EndTurn => end_turn(s),
         Action::Power { kind } => use_power(s, kind, None),
@@ -905,10 +941,13 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
 
 /// End the current player's turn and start the next living player's.
 pub fn end_turn(s: &mut State) -> Result<(), String> {
-    let order: Vec<PlayerId> = s.players.iter().filter(|p| !p.eliminated).map(|p| p.id).collect();
-    let i = order.iter().position(|&p| p == s.current).ok_or("current player not in order")?;
-    let next = order[(i + 1) % order.len()];
-    let day = if i + 1 == order.len() { s.day + 1 } else { s.day };
+    // The next player still in the game, in turn order (the current one may just have
+    // been put out); a new day starts when the order wraps around.
+    let n = s.players.len();
+    let i = s.players.iter().position(|p| p.id == s.current).ok_or("current player not in order")?;
+    let j = (1..=n).map(|k| (i + k) % n).find(|&j| !s.players[j].eliminated).ok_or("no players left")?;
+    let next = s.players[j].id;
+    let day = if j <= i { s.day + 1 } else { s.day };
     s.move_override.clear();
     start_turn(s, next, day);
     apc_supply(s, next);
@@ -918,10 +957,9 @@ pub fn end_turn(s: &mut State) -> Result<(), String> {
 /// The winner, if the game is over: the last player (or team) standing. A player with no
 /// units after day 1 is out (AWBW's rout rule).
 pub fn winner(s: &State) -> Option<String> {
-    let alive: Vec<&Player> = s.players.iter()
-        .filter(|p| !p.eliminated)
-        .filter(|p| s.day <= 1 || s.partial || s.units.values().any(|u| u.owner == p.id))
-        .collect();
+    // Out means eliminated: by capture, or by losing their last unit (`rout`). Having no
+    // units is not enough.
+    let alive: Vec<&Player> = s.players.iter().filter(|p| !p.eliminated).collect();
     let teams: std::collections::BTreeSet<&str> = alive.iter().map(|p| p.team.as_str()).collect();
     (teams.len() == 1).then(|| teams.into_iter().next().unwrap().to_string())
 }
