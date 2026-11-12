@@ -94,16 +94,49 @@ export function shots(sb, data, states = statesOf(sb)) {
       tiles.push([last.unit.x, last.unit.y]); focus = [last.unit.x, last.unit.y];
       score += 100;
     }
-    out.push({ from: i, to: j, kind: last.type, score, focus, player: sb.player, tiles });
+    score += focusBonus(sb.focus, last, before);
+    const dk = last.type === 'fire' && last.defender ? before.units[last.defender.unit_id]?.kind : null;
+    const sig = `${last.type}:${dk ?? ''}:${last.type === 'fire' ? (last.defender?.display_hp ?? 1) <= 0 : !!last.done}`;
+    out.push({ from: i, to: j, kind: last.type, score, focus, player: sb.player, tiles, sig });
     i = j - 1;
   }
   return out;
 }
 
+/** sb.focus (optional, from whoever made the storyboard): what moved the game, as
+ *  [{type: 'fire', kill: true, kind: 'Infantry', owner: 102, weight}, {type: 'capture', done, weight},
+ *  {type: 'power', weight}, {type: 'build', kind, weight}]. A shot that matches one ranks by its
+ *  weight ahead of any that don't, so a reel shows what the odds turned on, not just the loudest hit. */
+export function focusBonus(focus, last, before) {
+  let best = 0;
+  for (const f of focus ?? []) {
+    if (f.type !== last.type) continue;
+    if (last.type === 'fire') {
+      const d = last.defender;
+      const u = d && before.units[d.unit_id];
+      if (!u || (f.kind && u.kind !== f.kind) || (f.owner != null && u.owner !== f.owner)) continue;
+      if (f.kill && d.display_hp > 0) continue;
+    } else if (last.type === 'capture') {
+      if (f.done != null && !!last.done !== !!f.done) continue;
+    } else if (last.type === 'build') {
+      if (f.kind && last.unit.kind !== f.kind) continue;
+    }
+    best = Math.max(best, 1e5 * (f.weight ?? 1));
+  }
+  return best;
+}
+
 /** The n biggest shots, back in the order they happened. */
-export function highlights(sb, data, n = 3) {
+export function highlights(sb, data, n = 3, perSig = 2) {
   const all = shots(sb, data);
-  const top = [...all].filter((s) => s.score > 0).sort((a, b) => b.score - a.score).slice(0, n);
+  // At most perSig shots alike (three Infantry kills in a row make a dull reel).
+  const seen = new Map(), top = [];
+  for (const s of [...all].filter((s) => s.score > 0).sort((a, b) => b.score - a.score)) {
+    if ((seen.get(s.sig) ?? 0) >= perSig) continue;
+    seen.set(s.sig, (seen.get(s.sig) ?? 0) + 1);
+    top.push(s);
+    if (top.length >= n) break;
+  }
   return top.sort((a, b) => a.from - b.from);
 }
 

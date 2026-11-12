@@ -38,4 +38,9 @@ assert.ok(tl.duration > 2 && tl.duration < 5);
 assert.equal(S.segmentAt(tl, 0).seg.phase, 'move');
 assert.equal(S.segmentAt(tl, tl.duration).seg.phase, 'hold');
 assert.deepEqual(S.alongPath([[0, 0], [2, 0], [2, 2]], 0.5), [2, 0]);
+// A focus on the capture puts it first, ahead of the louder kill.
+const focused = S.highlights({ ...sb, focus: [{ type: 'capture', done: false, weight: 3 }] }, data, 1);
+assert.equal(focused[0].kind, 'capture');
+const kill = S.highlights({ ...sb, focus: [{ type: 'fire', kill: true, kind: 'Tank', weight: 9 }] }, data, 1);
+assert.equal(kill[0].kind, 'fire', 'a focus that matches nothing changes nothing');
 console.log('story ok');
