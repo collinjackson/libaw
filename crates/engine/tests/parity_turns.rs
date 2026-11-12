@@ -4,7 +4,7 @@
 
 use awbw_engine::actions::{Action, Pos, Then};
 use awbw_engine::data::tables;
-use awbw_engine::rules::{can_unload_from, movement_range};
+use awbw_engine::rules::{at_unit_limit, can_unload_from, is_income_property, league_capture_limit, movement_range};
 use awbw_engine::{fog, sim, Building, Hp, State, Unit, UnitId};
 
 fn state() -> State {
@@ -327,4 +327,71 @@ fn a_unit_beside_a_hidden_unit_or_a_property_under_it_reveals_it() {
     let (mut s, _, tiles) = hidden_stealth_board(2);
     s.buildings.insert(tiles[1], Building { terrain: building_id("City"), owner: Some(me), capture: 20 });
     assert!(fog::player_view(&s, me).units.contains_key(&7000));
+}
+
+#[test]
+fn no_builds_at_the_unit_limit() {
+    let mut s = state();
+    let me = s.current;
+    s.player_mut(me).unwrap().funds = 100_000;
+    let mine = s.units.values().filter(|u| u.owner == me).count() as u32;
+    // Free up a base so there is something to build on.
+    let base = *s.buildings.iter().find(|(_, b)| b.owner == Some(me)).unwrap().0;
+    s.buildings.get_mut(&base).unwrap().terrain = building_id("Base");
+    s.units.retain(|_, u| (u.x, u.y) != base || u.owner != me);
+    let mine = mine.min(s.units.values().filter(|u| u.owner == me).count() as u32);
+    s.unit_limit = Some(mine + 1);
+    assert!(!at_unit_limit(&s, me) && !awbw_engine::actions::builds(&s).is_empty());
+    s.unit_limit = Some(mine);
+    assert!(at_unit_limit(&s, me) && awbw_engine::actions::builds(&s).is_empty());
+    s.unit_limit = None;
+    assert!(!awbw_engine::actions::builds(&s).is_empty());
+    assert_eq!(state().unit_limit, Some(50), "AWBW's default");
+}
+
+#[test]
+fn reaching_the_capture_limit_wins() {
+    for (short_by, wins) in [(1, true), (2, false)] {
+        let mut s = state();
+        let me = s.current;
+        let foe = s.players.iter().find(|p| p.id != me).unwrap().id;
+        let id = with_co(&mut s, "Andy", "N").id;
+        let owned = s.buildings.values().filter(|b| b.owner == Some(me) && is_income_property(b.terrain)).count() as u32;
+        s.capture_limit = Some(owned + short_by);
+        // A city of the other player's, one point from falling.
+        let target = *s.buildings.iter().find(|(_, b)| b.owner == Some(foe)).unwrap().0;
+        let b = s.buildings.get_mut(&target).unwrap();
+        (b.terrain, b.capture) = (building_id("City"), 1);
+        s.units.get_mut(&id).unwrap().kind = "Infantry".into();
+        place(&mut s, id, target);
+        sim::step(&mut s, &Action::Move { unit: id, path: vec![target], then: Then::Capture }, &mut |l: i32, h: i32| (l + h) / 2).unwrap();
+        assert_eq!(s.player(foe).unwrap().eliminated, wins, "limit {short_by} above what I held");
+        assert_eq!(sim::winner(&s).is_some(), wins);
+    }
+    // League games set the limit to 70% of the map's income properties, rounded down.
+    let s = state();
+    let on_map = s.buildings.values().filter(|b| is_income_property(b.terrain)).count() as u32;
+    assert_eq!(league_capture_limit(&s), on_map * 7 / 10);
+    assert_eq!(s.capture_limit, None, "off unless set");
+}
+
+#[test]
+fn senseis_spawns_stop_at_the_unit_limit() {
+    let mut s = state();
+    let me = s.current;
+    with_co(&mut s, "Sensei", "N");
+    s.units.clear();
+    let city = building_id("City");
+    let mine: Vec<Pos> = s.buildings.iter().filter(|(_, b)| b.owner == Some(me)).map(|(k, _)| *k).collect();
+    assert!(mine.len() >= 3);
+    for k in &mine {
+        s.buildings.get_mut(k).unwrap().terrain = city;
+    }
+    s.unit_limit = Some(2);
+    assert!(sim::power_effects(&mut s, me, "Y"));
+    let mut spawned: Vec<Pos> = s.units.values().map(|u| (u.x, u.y)).collect();
+    spawned.sort_by_key(|&(x, y)| (y, x));
+    let mut by_row = mine.clone();
+    by_row.sort_by_key(|&(x, y)| (y, x));
+    assert_eq!(spawned, by_row[..2], "the first two cities, row by row");
 }

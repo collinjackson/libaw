@@ -417,11 +417,16 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
     }
     if let Some(kind) = e.spawn {
         let info = crate::data::tables().unit(kind);
-        let cities: Vec<(u16, u16)> = s.buildings.iter()
+        let mut cities: Vec<(u16, u16)> = s.buildings.iter()
             .filter(|(&(x, y), b)| b.owner == Some(pid) && s.unit_at(x, y).is_none()
                 && crate::data::tables().tile(b.terrain).building.as_deref() == Some("City"))
             .map(|(&p, _)| p).collect();
+        // AWBW walks the cities row by row and stops at the unit limit.
+        cities.sort_by_key(|&(x, y)| (y, x));
         for (x, y) in cities {
+            if at_unit_limit(s, pid) {
+                break;
+            }
             let id = s.units.keys().max().copied().unwrap_or(0) + 1;
             s.units.insert(id, Unit {
                 id, owner: pid, kind: kind.to_string(), x, y, hp: Hp::exact(90),
@@ -779,6 +784,16 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                         }
                         if let (true, Some(p)) = (hq || last_lab, prev) {
                             eliminate(s, p, u.owner);
+                        }
+                        // Capture limit: owning enough income properties wins the game
+                        // (game-1754313 turn 41 ends at 32 of 46).
+                        let owned = s.buildings.values().filter(|x| x.owner == Some(u.owner) && is_income_property(x.terrain)).count() as u32;
+                        if s.capture_limit.is_some_and(|n| owned >= n) {
+                            let captor = u.owner;
+                            let losers: Vec<PlayerId> = s.players.iter().filter(|p| !s.allied(p.id, captor)).map(|p| p.id).collect();
+                            for p in losers {
+                                s.player_mut(p).unwrap().eliminated = true;
+                            }
                         }
                     }
                     Ok(())

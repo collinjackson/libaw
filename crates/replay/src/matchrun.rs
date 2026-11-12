@@ -97,6 +97,11 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     if std::env::var("MATCH_POWERS").is_ok() {
         s.powers = true;
     }
+    // MATCH_CAPTURE_LIMIT: "league" (70% of the map's income properties, as AWBW's league
+    // games) or a number of properties. Default: off, as in AWBW's custom games.
+    if let Ok(v) = std::env::var("MATCH_CAPTURE_LIMIT") {
+        s.capture_limit = if v == "league" { Some(awbw_engine::rules::league_capture_limit(&s)) } else { v.parse().ok() };
+    }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
     }

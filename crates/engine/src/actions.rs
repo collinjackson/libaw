@@ -259,6 +259,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
 pub fn builds(s: &State) -> Vec<(Pos, String)> {
     let me = s.current;
     let Some(p) = s.player(me) else { return vec![] };
+    if at_unit_limit(s, me) {
+        return vec![];
+    }
     let mut out = vec![];
     for (&pos, b) in &s.buildings {
         if b.owner != Some(me) || s.unit_at(pos.0, pos.1).is_some() {

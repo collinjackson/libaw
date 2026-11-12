@@ -146,6 +146,21 @@ pub struct State {
     /// generator leaves them out; the simulator applies a recorded build either way.
     #[serde(default = "default_bans")]
     pub banned: Vec<String>,
+    /// Units a player may have at most, carried ones included: at the limit the generator
+    /// offers no builds and Sensei's powers spawn no further (the simulator applies a
+    /// recorded build either way). 50 is AWBW's default and every league game's setting;
+    /// the records don't carry it. None: no limit.
+    #[serde(default = "default_unit_limit")]
+    pub unit_limit: Option<u32>,
+    /// Capture limit: a player who owns at least this many income properties after
+    /// completing a capture wins. Off unless set, as in AWBW's custom games; league games
+    /// use `rules::league_capture_limit`. The records don't carry the setting.
+    #[serde(default)]
+    pub capture_limit: Option<u32>,
+}
+
+pub fn default_unit_limit() -> Option<u32> {
+    Some(50)
 }
 
 pub fn default_bans() -> Vec<String> {

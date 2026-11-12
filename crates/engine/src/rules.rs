@@ -134,6 +134,17 @@ pub fn is_urban_property(terrain: u16) -> bool {
     )
 }
 
+/// A league game's capture limit: 70% of the map's income properties, rounded down (what
+/// the public pages of seven recorded league games show).
+pub fn league_capture_limit(s: &State) -> u32 {
+    (s.buildings.values().filter(|b| is_income_property(b.terrain)).count() * 7 / 10) as u32
+}
+
+/// Has this player reached the game's unit limit? Carried units count.
+pub fn at_unit_limit(s: &State, pid: PlayerId) -> bool {
+    s.unit_limit.is_some_and(|n| s.units.values().filter(|u| u.owner == pid).count() as u32 >= n)
+}
+
 /// Which unit classes a building repairs and resupplies.
 pub fn services(terrain: u16, kind: &str) -> bool {
     let mt = tables().unit(kind).move_type.as_str();
