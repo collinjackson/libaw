@@ -33,9 +33,14 @@ try { puppeteer = (await import('puppeteer')).default; } catch {
 const browser = await puppeteer.launch({ headless: true, args: (process.env.CHROME_ARGS || '').split(' ').filter(Boolean) });
 const page = await browser.newPage();
 await page.setViewport({ width, height: Math.round(width * 0.75), deviceScaleFactor: 1 });
+// The page's own errors, so a page that never gets ready says why.
+page.on('pageerror', (e) => console.error('page error:', e.message));
+page.on('console', (m) => { if (m.type() === 'error') console.error('page console:', m.text()); });
+page.on('requestfailed', (r) => console.error('request failed:', r.url(), r.failure()?.errorText));
+page.on('response', (r) => { if (r.status() >= 400) console.error('page got', r.status(), r.url()); });
 const u = new URL(url); u.searchParams.set('capture', '1');
 await page.goto(u.toString(), { waitUntil: 'networkidle0' });
-await page.waitForFunction(() => window.__replay?.ready);
+await page.waitForFunction(() => window.__replay?.ready, { timeout: 20000 });
 const duration = await page.evaluate(() => window.__replay.duration);
 const dir = mkdtempSync(join(tmpdir(), 'libaw-capture-'));
 const n = Math.max(1, Math.ceil(duration * fps));
