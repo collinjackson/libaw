@@ -1,0 +1,26 @@
+{
+  "title": "Javier's com tower bonus counts the towers he owns at each attack, even while his power is on",
+  "source": "AWBW game 1563482, day 18 (replay ndx 102). Javier (Purple Lightning) has Tower of Power on. Sami uses Victory March and captures his only com tower in one action; then her 10 HP Md.Tank destroys his 9 HP Tank at (14,14). The position is that turn's file with the turn's first 16 actions applied (the capture, moves and fights before this attack). The kill needs a high luck roll with the tower gone; with the tower still counted, even the highest roll leaves the Tank alive, so the bonus dropped as soon as the tower changed hands. Spotted by Collin.",
+  "awbw_turn_file": "positions/game-1563482-D18-tower-lost.json",
+  "action": {
+    "move": {
+      "unit": 187366925,
+      "to": [
+        15,
+        14
+      ],
+      "then": {
+        "attack": [
+          14,
+          14
+        ]
+      }
+    }
+  },
+  "luck": "max",
+  "expect": {
+    "units": {
+      "187047359": null
+    }
+  }
+}

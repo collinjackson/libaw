@@ -25,7 +25,8 @@ Run one case (name substring): `CASE=tank-vs cargo test --release -p awbw-engine
 - `state`: the engine's state inline (see the two starter cases; coordinates are `[x, y]` from
   the top left, terrain ids are AWBW's, `hp` is AWBW's internal 0-100 as `{"lo": n, "hi": n}`).
 - `state_file`: the same, in a file next to the case.
-- `awbw_turn_file`: an AWBW replay turn as recorded (the JSON with `gameState`), next to the case.
+- `awbw_turn_file`: an AWBW replay turn as recorded (the JSON with `gameState`), next to the case
+  or under `positions/` (files there aren't run as cases).
   The quickest way to turn a replay moment into a case.
 
 **Action**:
