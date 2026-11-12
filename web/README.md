@@ -3,11 +3,6 @@
 A static browser client for `libaw-server` (docs/socket-api.md): lobby, board, play, spectate.
 Plain HTML/JS/CSS, no build step. Serve the repo root so the page can read `../data/*.json`.
 
-    web/play_flakbot.sh                      # server + page + FlakBot's engine; prints your link
-    web/play_flakbot.sh --fog --days 20      # options: TURN_FILE, --days N, --fog, --no-powers, --bot-seat 0|1
-
-Or by hand:
-
     cargo run --release -p libaw-server -- 127.0.0.1:8765
     python3 -m http.server 8000 --bind 127.0.0.1      # from the repo root
     open http://127.0.0.1:8000/web/                    # Connect, Create, Play / Watch

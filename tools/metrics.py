@@ -20,7 +20,6 @@ Metrics (one JSON object per run):
     wrong ("differ"), or don't model yet ("missing", by CO and power); "sonja_turns": turns
     whose HP we can't compare because Sonja hides it (her day-to-day, not yet modelled). Tracked apart from
     rules fidelity because it grows as powers are implemented.
-  spend_today: Claude spend so far today (tools/spend.py).
 """
 import json, os, re, subprocess, sys, time
 from pathlib import Path
@@ -121,10 +120,6 @@ def main():
         row["replay"][name] = r
     row["legal"] = {k: {"ok": a, "total": b} for k, (a, b) in row["legal"].items()}
     row["selfplay"] = run_selfplay()
-    spend = "" if os.environ.get("CI") else subprocess.run(
-        [sys.executable, "-I", str(ROOT / "tools/spend.py")], capture_output=True, text=True).stdout
-    m = re.search(r"spent today \$([\d.]+)", spend)
-    row["spend_today"] = float(m.group(1)) if m else None
     print(json.dumps(row, indent=1))
     if "--check" in sys.argv:
         base = json.loads((ROOT / "metrics/baseline.json").read_text())

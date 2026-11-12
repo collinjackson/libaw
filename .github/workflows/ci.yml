@@ -20,14 +20,11 @@ jobs:
           for f in docs/eval-harness/test-states/*.json; do
             SELFPLAY_LOG_DIR=out/logs ./target/release/awbw-replay --selfplay "$f" 2 | tee -a out/selfplay.txt
           done
-      - name: Game viewer pages
-        run: |
-          for f in out/logs/*.json; do python3 -I tools/viewer.py "$f" "out/games/$(basename "$f" .json).html"; done
       - uses: actions/upload-artifact@v4
         with:
           name: games-${{ github.sha }}
           path: |
-            out/games
+            out/logs
             out/selfplay.txt
           retention-days: 14
   replay-fidelity:

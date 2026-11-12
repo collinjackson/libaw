@@ -1,7 +1,7 @@
 //! Rules: movement, capture, combat, start of turn.
 //!
 //! Sources are AWBW's own pages and recorded games (see docs/sources.md). Anything still
-//! unmodelled is listed in NOTES.md.
+//! unmodelled is listed in docs/awbw-rule-findings.md (Open).
 
 use crate::data::tables;
 use crate::state::*;

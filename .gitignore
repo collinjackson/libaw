@@ -1,10 +1,5 @@
-.vercel/
-site/public/
 target/
-site/api/maps/
-site/api/pkg/
-.venv/
 __pycache__/
-.venv-ml/
-.cache-ml/
 web/states/local/
+.vercel/
+.env*
