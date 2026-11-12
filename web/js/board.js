@@ -18,9 +18,12 @@ function use(id, x, y, parent, extra = {}) {
 }
 
 export class Board {
-  constructor(svg, terrainMap) {
+  /** art: optional art set (web/js/art.js), {unit(u, parent, box) -> true when it drew the unit};
+   *  without one, or when it declines, the unit is drawn from assets/sprites.svg. */
+  constructor(svg, terrainMap, { art = null } = {}) {
     this.svg = svg;
     this.tmap = terrainMap;
+    this.art = art;
     this.onTile = () => {};
     this.onHover = () => {};
     svg.addEventListener('click', (e) => { const t = this.tileOf(e); if (t) this.onTile(t[0], t[1], e); });
@@ -108,10 +111,8 @@ export class Board {
       const g = el('g', { class: `unit ${cls(u.owner)}${u.moved ? ' moved' : ''}${selected === u.id ? ' selected' : ''}`, 'data-id': u.id }, units);
       const flip = mirrorOdd && idx % 2 === 1;
       const id = `u-${u.kind.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
-      if (flip) {
-        const fg = el('g', { transform: `translate(${(2 * u.x + 1) * TILE} 0) scale(-1 1)` }, g);
-        use(id, u.x, u.y, fg);
-      } else use(id, u.x, u.y, g);
+      const at = flip ? el('g', { transform: `translate(${(2 * u.x + 1) * TILE} 0) scale(-1 1)` }, g) : g;
+      if (!this.art?.unit?.(u, at, { x: u.x * TILE, y: u.y * TILE, size: TILE, flip })) use(id, u.x, u.y, at);
       const hp = displayHp(u);
       if (hp < 10) {
         el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);

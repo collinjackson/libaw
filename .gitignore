@@ -7,3 +7,4 @@ site/api/pkg/
 __pycache__/
 .venv-ml/
 .cache-ml/
+web/states/local/

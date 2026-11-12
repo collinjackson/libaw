@@ -10,6 +10,7 @@ pub mod fog;
 pub mod rules;
 pub mod sim;
 pub mod state;
+pub mod storyboard;
 pub mod view;
 
 pub use state::*;

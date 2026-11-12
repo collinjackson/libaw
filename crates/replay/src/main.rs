@@ -1518,6 +1518,13 @@ fn main() {
         matchrun::suggest(&args[2..]);
         return;
     }
+    if args.get(1).map(String::as_str) == Some("--storyboard") {
+        // awbw-replay --storyboard TURN.json: the turn as a storyboard (docs/storyboard.md) on stdout.
+        let f = args.get(2).expect("usage: awbw-replay --storyboard TURN.json");
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(f).expect("read turn")).expect("turn json");
+        println!("{}", awbw_engine::storyboard::from_awbw_turn(&v));
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--step") {
         stepcheck::run(&args[2..]);
         return;
