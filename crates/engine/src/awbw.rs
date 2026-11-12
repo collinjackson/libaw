@@ -39,6 +39,12 @@ pub fn hp_display(v: &Value) -> u8 {
     }
 }
 
+/// A unit's HP from a record: its displayed value, or anything alive when the record hides it
+/// ("?": Sonja's units, seen by her opponents).
+pub fn hp_of(v: &Value) -> Hp {
+    if v.as_str() == Some("?") { Hp { lo: 1, hi: 100 } } else { Hp::from_display(hp_display(v)) }
+}
+
 pub fn unit_from(v: &Value) -> Unit {
     Unit {
         id: num(&v["units_id"]) as u32,
@@ -46,7 +52,7 @@ pub fn unit_from(v: &Value) -> Unit {
         kind: v["units_name"].as_str().unwrap_or("?").to_string(),
         x: num(&v["units_x"]) as u16,
         y: num(&v["units_y"]) as u16,
-        hp: Hp::from_display(hp_display(&v["units_hit_points"])),
+        hp: hp_of(&v["units_hit_points"]),
         fuel: num(&v["units_fuel"]) as i32,
         ammo: num(&v["units_ammo"]) as i32,
         moved: num(&v["units_moved"]) != 0,
