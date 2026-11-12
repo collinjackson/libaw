@@ -379,3 +379,23 @@ fn striking_into_sonjas_super_counts_as_a_counterattack() {
     assert!(as_counter > as_attack);
     assert_eq!(s.units.get(&hers).map_or(0, |u| u.hp.hi), 100u8.saturating_sub(as_counter));
 }
+
+/// A unit whose HP is only known as a range (a fogged or Sonja view) is repaired at each end by
+/// the rule: the low end gains its full 20, not the top end's price (75-85 -> 95-100).
+#[test]
+fn repairs_of_an_uncertain_hp_heal_each_end_by_the_rule() {
+    let city = *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some("City")).unwrap().0;
+    for (co, lo, hi, want) in [("Andy", 75, 85, Hp { lo: 95, hi: 100 }), ("Andy", 1, 100, Hp { lo: 21, hi: 100 }),
+                               ("Andy", 50, 60, Hp { lo: 70, hi: 80 }), ("Rachel", 55, 65, Hp { lo: 85, hi: 95 })] {
+        let (mut s, me, _) = board(co, "N", "Andy");
+        let at = *s.buildings.iter().find(|(_, b)| b.owner == Some(me)).unwrap().0;
+        s.buildings.get_mut(&at).unwrap().terrain = city;
+        let mut u = unit(9_000_001, me, "Infantry", at);
+        u.hp = Hp { lo, hi };
+        let id = add(&mut s, u);
+        s.player_mut(me).unwrap().funds = 100_000;
+        let day = s.day;
+        sim::start_turn(&mut s, me, day);
+        assert_eq!(s.units[&id].hp, want, "{co} {lo}-{hi}");
+    }
+}

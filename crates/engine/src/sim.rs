@@ -104,7 +104,10 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
         let points: u8 = if top > 90 { 0 } else if top > 80 { 1 } else if top > 70 || !rachel { 2 } else { 3 };
         let cost = per_hp * points as i64;
         let full_from = if rachel { 70 } else { 80 };
-        let heal = |h: u8| if h >= full_from { 100 } else { (h + points * 10).min(100) };
+        // The gain is the rule's, not the price's: with an uncertain HP the price comes from the
+        // top of the range, and the low end still gains its full 20 (Rachel 30).
+        let gain = if rachel { 30 } else { 20 };
+        let heal = |h: u8| if h >= full_from { 100 } else { (h + gain).min(100) };
         let repaired = u.hp.lo < 100 && cost <= funds;
         let m = s.units.get_mut(id).unwrap();
         if repaired {
