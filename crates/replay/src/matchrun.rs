@@ -142,6 +142,27 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         json!({"day": s.day, "to_move": seat_of(s.current), "sides": [side(0), side(1)]})
     };
     if pos_log.is_some() { positions.push(snap(&s)); }
+    // MATCH_TURNS=DIR: each turn start as an AWBW-style turn file, DIR/<game>/turn-NNN-Dd-pidP.json
+    // (what tools/mistakes.py and the replay tools read), so our own matches can be analysed
+    // like recorded games.
+    let turns_dir = std::env::var("MATCH_TURNS").ok().map(|d| format!("{d}/{name}"));
+    let mut turn_no = 0u32;
+    let write_turn = |s: &State, n: u32| {
+        if let Some(d) = &turns_dir {
+            let _ = std::fs::create_dir_all(d);
+            let f = format!("{d}/turn-{n:03}-D{}-pid{}.json", s.day, s.current);
+            let _ = std::fs::write(f, serde_json::to_vec(&to_turn_json(s, start)).unwrap_or_default());
+        }
+    };
+    if let Some(d) = &turns_dir {
+        // The turn files keep the recorded game's usernames: seats.json says which agent played
+        // which player id.
+        let seats_by_pid: serde_json::Map<String, Value> = s.players.iter()
+            .map(|p| (p.id.to_string(), json!(seats[seat_of(p.id)].name()))).collect();
+        let _ = std::fs::create_dir_all(d);
+        let _ = std::fs::write(format!("{d}/seats.json"), serde_json::to_vec_pretty(&seats_by_pid).unwrap_or_default());
+    }
+    write_turn(&s, turn_no);
     while s.day <= max_days && sim::winner(&s).is_none() {
         let i = seat_of(s.current);
         let req_seed = seed ^ (st[0].actions + st[1].actions).wrapping_mul(0x9E3779B97F4A7C15);
@@ -188,6 +209,8 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         // MATCH_DUMP=DIR: the full engine state at each turn start (DIR/<game>-d<day>-p<player>.json),
         // to replay one decision in a bot offline.
         if ended && sim::winner(&s).is_none() {
+            turn_no += 1;
+            write_turn(&s, turn_no);
             if let Ok(dir) = std::env::var("MATCH_DUMP") {
                 let f = format!("{dir}/{name}-d{:02}-p{}.json", s.day, s.current);
                 let _ = std::fs::write(f, serde_json::to_vec(&s).unwrap_or_default());
