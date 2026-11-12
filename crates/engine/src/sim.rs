@@ -51,7 +51,8 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
     let props = s.buildings.values()
         .filter(|b| b.owner == Some(next) && is_income_property(b.terrain))
         .count() as i64;
-    let fpp = s.funds_per_property + co::property_fund_increase(&co_of(s, next));
+    // Sasha's +100 per property comes on top of the game's funds setting, not instead of it.
+    let fpp = if s.funds_per_property > 0 { s.funds_per_property + co::property_fund_increase(&co_of(s, next)) } else { 0 };
     if let Some(p) = s.player_mut(next) {
         p.funds += props * fpp;
     }
@@ -529,9 +530,14 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     // that can counter strikes first, without her x1.5 counter bonus; the attacker then fires
     // with what's left, and there's no second counter.
     {
-        let first = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
-            && dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind)
-            && base_damage_now(&def, &att.kind).is_some();
+        let counter_break = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
+            && dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind);
+        // A defender that could hit the attacker by the chart but can't fire (out of ammo,
+        // no second weapon) never strikes, and AWBW then drops the attack altogether.
+        if counter_break && tables().base_damage(&def.kind, &att.kind).is_some() && base_damage_now(&def, &att.kind).is_none() {
+            return Ok(());
+        }
+        let first = counter_break && base_damage_now(&def, &att.kind).is_some();
         if first {
             let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
             let dmg = damage(s, &def, &att, luck(lo, hi), false);
@@ -702,6 +708,12 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                 Then::Join => {
                     let t = s.unit_at(end.0, end.1).filter(|o| o.id != *unit).cloned().ok_or("no join target")?;
                     let me = s.units.remove(unit).unwrap();
+                    // Cargo passes to the unit joined.
+                    for c in &me.cargo {
+                        if let Some(cu) = s.units.get_mut(c) {
+                            (cu.carried_by, cu.x, cu.y) = (Some(t.id), t.x, t.y);
+                        }
+                    }
                     let info = tables().unit(&t.kind);
                     let sum = display(hp_now(&me)) as u32 + display(hp_now(&t)) as u32;
                     let refund = sum.saturating_sub(10) as i64 * owner_price(s, t.owner, &t.kind) / 10;
@@ -709,6 +721,7 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     tm.hp = Hp::exact((sum.min(10) * 10) as u8);
                     tm.fuel = (tm.fuel + me.fuel).min(info.fuel as i32);
                     tm.ammo = (tm.ammo + me.ammo).min(info.ammo as i32);
+                    tm.cargo.extend(me.cargo.iter().copied());
                     tm.moved = true;
                     if let Some(p) = s.player_mut(me.owner) {
                         p.funds += refund;
@@ -842,14 +855,20 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     let info = tables().unit(&t.kind);
                     let cost = owner_price(s, t.owner, &t.kind) / 10;
                     let afford = s.player(t.owner).is_some_and(|p| p.funds >= cost);
+                    let low = t.fuel < info.fuel as i32 || t.ammo < info.ammo as i32;
                     let tm = s.units.get_mut(&t.id).unwrap();
                     tm.fuel = info.fuel as i32;
                     tm.ammo = info.ammo as i32;
-                    if afford && display(hp_now(&t)) < 10 {
-                        // +1 displayed HP; the fraction under it is kept, so (like property
-                        // repairs) the result is the whole range of the new display value.
-                        tm.hp = Hp::from_display((display(hp_now(&t)) + 1).min(10));
-                        s.player_mut(t.owner).unwrap().funds -= cost;
+                    if t.hp.hi <= 90 {
+                        // 9.0 or less: exactly +1.0, the fraction kept, if it can be paid for.
+                        if afford {
+                            tm.hp = Hp { lo: t.hp.lo.max(1) + 10, hi: t.hp.hi + 10 };
+                            s.player_mut(t.owner).unwrap().funds -= cost;
+                        }
+                    } else if t.hp.lo < 100 && low {
+                        // A 9.x unit is topped up to 10.0 for free, but only when it also
+                        // needed fuel or ammo.
+                        tm.hp = Hp::exact(100);
                     }
                     Ok(())
                 }
@@ -857,6 +876,10 @@ pub fn step(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     // Fog: a hidden enemy unit on the drop tile blocks the unload; the cargo
                     // stays aboard and the transport just waits.
                     if s.unit_at(to.0, to.1).is_some_and(|o| o.id != *unit) {
+                        // Nothing happened: a transport that hadn't moved may still move.
+                        if in_place_drop {
+                            s.units.get_mut(unit).unwrap().moved = u.moved;
+                        }
                         return Ok(());
                     }
                     let carrier = &s.units[unit];

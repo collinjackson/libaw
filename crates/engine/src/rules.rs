@@ -255,6 +255,11 @@ pub fn mg_damage(att_kind: &str, def_kind: &str) -> Option<u8> {
 pub fn base_damage_now(att: &Unit, def_kind: &str) -> Option<u8> {
     let info = tables().unit(&att.kind);
     if info.ammo > 0 && att.ammo == 0 {
+        // A Cruiser has no second weapon as AWBW counts them: out of ammo it can't fire at
+        // all, not even its guns at aircraft.
+        if att.kind == "Cruiser" {
+            return None;
+        }
         if secondary_target(&att.kind, def_kind) {
             return tables().base_damage(&att.kind, def_kind);
         }

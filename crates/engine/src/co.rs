@@ -202,7 +202,9 @@ pub fn moves_apply(kind: &str, moves_for: &str) -> bool {
     match moves_for {
         "foot" => foot,
         "vehicle" => ground && !foot,
-        "direct" => !foot && u.range[0] <= 1 && u.range[1] == 1,
+        // Max's powers: every unit that isn't an indirect, a foot soldier or a transport;
+        // the unarmed Black Bomb counts.
+        "direct" => (!foot && u.range[0] <= 1 && u.range[1] == 1) || kind == "Black Bomb",
         _ => true,
     }
 }

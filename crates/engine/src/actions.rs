@@ -159,7 +159,9 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
             if capacity(&o.kind) > o.cargo.len() && can_carry(&o.kind, &u.kind) {
                 out.push(Then::Load);
             }
-            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.is_empty() && u.cargo.is_empty() {
+            // Transports may join while their cargo together still fits; it passes to the
+            // unit joined.
+            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.len() + u.cargo.len() <= capacity(&o.kind) {
                 out.push(Then::Join);
             }
             return out;

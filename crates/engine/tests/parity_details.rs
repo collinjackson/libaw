@@ -4,6 +4,7 @@
 
 use awbw_engine::actions::{Action, Pos, Then};
 use awbw_engine::data::tables;
+use awbw_engine::rules::{base_damage_now, move_cost};
 use awbw_engine::{co, combat, sim, Hp, PlayerId, State, Unit, UnitId};
 
 fn state() -> State {
@@ -143,4 +144,109 @@ fn kindles_urban_bonus_is_for_properties_not_pipes() {
     assert_eq!(combat::bonus_terrain(&u, city, "Building"), "Building");
     assert_eq!(co::attack_bonus("Kindle", "N", "Piperunner", "Pipe", 0), 0);
     assert_eq!(co::attack_bonus("Kindle", "N", "Piperunner", "Building", 0), 40);
+}
+
+/// Two neighbouring tiles that treads can cross, with no building on either.
+fn land_pair(s: &State) -> (Pos, Pos) {
+    let open = |p: Pos| move_cost(s.terrain_at(p.0, p.1), "T").is_some() && !s.buildings.contains_key(&p);
+    (0..s.height)
+        .flat_map(|y| (0..s.width - 1).map(move |x| ((x, y), (x + 1, y))))
+        .find(|&(a, b)| open(a) && open(b))
+        .unwrap()
+}
+
+#[test]
+fn a_blocked_drop_in_place_does_not_cost_the_transport_its_move() {
+    let (mut s, me, foe) = board("Andy", "N", "Andy");
+    let (here, there) = land_pair(&s);
+    let apc = add(&mut s, unit(1, me, "APC", here));
+    let rider = add(&mut s, Unit { carried_by: Some(apc), ..unit(2, me, "Infantry", here) });
+    s.units.get_mut(&apc).unwrap().cargo.push(rider);
+    add(&mut s, unit(3, foe, "Infantry", there)); // in the way (unseen, in a fog game)
+    sim::step(&mut s, &Action::Move { unit: apc, path: vec![here], then: Then::Unload { cargo: rider, to: there } }, &mut avg).unwrap();
+    assert_eq!(s.units[&apc].cargo, vec![rider], "still aboard");
+    assert!(!s.units[&apc].moved, "and the APC may still move");
+}
+
+#[test]
+fn transports_join_while_their_cargo_fits() {
+    let (mut s, me, _) = board("Andy", "N", "Andy");
+    let (here, there) = land_pair(&s);
+    let a = add(&mut s, Unit { hp: Hp::exact(50), ..unit(1, me, "APC", here) });
+    let rider = add(&mut s, Unit { carried_by: Some(a), ..unit(2, me, "Infantry", here) });
+    s.units.get_mut(&a).unwrap().cargo.push(rider);
+    let b = add(&mut s, Unit { hp: Hp::exact(40), ..unit(3, me, "APC", there) });
+    assert!(awbw_engine::actions::options_at(&s, &s.units[&a], there).contains(&Then::Join));
+    sim::step(&mut s, &Action::Move { unit: a, path: vec![here, there], then: Then::Join }, &mut avg).unwrap();
+    assert!(!s.units.contains_key(&a));
+    assert_eq!((s.units[&b].hp, s.units[&b].cargo.clone()), (Hp::exact(90), vec![rider]));
+    assert_eq!(s.units[&rider].carried_by, Some(b));
+
+    // Two loaded APCs have one slot between them: no join.
+    let (mut s, me, _) = board("Andy", "N", "Andy");
+    for (id, at) in [(1, here), (3, there)] {
+        let apc = add(&mut s, Unit { hp: Hp::exact(50), ..unit(id, me, "APC", at) });
+        let rider = add(&mut s, Unit { carried_by: Some(apc), ..unit(id + 1, me, "Infantry", at) });
+        s.units.get_mut(&apc).unwrap().cargo.push(rider);
+    }
+    assert!(!awbw_engine::actions::options_at(&s, &s.units[&1], there).contains(&Then::Join));
+}
+
+#[test]
+fn black_boat_repairs_keep_exact_hp() {
+    // (HP, fuel short, funds) -> (HP after, cost): a Tank costs 700 a point.
+    for (hp, low_fuel, funds, after, cost) in [
+        (74, false, 5000, 84, 700),   // exactly +1.0, the fraction kept
+        (90, false, 5000, 100, 700),  // 9.0 is still a paid repair
+        (95, true, 5000, 100, 0),     // 9.x topped up free, since it needed fuel
+        (95, false, 5000, 95, 0),     // ... but not when it needed nothing
+        (50, true, 600, 50, 0),       // can't pay: resupply only
+    ] {
+        let (mut s, me, _) = board("Andy", "N", "Andy");
+        let (here, there) = land_pair(&s);
+        let boat = add(&mut s, unit(1, me, "Black Boat", here));
+        let tank = add(&mut s, Unit { hp: Hp::exact(hp), ..unit(2, me, "Tank", there) });
+        if low_fuel {
+            s.units.get_mut(&tank).unwrap().fuel = 5;
+        }
+        s.player_mut(me).unwrap().funds = funds;
+        sim::step(&mut s, &Action::Move { unit: boat, path: vec![here], then: Then::Repair { target: there } }, &mut avg).unwrap();
+        assert_eq!((s.units[&tank].hp, funds - s.player(me).unwrap().funds), (Hp::exact(after), cost), "from {hp}");
+        assert_eq!(s.units[&tank].fuel, tables().unit("Tank").fuel as i32, "resupplied either way");
+    }
+}
+
+#[test]
+fn under_sonjas_super_a_defender_that_cannot_fire_voids_the_attack() {
+    let (mut s, me, foe) = board("Andy", "N", "Sonja");
+    s.player_mut(foe).unwrap().power = "S".into();
+    let (here, there) = land_pair(&s);
+    let tank = add(&mut s, unit(1, me, "Tank", here));
+    let gun = add(&mut s, Unit { ammo: 0, ..unit(2, foe, "Anti-Air", there) });
+    sim::step(&mut s, &Action::Move { unit: tank, path: vec![here], then: Then::Attack { target: there } }, &mut avg).unwrap();
+    assert_eq!((s.units[&tank].hp, s.units[&gun].hp), (Hp::exact(100), Hp::exact(100)));
+}
+
+#[test]
+fn max_speeds_up_the_black_bomb_but_not_transports() {
+    for (kind, fast) in [("Black Bomb", true), ("Tank", true), ("Fighter", true), ("APC", false), ("Infantry", false), ("Artillery", false)] {
+        assert_eq!(co::moves_apply(kind, "direct"), fast, "{kind}");
+    }
+}
+
+#[test]
+fn sasha_gets_nothing_extra_when_properties_pay_nothing() {
+    let (mut s, me, _) = board("Sasha", "N", "Andy");
+    s.funds_per_property = 0;
+    let before = s.player(me).unwrap().funds;
+    let day = s.day.max(2);
+    sim::start_turn(&mut s, me, day);
+    assert_eq!(s.player(me).unwrap().funds, before);
+}
+
+#[test]
+fn a_cruiser_out_of_ammo_cannot_fire_at_aircraft() {
+    let cruiser = unit(1, 0, "Cruiser", (0, 0));
+    assert!(base_damage_now(&cruiser, "B-Copter").is_some());
+    assert!(base_damage_now(&Unit { ammo: 0, ..cruiser }, "B-Copter").is_none());
 }
