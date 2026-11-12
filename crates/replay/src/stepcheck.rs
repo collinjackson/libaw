@@ -228,6 +228,40 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
                     i += 1;
                     continue;
                 }
+                let spawned = items(&a["unitAdd"]["units"]);
+                if !spawned.is_empty() {
+                    // Sensei's powers spawn units with ids the server picks: take them from the
+                    // record, matched by position. The game's unit limit isn't in the records and
+                    // can stop the spawn early (cities go row by row), so the recorded sites must
+                    // be the first of the engine's, and only the recorded units stay.
+                    let kind = a["coPower"].as_str().unwrap_or("").to_string();
+                    let before: Vec<UnitId> = s.units.keys().copied().collect();
+                    step(&mut s, &Action::Power { kind }, a, r, c)?;
+                    let mut new: Vec<UnitId> = s.units.keys().copied().filter(|k| !before.contains(k)).collect();
+                    let row_order = |p: &Pos| (p.1, p.0);
+                    let mut got: Vec<Pos> = new.iter().map(|k| (s.units[k].x, s.units[k].y)).collect();
+                    got.sort_by_key(row_order);
+                    let want: Vec<(UnitId, Pos)> = spawned.iter().map(|u| (num(&u["units_id"]) as UnitId, pos(u, "units_x", "units_y"))).collect();
+                    let mut wp: Vec<Pos> = want.iter().map(|w| w.1).collect();
+                    wp.sort_by_key(row_order);
+                    r.check("power.spawn_sites", got.starts_with(&wp), || tag(c, format!("spawned at {got:?}, recorded {wp:?}")));
+                    let mut keep = Vec::new();
+                    for (id, at) in want {
+                        if let Some(i) = new.iter().position(|k| (s.units[k].x, s.units[k].y) == at) {
+                            let mut u = s.units.remove(&new.swap_remove(i)).unwrap();
+                            u.id = id;
+                            keep.push(u);
+                        }
+                    }
+                    for k in new {
+                        s.units.remove(&k);
+                    }
+                    for u in keep {
+                        s.units.insert(u.id, u);
+                    }
+                    i += 1;
+                    continue;
+                }
                 Action::Power { kind: a["coPower"].as_str().unwrap_or("").to_string() }
             }
             "NextTurn" => {
