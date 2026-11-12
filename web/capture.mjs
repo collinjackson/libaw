@@ -9,6 +9,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
 
@@ -21,10 +22,11 @@ const wantGif = args.includes('--gif') || !args.includes('--mp4'), wantMp4 = arg
 
 // A global install is not on Node's ESM path: find it through npm's root.
 const require = createRequire(import.meta.url);
+// puppeteer is ESM from v24: import it (a require of it fails on Node < 22.12).
 let puppeteer;
-try { puppeteer = require('puppeteer'); } catch {
+try { puppeteer = (await import('puppeteer')).default; } catch {
   const root = execFileSync('npm', ['root', '-g']).toString().trim();
-  puppeteer = require(join(root, 'puppeteer'));
+  puppeteer = (await import(pathToFileURL(require.resolve(join(root, 'puppeteer'))).href)).default;
 }
 
 // CHROME_ARGS: extra flags, e.g. "--no-sandbox" in a container.
