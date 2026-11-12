@@ -30,6 +30,7 @@ try { puppeteer = (await import('puppeteer')).default; } catch {
 }
 
 // CHROME_ARGS: extra flags, e.g. "--no-sandbox" in a container.
+const t0 = Date.now();
 const browser = await puppeteer.launch({ headless: true, args: (process.env.CHROME_ARGS || '').split(' ').filter(Boolean) });
 const page = await browser.newPage();
 await page.setViewport({ width, height: Math.round(width * 0.75), deviceScaleFactor: 1 });
@@ -42,17 +43,25 @@ const u = new URL(url); u.searchParams.set('capture', '1');
 await page.goto(u.toString(), { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => window.__replay?.ready, { timeout: 20000 });
 const duration = await page.evaluate(() => window.__replay.duration);
+const tLoaded = Date.now();
 const dir = mkdtempSync(join(tmpdir(), 'libaw-capture-'));
 const n = Math.max(1, Math.ceil(duration * fps));
 const screen = await page.$('#screen');
 for (let f = 0; f <= n; f++) {
   await page.evaluate((t) => window.__replay.renderAt(t), Math.min(duration, f / fps));
-  // Sprites from an art set's site: let any new image finish before the shot.
-  await page.evaluate(() => Promise.all([...document.querySelectorAll('#board image')].map((im) =>
-    new Promise((ok) => { const i = new Image(); i.onload = i.onerror = ok; i.src = im.getAttribute('href'); }))));
-  writeFileSync(join(dir, `f${String(f).padStart(5, '0')}.png`), await screen.screenshot());
+  // Sprites from an art set's site: let any image not seen before finish before the shot (each
+  // sprite once, not once a frame: on a slow machine the per-frame wait dominated).
+  await page.evaluate(() => {
+    const seen = (window.__captureSeen ||= new Set());
+    const fresh = [...new Set([...document.querySelectorAll('#board image')].map((im) => im.getAttribute('href')))]
+      .filter((src) => src && !seen.has(src));
+    fresh.forEach((src) => seen.add(src));
+    return Promise.all(fresh.map((src) => new Promise((ok) => { const i = new Image(); i.onload = i.onerror = ok; i.src = src; })));
+  });
+  writeFileSync(join(dir, `f${String(f).padStart(5, '0')}.png`), await screen.screenshot({ optimizeForSpeed: true }));
 }
 await browser.close();
+const tFrames = Date.now();
 const frames = join(dir, 'f%05d.png');
 // --vf FILTERS: an ffmpeg filter chain to run on the frames first (e.g. a palette or pixel look).
 const pre = flag('--vf', '') ? `${flag('--vf', '')},` : '';
@@ -66,4 +75,5 @@ if (wantMp4) {
     '-vf', `${pre}pad=ceil(iw/2)*2:ceil(ih/2)*2`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', `${out}.mp4`]);
 }
 rmSync(dir, { recursive: true, force: true });
-console.log(JSON.stringify({ frames: n + 1, duration, gif: wantGif ? `${out}.gif` : null, mp4: wantMp4 ? `${out}.mp4` : null }));
+const secs = (a, b) => Math.round((b - a) / 100) / 10;
+console.log(JSON.stringify({ frames: n + 1, duration, seconds: { load: secs(t0, tLoaded), frames: secs(tLoaded, tFrames), encode: secs(tFrames, Date.now()) }, gif: wantGif ? `${out}.gif` : null, mp4: wantMp4 ? `${out}.mp4` : null }));
