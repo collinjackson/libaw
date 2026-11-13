@@ -1,7 +1,7 @@
 //! Static game data, generated into `data/*.json` by `tools/gen_data.py`.
 
 use serde::Deserialize;
-use std::collections::HashMap;
+use crate::fx::FxMap as HashMap;
 use std::sync::OnceLock;
 
 #[derive(Debug, Deserialize)]

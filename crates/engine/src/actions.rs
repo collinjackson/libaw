@@ -8,7 +8,7 @@ use crate::co;
 use crate::data::tables;
 use crate::rules::*;
 use crate::state::*;
-use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::collections::{BTreeMap, BinaryHeap};
 
 pub type Pos = (u16, u16);
 
@@ -51,8 +51,9 @@ pub enum Action {
 pub fn reachable(s: &State, u: &Unit) -> BTreeMap<Pos, (u32, Vec<Pos>)> {
     let range = movement_range(s, u).min(u.fuel.max(0) as u32);
     let start = (u.x, u.y);
-    let mut best: HashMap<Pos, u32> = HashMap::from([(start, 0)]);
-    let mut prev: HashMap<Pos, Pos> = HashMap::new();
+    let mut best: crate::fx::FxMap<Pos, u32> = crate::fx::FxMap::default();
+    best.insert(start, 0);
+    let mut prev: crate::fx::FxMap<Pos, Pos> = crate::fx::FxMap::default();
     let mut heap = BinaryHeap::from([std::cmp::Reverse((0u32, start))]);
     while let Some(std::cmp::Reverse((c, p))) = heap.pop() {
         if best.get(&p).is_some_and(|&b| b < c) {
