@@ -77,6 +77,30 @@ struct Stats {
     forced_ends: u64,
 }
 
+/// Power stars of a CO's power and super power, from data/cos.json.
+fn stars(co: &str) -> Option<(i64, i64)> {
+    let c = data::tables().cos.get(co)?;
+    let n = |k: &str| c[k]["PowerStars"].as_i64();
+    Some((n("cop")?, n("scop")?))
+}
+
+/// Give every player `co`. The power costs keep the start's value per star (AWBW: 9000 funds a star
+/// at the start), scaled to the new CO's star counts.
+pub fn set_co(s: &mut State, co: &str) -> Result<(), String> {
+    set_co_players(&mut s.players, co)
+}
+
+fn set_co_players(players: &mut [Player], co: &str) -> Result<(), String> {
+    let (cop, scop) = stars(co).ok_or_else(|| format!("unknown CO {co:?}"))?;
+    for p in players.iter_mut() {
+        let star = stars(&p.co).filter(|&(_, sc)| sc > 0 && p.scop_cost > 0).map(|(_, sc)| p.scop_cost / sc).unwrap_or(9000);
+        p.co = co.to_string();
+        p.cop_cost = cop * star;
+        p.scop_cost = scop * star;
+    }
+    Ok(())
+}
+
 /// Play one game; `seats[i]` plays the i-th player in turn order.
 pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir: Option<&str>, name: &str) -> Value {
     let mut s = state_from(start);
@@ -96,6 +120,10 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     }
     if std::env::var("MATCH_POWERS").is_ok() {
         s.powers = true;
+    }
+    // MATCH_CO=Name: every player plays that CO (a mirror match, for self-play on one CO).
+    if let Ok(v) = std::env::var("MATCH_CO") {
+        set_co(&mut s, v.trim()).unwrap_or_else(|e| panic!("MATCH_CO: {e}"));
     }
     // MATCH_CAPTURE_LIMIT: "league" (70% of the map's income properties, as AWBW's league
     // games) or a number of properties. Default: off, as in AWBW's custom games.
@@ -332,5 +360,26 @@ pub fn suggest(args: &[String]) {
     match args.get(2) {
         Some(p) => std::fs::write(p, out.to_string()).expect("write"),
         None => println!("{out}"),
+    }
+}
+
+
+#[cfg(test)]
+mod co_tests {
+    use super::*;
+
+    #[test]
+    fn match_co_sets_every_player_and_rescales_power_costs() {
+        let mut s: Vec<Player> = vec![];
+        let mut p = Player { id: 1, team: "1".into(), co: "Kanbei".into(), funds: 0, eliminated: false, order: 0, power: "N".into(),
+                             meter: 0, cop_cost: 36000, scop_cost: 63000, power_attack: 0 };
+        s.push(p.clone());
+        p.id = 2; p.co = "Nobody".into(); p.cop_cost = 0; p.scop_cost = 0;
+        s.push(p);
+        set_co_players(&mut s, "Adder").unwrap();
+        assert!(s.iter().all(|p| p.co == "Adder"));
+        assert_eq!((s[0].cop_cost, s[0].scop_cost), (18000, 45000)); // 9000 a star kept from Kanbei's 7
+        assert_eq!((s[1].cop_cost, s[1].scop_cost), (18000, 45000)); // unknown CO: 9000 a star
+        assert!(set_co_players(&mut s, "Nobody").is_err());
     }
 }
