@@ -191,8 +191,13 @@ impl State {
     pub fn team_of(&self, id: PlayerId) -> String {
         self.player(id).map(|p| p.team.clone()).unwrap_or_default()
     }
+    /// Same team (a missing player counts as team ""). Compares in place: team_of's clones were
+    /// two allocations a call in the bot's hottest loops (2026-11-13 profile).
     pub fn allied(&self, a: PlayerId, b: PlayerId) -> bool {
-        a == b || self.team_of(a) == self.team_of(b)
+        a == b || {
+            let t = |id| self.player(id).map_or("", |p| p.team.as_str());
+            t(a) == t(b)
+        }
     }
 }
 
