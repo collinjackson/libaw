@@ -139,8 +139,14 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     }
     let order: Vec<PlayerId> = s.players.iter().map(|p| p.id).collect();
     let seat_of = |p: PlayerId| order.iter().position(|&q| q == p).unwrap_or(0).min(1);
-    let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-    let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as u32 };
+    // Luck and the per-request seeds come from ChaCha8 keyed by the game's seed and a secret for the
+    // run, so a bot can't predict a roll from the seed in the game's name (seeds are small numbers)
+    // or count the other side's actions from its request seeds.
+    let secret = run_secret();
+    let key = |salt: u64| seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ secret ^ salt;
+    let mut luck = <rand_chacha::ChaCha8Rng as rand_core::SeedableRng>::seed_from_u64(key(0));
+    let mut next = move || rand_core::RngCore::next_u32(&mut luck) >> 1;
+    let mut seeds = <rand_chacha::ChaCha8Rng as rand_core::SeedableRng>::seed_from_u64(key(0x5EED));
     let mut st = [Stats::default(), Stats::default()];
     let mut frames = vec![libaw::view::frame(&s, "start")];
     let mut this_turn = 0u32;
@@ -193,7 +199,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     write_turn(&s, turn_no);
     while s.day <= max_days && sim::winner(&s).is_none() {
         let i = seat_of(s.current);
-        let req_seed = seed ^ (st[0].actions + st[1].actions).wrapping_mul(0x9E3779B97F4A7C15);
+        let req_seed = rand_core::RngCore::next_u64(&mut seeds);
         // Fog: the agent plans on what its player can see; its reply is read against that
         // view and applied to the real state (a path may run into a hidden unit: a trap).
         let view = libaw::fog::player_view(&s, s.current);
@@ -298,6 +304,16 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         "errors": [st[0].errors, st[1].errors], "forced_ends": [st[0].forced_ends, st[1].forced_ends],
         "first_error": first_error,
     })
+}
+
+/// The run's secret: MATCH_SECRET (a number) for a reproducible run, else 64 random bits.
+fn run_secret() -> u64 {
+    static S: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *S.get_or_init(|| std::env::var("MATCH_SECRET").ok().and_then(|v| v.parse().ok()).unwrap_or_else(|| {
+        let mut b = [0u8; 8];
+        getrandom::fill(&mut b).expect("OS random source");
+        u64::from_le_bytes(b)
+    }))
 }
 
 pub fn run(args: &[String]) {

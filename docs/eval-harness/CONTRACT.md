@@ -51,7 +51,7 @@ Request:
   (`units_hit_points`) is displayed HP, 1 to 10. Funds per player are in the top-level
   `players[].funds`.
 - `player_id` is the player to move (always equal to `currentTurnPId`).
-- `seed`: use it for any randomness, so the same request gives the same answer.
+- `seed`: a fresh random number for each request (it tells you nothing about the game's luck or the other side). Use it for any randomness, so the same request gives the same answer.
 - Settings in these games: no fog, clear weather, CO day-to-day abilities on, CO powers
   never used by either side. Maps may contain pipes, pipe seams and missile silos (empty
   or full); the bot may treat seams and silos as impassable/plain terrain and never use
