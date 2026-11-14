@@ -24,10 +24,23 @@ bot's code can stay private: only its image id is public.
   information, so either proofs are made after the game, or the input is the seat's own view
   history (whose hashes the server publishes as the game goes).
 
-Hashing the data costs cycles in every proof, growing with its size. So the benchmark measures
-it on its own, with and without each zkVM's hash accelerator (the one place accelerators are
-allowed), and one proof per game (recursion or a single run over the whole history) spreads that
-cost over every move.
+### Setup once, then one step per move
+
+1. **Setup proof** (once per event or game): the guest loads the private data, checks its hash
+   against the committed one, and ends with the data in memory. Its public output is the commitment
+   and the root of the guest's memory (zkVMs already keep a Merkle root of memory).
+2. **Move proofs:** each one resumes from the previous memory root, takes that move's public input
+   (history or view), and outputs the action and the new root. The data is never hashed again.
+3. **Recursion** folds setup plus every move into one proof per game, which anyone can check
+   against the data commitment, the image id and the published history.
+
+A bot that reads all its weights every move still pays for reading them (each zkVM checks the
+memory pages a step touches), but that is the zkVM's own accelerated memory check, far cheaper than
+hashing the weights in software. If a zkVM can't resume an execution with new input, the fallback
+is one proof over the whole game, made after it ends.
+
+So two more things to measure per zkVM: whether it can pause and resume with new input (and
+aggregate the steps), and the cost of one move's step as the data grows.
 
 What we measure is how much bot fits in a proof: the cost of one decision as the bot gets
 stronger (more search), from a one-step greedy bot up.
