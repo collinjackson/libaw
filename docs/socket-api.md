@@ -109,7 +109,8 @@ A seat whose view didn't change gets no `state`.
     on turn: send act {action: pick(turn.legal)}
     on game_over: stop
 
-`examples/` has a random Python bot, a JavaScript bot and a spectator page.
+`examples/` has a random Python bot, a JavaScript bot, a spectator page, and
+`unit_by_unit_bot.mjs`, which plays from the summary and `options` (no full legal list).
 
 ## Not in v1
 
