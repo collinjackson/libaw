@@ -11,6 +11,8 @@ actions, damage, counters, captures, funds, CO powers), 99.96% match AWBW. Some 
 information the recordings don't carry, such as Sonja's hidden HP. What the rules review fixed,
 and what is still open: [docs/awbw-rule-findings.md](docs/awbw-rule-findings.md).
 
+**Docs:** https://collinjackson.github.io/libaw/ (searchable; built from `docs/` on every push).
+
 ## What's here
 
 | Part | What it does |

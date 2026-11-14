@@ -3,3 +3,4 @@ __pycache__/
 web/states/local/
 .vercel/
 .env*
+/book

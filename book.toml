@@ -1,0 +1,16 @@
+# The docs site (mdBook): https://collinjackson.github.io/libaw/
+# Built from docs/ by .github/workflows/docs.yml on every push to main.
+#   cargo install mdbook && mdbook serve      # preview at http://localhost:3000
+[book]
+title = "libaw"
+description = "An Advance Wars By Web rules engine for bots: its API and the rules it plays by."
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "book"
+
+[output.html]
+site-url = "/libaw/"
+git-repository-url = "https://github.com/collinjackson/libaw"
+edit-url-template = "https://github.com/collinjackson/libaw/edit/main/{path}"
