@@ -98,6 +98,8 @@ details summary { cursor: pointer; font-weight: 600; margin-bottom: 4px; }
 .log li.err { color: var(--danger); }
 .log li.me { color: var(--accent); }
 .foot { font-size: 12px; text-align: center; }
+/* The page footer spans the whole width under the board and the side column. */
+footer.foot { padding: 4px 16px 20px; margin: 0; }
 
 /* Board layers */
 .mark.move { fill: var(--move); }
