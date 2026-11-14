@@ -10,6 +10,25 @@ publishes for every turn) and the bot's committed seed, output an action. The pr
 program with a known image id, committed before the event, maps that view to that action. The
 bot's code can stay private: only its image id is public.
 
+### Code, data and inputs are committed separately
+
+- **Code** (public, or at least its image id): the guest program, ideally a shared, audited one
+  (libaw plus a standard evaluator or inference runtime) that many bots use. One image id then
+  covers every entrant, and verifiers trust code they can read.
+- **Data** (private, committed by hash before the event): the bot's weights, tables or settings.
+  The proof shows the action came from the data with that hash. A bot can change its data between
+  events without a new guest build.
+- **Public inputs:** the game's history (actions and revealed luck), from which the guest
+  rebuilds the seat's view and any memory the bot keeps. No state is carried between moves outside
+  the proof, so there's no side channel for help. In a fog game the full history has hidden
+  information, so either proofs are made after the game, or the input is the seat's own view
+  history (whose hashes the server publishes as the game goes).
+
+Hashing the data costs cycles in every proof, growing with its size. So the benchmark measures
+it on its own, with and without each zkVM's hash accelerator (the one place accelerators are
+allowed), and one proof per game (recursion or a single run over the whole history) spreads that
+cost over every move.
+
 What we measure is how much bot fits in a proof: the cost of one decision as the bot gets
 stronger (more search), from a one-step greedy bot up.
 
