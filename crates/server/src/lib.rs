@@ -257,11 +257,8 @@ fn legal_filter(a: &Action, f: &Value) -> bool {
 /// do on arrival.
 fn unit_options(v: &State, unit: u32) -> Value {
     let mut by_tile: BTreeMap<(u16, u16), (Value, Vec<Value>)> = BTreeMap::new();
-    for a in legal_actions(v) {
-        if let Action::Move { unit: u, path, .. } = &a {
-            if *u != unit {
-                continue;
-            }
+    for a in libaw::actions::unit_actions(v, unit) {
+        if let Action::Move { path, .. } = &a {
             let c = action_to_contract(&a);
             let end = *path.last().unwrap_or(&(0, 0));
             let e = by_tile.entry(end).or_insert_with(|| (c["path"].clone(), vec![]));

@@ -294,28 +294,13 @@ pub fn builds(s: &State) -> Vec<(Pos, String)> {
 /// All legal actions for the player to move.
 pub fn legal_actions(s: &State) -> Vec<Action> {
     let mut out = vec![];
-    for u in s.units.values() {
-        if u.owner != s.current || u.moved || u.carried_by.is_some() {
-            continue;
-        }
-        for (to, (_, path)) in reachable(s, u) {
-            for then in options_at(s, u, to) {
-                out.push(Action::Move { unit: u.id, path: path.clone(), then });
-            }
-        }
+    // Unmoved units first, then moved transports' in-place drops (bots that take the first
+    // legal action rely on this order).
+    for u in s.units.values().filter(|u| !u.moved) {
+        unit_moves(s, u, &mut out);
     }
-    // A transport that has moved may still drop cargo where it stands (AWBW records ~400
-    // such drops: a second cargo, cargo that boarded after it moved, or after other units
-    // cleared the tile). An unmoved transport's in-place drop is offered above.
-    for u in s.units.values() {
-        if u.owner != s.current || !u.moved || u.carried_by.is_some() || u.cargo.is_empty() {
-            continue;
-        }
-        for then in options_at(s, u, (u.x, u.y)) {
-            if matches!(then, Then::Unload { .. }) {
-                out.push(Action::Move { unit: u.id, path: vec![(u.x, u.y)], then });
-            }
-        }
+    for u in s.units.values().filter(|u| u.moved) {
+        unit_moves(s, u, &mut out);
     }
     for (at, kind) in builds(s) {
         out.push(Action::Build { at, kind });
@@ -325,4 +310,47 @@ pub fn legal_actions(s: &State) -> Vec<Action> {
     }
     out.push(Action::EndTurn);
     out
+}
+
+/// One unit's legal moves: the same as filtering `legal_actions` by unit, without working out
+/// every other unit's.
+pub fn unit_actions(s: &State, unit: UnitId) -> Vec<Action> {
+    let mut out = vec![];
+    if let Some(u) = s.units.get(&unit) {
+        unit_moves(s, u, &mut out);
+    }
+    out
+}
+
+/// Whether `a` is legal: the same answer as `legal_actions(s).contains(a)`, at the cost of one
+/// unit's moves (a referee checking a bot's action needs no more).
+pub fn is_legal(s: &State, a: &Action) -> bool {
+    match a {
+        Action::Move { unit, .. } => unit_actions(s, *unit).contains(a),
+        Action::Build { at, kind } => builds(s).iter().any(|(p, k)| p == at && k == kind),
+        Action::Power { kind } => crate::co::powers_ready(s, s.current).iter().any(|k| *k == kind.as_str()),
+        Action::EndTurn => true,
+    }
+}
+
+fn unit_moves(s: &State, u: &Unit, out: &mut Vec<Action>) {
+    if u.owner != s.current || u.carried_by.is_some() {
+        return;
+    }
+    if !u.moved {
+        for (to, (_, path)) in reachable(s, u) {
+            for then in options_at(s, u, to) {
+                out.push(Action::Move { unit: u.id, path: path.clone(), then });
+            }
+        }
+    } else if !u.cargo.is_empty() {
+        // A transport that has moved may still drop cargo where it stands (AWBW records ~400
+        // such drops: a second cargo, cargo that boarded after it moved, or after other units
+        // cleared the tile). An unmoved transport's in-place drop is offered above.
+        for then in options_at(s, u, (u.x, u.y)) {
+            if matches!(then, Then::Unload { .. }) {
+                out.push(Action::Move { unit: u.id, path: vec![(u.x, u.y)], then });
+            }
+        }
+    }
 }
