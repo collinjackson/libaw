@@ -39,8 +39,17 @@ memory pages a step touches), but that is the zkVM's own accelerated memory chec
 hashing the weights in software. If a zkVM can't resume an execution with new input, the fallback
 is one proof over the whole game, made after it ends.
 
-So two more things to measure per zkVM: whether it can pause and resume with new input (and
-aggregate the steps), and the cost of one move's step as the data grows.
+## Rounds
+
+Each round drops the zkVMs that fail it, so later, costlier rounds run on fewer:
+
+1. **Builds and matches:** the engine compiles for the zkVM, and the executor's output matches
+   native exactly.
+2. **Setup then steps:** it can verify the data once, then resume with new input for each move and
+   fold the steps into one proof. A zkVM that can only prove a whole game after it ends stays as a
+   fallback, but drops out of the main ranking.
+3. **Cost:** cycles and proving time for one move's step as the bot gets stronger (search budget)
+   and bigger (data size).
 
 What we measure is how much bot fits in a proof: the cost of one decision as the bot gets
 stronger (more search), from a one-step greedy bot up.
