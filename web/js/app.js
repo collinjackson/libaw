@@ -117,13 +117,15 @@ async function createGame() {
   try {
     const c = await ui.conn.request({ type: 'create', turn, max_days: Number($('newdays').value) || 0,
       fog: $('newfog').checked, powers: $('newpowers').checked });
-    log(`created ${c.game} (seed ${c.seed})`);
+    safeSet(spectateKey(c.game), c.spectator_key);   // only the creator can watch a running game
+    log(`created ${c.game}`);
     await refreshGames();
   } catch (e) { log(`create: ${e.message}`, 'err'); }
 }
 
 const tokenKey = (game, seat) => `libaw:${$('server').value.trim()}:${game}:${seat}`;
 const tokenFor = (game, seat) => safeGet(tokenKey(game, seat));
+const spectateKey = (game) => `libaw:${$('server').value.trim()}:${game}:spectate`;
 
 async function join(game, seat) {
   resetGame();
@@ -140,7 +142,8 @@ async function join(game, seat) {
 async function spectate(game) {
   resetGame();
   try {
-    const j = await ui.conn.request({ type: 'spectate', game });
+    const key = safeGet(spectateKey(game));
+    const j = await ui.conn.request({ type: 'spectate', game, ...(key ? { key } : {}) });
     Object.assign(ui, { game, me: null, spectator: true, info: j.info });
     history.replaceState(null, '', `?server=${encodeURIComponent($('server').value.trim())}&game=${encodeURIComponent(game)}&spectate=1`);
     log(`watching ${game}`);

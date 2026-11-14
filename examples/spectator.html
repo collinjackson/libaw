@@ -13,6 +13,7 @@
 </style>
 <label>Server <input id="url" value="ws://127.0.0.1:8765" size="24"></label>
 <label>Game <input id="game" size="8"></label>
+<label>Key <input id="key" size="34" placeholder="spectator_key (running games)"></label>
 <button id="go">Watch</button>
 <span id="status"></span>
 <table id="board"></table>
@@ -23,7 +24,8 @@ $('go').onclick = () => {
   const ws = new WebSocket($('url').value);
   const game = $('game').value.trim();
   let order = [];
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'spectate', game }));
+  const key = $('key').value.trim();
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'spectate', game, ...(key ? { key } : {}) }));
   ws.onmessage = ({ data }) => {
     const m = JSON.parse(data);
     if (m.type === 'joined') order = m.info.players.map((p) => p.id);

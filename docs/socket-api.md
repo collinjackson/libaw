@@ -58,9 +58,9 @@ seat with `format: "awbw"` and forwards each `turn` to the bot's `POST /act`.
 |---|---|---|
 | `hello` | `name`? | `welcome` {`protocol`: 1, `server`, `version`} |
 | `list` | | `games` {`games`: [summary]} |
-| `create` | `turn` (AWBW turn file) or `state` (libaw state); `seed`?, `max_days`?, `fog`?, `powers`?, `banned`? [unit names], `name`? (game id) | `created` {`game`, `seed`, `players`, `awbw_format`} |
+| `create` | `turn` (AWBW turn file) or `state` (libaw state); `seed`?, `max_days`?, `fog`?, `powers`?, `banned`? [unit names], `name`? (game id) | `created` {`game`, `players`, `awbw_format`, `spectator_key`, `seed` (only if you chose it)} |
 | `join` | `game`; `player` (id) or `seat` (index), else the first free seat; `token`? (to take a seat back); `format`? | `joined` {`game`, `player`, `seat`, `token`, `format`, `info`}, then `state`, then `turn` if it's this player's |
-| `spectate` | `game`, `format`? | `joined` {`spectator`: true, `info`}, then `state` |
+| `spectate` | `game`, `key` (the game's `spectator_key`, while it runs), `format`? | `joined` {`spectator`: true, `info`}, then `state` |
 | `state` | `game` | `state` |
 | `legal` | `game` | `turn` (only for the player to move) |
 | `act` | `game`, `action` | `ok` {`seq`}, then broadcasts |
@@ -132,4 +132,17 @@ HP is AWBW's internal 0-100, so HP lost is the damage %: 49-57% dealt here, 10-1
 
 Every `state` message also carries `"income": {"<player id>": funds}`: what each player collects at
 their next turn start, by the engine's rule (income properties times funds per property plus the
-CO's bonus). Property owners are public, so it's the same for every seat, fog or not.
+CO's bonus), counted on the receiving seat's own view: in fog, properties out of sight look neutral
+and don't count.
+
+### Hidden information
+
+A seat sees only its fog view. What else the server keeps back while a game runs:
+
+- **Spectating** shows everything (fog, dived Subs, hidden Stealths, Sonja's HP), so a running game
+  can be watched only with its `spectator_key`, which goes to the creator alone, and never from a
+  connection seated in that game. Once the game is over anyone may watch it.
+- **The luck seed** isn't sent (with it, every roll could be predicted) until the game is over, when
+  it appears in the game's summary; a creator who chose the seed gets it back in `created`. Luck
+  comes from ChaCha8 seeded with it, so a chosen seed replays the same game.
+- **Seat tokens** are 128 random bits.

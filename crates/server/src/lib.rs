@@ -44,7 +44,9 @@ pub struct Game {
     pub state: State,
     template: Option<Value>,
     seed: u64,
-    rng: u64,
+    rng: rand_chacha::ChaCha8Rng,
+    /// Lets the holder spectate (see everything) while the game runs; given only to the creator.
+    spectator_key: String,
     max_days: u32,
     seats: Vec<Seat>,
     spectators: Vec<(ConnId, Format)>,
@@ -105,8 +107,10 @@ impl Game {
 
     fn summary(&self) -> Value {
         json!({"game": self.id, "day": self.state.day, "current": self.state.current, "fog": self.state.fog,
-               "powers": self.state.powers, "banned": self.state.banned, "seed": self.seed, "max_days": self.max_days,
-               "players": self.players_json(), "over": self.over.is_some()})
+               "powers": self.state.powers, "banned": self.state.banned, "max_days": self.max_days,
+               "players": self.players_json(), "over": self.over.is_some(),
+               // The seed only once the game is over: with it, every luck roll can be predicted.
+               "seed": if self.over.is_some() { json!(self.seed) } else { Value::Null }})
     }
 
     /// After the position changed: per-viewer states, the turn prompt or the game's end.
@@ -150,8 +154,14 @@ fn fmt_name(f: Format) -> &'static str {
 pub struct Hub {
     pub games: BTreeMap<String, Game>,
     next_game: u64,
-    next_token: u64,
     names: HashMap<ConnId, String>,
+}
+
+/// 128 random bits from the OS, as hex.
+fn secret() -> String {
+    let mut b = [0u8; 16];
+    getrandom::fill(&mut b).expect("OS random source");
+    b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
 fn err(conn: ConnId, re: &Value, message: impl Into<String>) -> (ConnId, Value) {
@@ -171,15 +181,9 @@ impl Hub {
         Hub::default()
     }
 
-    fn token(&mut self, game: &str, player: PlayerId) -> String {
-        self.next_token += 1;
-        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-        let mut h: u64 = 0xcbf29ce484222325 ^ (t as u64) ^ self.next_token.wrapping_mul(0x9E3779B97F4A7C15);
-        for b in game.bytes().chain(player.to_le_bytes()) {
-            h ^= b as u64;
-            h = h.wrapping_mul(0x100000001b3);
-        }
-        format!("{h:016x}")
+    /// A seat token: 128 random bits from the OS, so it can't be guessed from the join time.
+    fn token(&mut self) -> String {
+        secret()
     }
 
     /// A connection closed: free its seats (they can be taken back with the token) and drop
@@ -283,19 +287,29 @@ impl Hub {
         if let Some(b) = msg["banned"].as_array() {
             s.banned = b.iter().filter_map(|x| x.as_str().map(String::from)).collect();
         }
-        let seed = msg["seed"].as_u64().unwrap_or_else(|| {
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1)
+        // The luck seed: the creator's (reproducible benchmarks) or 64 random bits. It is sent to
+        // nobody until the game is over (anyone holding it could predict every luck roll), except
+        // back to a creator who chose it.
+        let chosen = msg["seed"].as_u64();
+        let seed = chosen.unwrap_or_else(|| {
+            let mut b = [0u8; 8];
+            getrandom::fill(&mut b).expect("OS random source");
+            u64::from_le_bytes(b)
         });
         self.next_game += 1;
         let id = msg["name"].as_str().filter(|n| !n.is_empty() && !self.games.contains_key(*n))
             .map(String::from).unwrap_or_else(|| format!("g{}", self.next_game));
         let seats = s.players.iter().map(|p| Seat { player: p.id, conn: None, token: None, format: Format::Libaw, name: String::new() }).collect();
         let g = Game {
-            id: id.clone(), state: s, template, seed, rng: seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407),
+            id: id.clone(), state: s, template, seed, rng: <rand_chacha::ChaCha8Rng as rand_core::SeedableRng>::seed_from_u64(seed),
+            spectator_key: secret(),
             max_days: msg["max_days"].as_u64().unwrap_or(0) as u32, seats, spectators: vec![], seq: 0, over: None,
         };
-        let reply = json!({"type": "created", "game": id, "seed": seed, "players": g.players_json(),
-                           "awbw_format": g.template.is_some()});
+        let mut reply = json!({"type": "created", "game": id, "players": g.players_json(),
+                               "awbw_format": g.template.is_some(), "spectator_key": g.spectator_key});
+        if let Some(sd) = chosen {
+            reply["seed"] = json!(sd);
+        }
         self.games.insert(id, g);
         vec![(conn, with_id(reply, msg))]
     }
@@ -329,11 +343,13 @@ impl Hub {
         let given = msg["token"].as_str();
         let player = g.seats[i].player;
         let token = match (&g.seats[i].token, given) {
-            (None, _) => self.token(&gid, player),
+            (None, _) => self.token(),
             (Some(t), Some(x)) if t == x => t.clone(),
             (Some(_), _) => return vec![err(conn, msg, "seat taken (send its token to take it back)")],
         };
         let g = self.games.get_mut(&gid).unwrap();
+        // A player is never also a spectator of its own game.
+        g.spectators.retain(|&(c, _)| c != conn);
         let seat = &mut g.seats[i];
         seat.conn = Some(conn);
         seat.token = Some(token.clone());
@@ -358,6 +374,16 @@ impl Hub {
             Ok(f) => f,
             Err(e) => return vec![err(conn, msg, e)],
         };
+        // A spectator sees everything (fog, dived Subs, hidden Stealths, Sonja's HP), so while the
+        // game runs it needs the creator's key, and never from a connection seated in the game.
+        if g.over.is_none() {
+            if g.seats.iter().any(|s| s.conn == Some(conn)) {
+                return vec![err(conn, msg, "you play in this game: spectating it would show what your seat can't see")];
+            }
+            if msg["key"].as_str() != Some(g.spectator_key.as_str()) {
+                return vec![err(conn, msg, "this game is still running: spectating needs the creator's spectator_key (or wait for game_over)")];
+            }
+        }
         g.spectators.retain(|&(c, _)| c != conn);
         g.spectators.push((conn, format));
         let mut out = vec![(conn, with_id(json!({"type": "joined", "game": g.id, "spectator": true,
@@ -423,13 +449,16 @@ impl Hub {
         let label = view::describe(&g.state, &a);
         // Luck comes from the game's seeded generator: the same seed and the same actions give
         // the same game.
-        let mut rng = g.rng;
+        // ChaCha8, so the rolls seen in play don't give away the generator's state.
+        let mut rng = g.rng.clone();
         let mut roll = |lo: i32, hi: i32| {
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            lo + ((rng >> 33) as i32).rem_euclid(hi - lo + 1)
+            let x = rand_core::RngCore::next_u64(&mut rng);
+            lo + (x % (hi - lo + 1) as u64) as i32
         };
         let stepped = sim::step(&mut g.state, &a, &mut roll);
-        g.rng = rng;
+        if stepped.is_ok() {
+            g.rng = rng;
+        }
         if let Err(e) = stepped {
             g.state = before;
             return vec![err(conn, msg, format!("referee refused: {e}"))];

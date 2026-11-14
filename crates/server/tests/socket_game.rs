@@ -127,23 +127,45 @@ fn same_seed_same_game() {
 #[test]
 fn seats_tokens_and_spectators() {
     let mut hub = Hub::new();
-    let g = hub.handle(1, &json!({"type": "create", "state": last_stand(), "name": "t"}))[0].1["game"].as_str().unwrap().to_string();
+    let created = hub.handle(1, &json!({"type": "create", "state": last_stand(), "name": "t"}))[0].1.clone();
+    let g = created["game"].as_str().unwrap().to_string();
+    let key = created["spectator_key"].as_str().unwrap().to_string();
     assert_eq!(g, "t");
+    assert!(created["seed"].is_null(), "a random seed is never sent while the game runs");
     let j = hub.handle(2, &json!({"type": "join", "game": g, "seat": 1}));
     let token = j[0].1["token"].as_str().unwrap().to_string();
+    assert_eq!(token.len(), 32, "128 random bits");
+    assert!(j[0].1["info"]["seed"].is_null());
     let taken = hub.handle(3, &json!({"type": "join", "game": g, "seat": 1}));
     assert_eq!(taken[0].1["type"], "error");
     hub.disconnect(2);
     let back = hub.handle(3, &json!({"type": "join", "game": g, "seat": 1, "token": token}));
     assert_eq!(back[0].1["type"], "joined");
-    let sp = hub.handle(4, &json!({"type": "spectate", "game": g}));
+    // A running game: no spectating without the key, and never from a seated connection.
+    assert_eq!(hub.handle(4, &json!({"type": "spectate", "game": g}))[0].1["type"], "error");
+    assert_eq!(hub.handle(3, &json!({"type": "spectate", "game": g, "key": key}))[0].1["type"], "error", "a player can't spectate its own game");
+    let sp = hub.handle(4, &json!({"type": "spectate", "game": g, "key": key}));
     assert_eq!(sp[0].1["spectator"], true);
-    assert_eq!(hub.handle(4, &json!({"type": "spectate", "game": g, "format": "awbw"}))[0].1["type"], "error");
+    assert_eq!(hub.handle(4, &json!({"type": "spectate", "game": g, "format": "awbw", "key": key}))[0].1["type"], "error");
     // A resign by the only other player ends it.
     let r = hub.handle(3, &json!({"type": "resign", "game": g}));
     let over = r.iter().find(|(c, v)| *c == 4 && v["type"] == "game_over").expect("the spectator hears it");
     assert_eq!(over.1["winner"], "1");
     assert_eq!(over.1["reason"], "resign");
+    // Over: anyone may watch it, and the seed is public now.
+    let after = hub.handle(5, &json!({"type": "spectate", "game": g}));
+    assert_eq!(after[0].1["spectator"], true);
+    assert!(after[0].1["info"]["seed"].is_u64());
+}
+
+#[test]
+fn a_chosen_seed_replays_the_same_luck() {
+    let mut hub = Hub::new();
+    let c = hub.handle(1, &json!({"type": "create", "state": last_stand(), "seed": 42}))[0].1.clone();
+    assert_eq!(c["seed"], 42, "echoed to the creator who chose it");
+    let a = hub.handle(1, &json!({"type": "create", "state": last_stand()}))[0].1["spectator_key"].clone();
+    let b = hub.handle(1, &json!({"type": "create", "state": last_stand()}))[0].1["spectator_key"].clone();
+    assert_ne!(a, b);
 }
 
 #[test]
@@ -182,7 +204,7 @@ fn state_carries_each_players_income() {
     let mut hub = Hub::new();
     let out = hub.handle(1, &json!({"type": "create", "turn": turn}));
     let game = out[0].1["game"].as_str().unwrap().to_string();
-    let sp = hub.handle(2, &json!({"type": "spectate", "game": game}));
+    let sp = hub.handle(2, &json!({"type": "spectate", "game": game, "key": out[0].1["spectator_key"]}));
     let st = &sp.iter().find(|(_, v)| v["type"] == "state").unwrap().1;
     let fpp = st["state"]["funds_per_property"].as_i64().unwrap();
     for p in st["state"]["players"].as_array().unwrap() {

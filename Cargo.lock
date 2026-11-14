@@ -410,7 +410,10 @@ name = "libaw-server"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "getrandom 0.3.4",
  "libaw",
+ "rand_chacha",
+ "rand_core",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
