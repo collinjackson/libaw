@@ -180,32 +180,55 @@ pub struct AttackParams {
     pub luck_max: i32,
 }
 
-/// AWBW's result depends on how double-precision arithmetic rounds each step, so this has
-/// to use f64 in AWBW's own order of operations: integer arithmetic gives 80 where AWBW
-/// (and game-1749614, turn 26) gives 79. IEEE 754 doubles are deterministic, so the same
-/// inputs give the same result everywhere.
+/// AWBW computes damage in double precision (PHP floats), and its result depends on how the
+/// doubles round: game-1749614 turn 26 is 79.95 on paper and AWBW dealt 79. `damage_f64` is
+/// that computation, in AWBW's order of operations. `damage_exact` gives the same answer for
+/// every input with integer arithmetic (for a zkVM, where floats are emulated and slow): the
+/// exact value is a multiple of 1e-8, and double rounding can only matter when it sits exactly
+/// on a "x.95" boundary, so only those rare inputs fall back to `damage_f64`.
 pub fn damage_range(p: &AttackParams) -> (u32, u32) {
-    let f = |luck: i32| -> u32 {
-        let attack = p.att_value as f64 + p.att_milli as f64 / 1000.0;
-        let raw = (p.att_hp as f64 / 10.0) * (p.base as f64 * (attack / 100.0) + luck as f64);
-        let defence = 200 - (p.def_value as i64 + p.def_terrain as i64 * p.def_hp as i64);
-        let raw = raw * (defence as f64 / 100.0);
-        if raw.is_nan() || raw <= 0.0 {
-            return 0;
-        }
-        // One decimal the way AWBW rounds it: the whole tenths below the
-        // value, one more when the value is at or above the double nearest to "those tenths
-        // and a half". Then drop the fraction.
-        let mut tenths = (raw * 10.0).floor();
-        if (tenths + 1.0) / 10.0 == raw {
-            tenths += 1.0; // the product is exactly the next tenth
-        }
-        if raw >= (tenths + 0.5) / 10.0 {
-            tenths += 1.0;
-        }
-        (tenths as u64 / 10) as u32
-    };
-    (f(p.luck_min), f(p.luck_max))
+    (damage_exact(p, p.luck_min), damage_exact(p, p.luck_max))
+}
+
+/// Damage at one luck roll, as AWBW's doubles give it.
+pub fn damage_f64(p: &AttackParams, luck: i32) -> u32 {
+    let attack = p.att_value as f64 + p.att_milli as f64 / 1000.0;
+    let raw = (p.att_hp as f64 / 10.0) * (p.base as f64 * (attack / 100.0) + luck as f64);
+    let defence = 200 - (p.def_value as i64 + p.def_terrain as i64 * p.def_hp as i64);
+    let raw = raw * (defence as f64 / 100.0);
+    if raw.is_nan() || raw <= 0.0 {
+        return 0;
+    }
+    // One decimal the way AWBW rounds it: the whole tenths below the
+    // value, one more when the value is at or above the double nearest to "those tenths
+    // and a half". Then drop the fraction.
+    let mut tenths = (raw * 10.0).floor();
+    if (tenths + 1.0) / 10.0 == raw {
+        tenths += 1.0; // the product is exactly the next tenth
+    }
+    if raw >= (tenths + 0.5) / 10.0 {
+        tenths += 1.0;
+    }
+    (tenths as u64 / 10) as u32
+}
+
+/// The same result as `damage_f64`, in integers. raw = N / 1e8 exactly, with
+/// N = hp * (base * (1000 * attack + milli) + 100000 * luck) * defence. Rounding to one decimal
+/// and then dropping the fraction is floor(raw + 0.05), except when raw is exactly k - 0.05:
+/// there the doubles decide (79.95 gave 79), so those inputs take the f64 path.
+pub fn damage_exact(p: &AttackParams, luck: i32) -> u32 {
+    let defence = 200 - (p.def_value as i128 + p.def_terrain as i128 * p.def_hp as i128);
+    let n = p.att_hp as i128
+        * (p.base as i128 * (1000 * p.att_value as i128 + p.att_milli as i128) + 100_000 * luck as i128)
+        * defence;
+    if n <= 0 {
+        return 0;
+    }
+    let q = n + 5_000_000;
+    if q % 100_000_000 == 0 {
+        return damage_f64(p, luck);
+    }
+    (q / 100_000_000) as u32
 }
 
 /// Terrain defence stars that apply to a unit (air units get none).
