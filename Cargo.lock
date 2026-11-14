@@ -397,6 +397,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libaw-proof"
+version = "0.1.0"
+dependencies = [
+ "libaw",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "libaw-replay"
 version = "0.1.0"
 dependencies = [
