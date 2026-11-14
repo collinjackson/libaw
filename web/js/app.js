@@ -177,7 +177,9 @@ function onMessage(m) {
     }
     case 'game_over': {
       ui.over = m;
-      const won = m.winner == null ? 'No winner' : `Team ${m.winner} wins`;
+      // The winner is a team id; name its players (a 1v1 team is one player).
+      const side = (ui.state?.players ?? []).filter((p) => String(p.team ?? p.id) === String(m.winner)).map((p) => playerName(p.id));
+      const won = m.winner == null ? 'No winner' : `${side.length ? side.join(' & ') : `Team ${m.winner}`} ${side.length > 1 ? 'win' : 'wins'}`;
       log(`Game over: ${won} (${m.reason.replace('_', ' ')}), day ${m.day}`);
       banner(`Game over · ${won}`, 0);
       render();
