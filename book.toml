@@ -14,3 +14,4 @@ build-dir = "book"
 site-url = "/libaw/"
 git-repository-url = "https://github.com/collinjackson/libaw"
 edit-url-template = "https://github.com/collinjackson/libaw/edit/main/{path}"
+additional-css = ["book-theme/libaw.css"]

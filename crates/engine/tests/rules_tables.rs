@@ -5,8 +5,18 @@ use libaw::data::tables;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-const MOVE_TYPES: [(&str, &str); 8] = [("F", "Foot (Infantry)"), ("B", "Boots (Mech)"), ("T", "Treads"), ("W", "Tires"),
+const MOVE_TYPES: [(&str, &str); 8] = [("F", "Foot"), ("B", "Boots"), ("T", "Treads"), ("W", "Tires"),
     ("A", "Air"), ("S", "Sea"), ("L", "Lander"), ("P", "Pipe")];
+
+/// Short column names for the damage tables, so they fit a page.
+fn short(name: &str) -> &str {
+    match name {
+        "Infantry" => "Inf", "Md.Tank" => "Md.T", "Artillery" => "Arty", "Rocket" => "Rkt", "Anti-Air" => "AA",
+        "Missile" => "Msl", "Neotank" => "Neo", "Piperunner" => "Pipe", "Mega Tank" => "Mega", "B-Copter" => "B-Cop",
+        "T-Copter" => "T-Cop", "Black Bomb" => "B.Bomb", "Battleship" => "B.Ship", "Black Boat" => "B.Boat",
+        other => other,
+    }
+}
 
 fn render() -> String {
     let t = tables();
@@ -20,7 +30,8 @@ fn render() -> String {
     s += "## Units\n\nCost in funds; move in movement points; fuel per day (`burn`) is what an air or sea unit uses at\n";
     s += "the start of each of its turns; ammo 0 means it has only a machine gun or no weapon; range is min-max\n";
     s += "(1-1 is direct fire; none: it can't attack).\n\n";
-    s += "| Unit | Cost | Move | Move type | Fuel | Burn | Ammo | Vision | Range | Second weapon |\n";
+    s += "Move types: F foot (Infantry), B boots (Mech), T treads, W tires, A air, S sea, L lander, P pipe.\n\n";
+    s += "| Unit | Cost | Move | Type | Fuel | Burn | Ammo | Vision | Range | 2nd gun |\n";
     s += "|---|---|---|---|---|---|---|---|---|---|\n";
     let mut units: Vec<_> = t.units.iter().collect();
     units.sort_by_key(|(_, u)| u.id);
@@ -34,23 +45,34 @@ fn render() -> String {
     s += "\n## Base damage\n\nPercent of a full-HP defender's HP that a full-HP attacker deals before CO, terrain and luck\n";
     s += "(the damage formula is in `rules::damage_f64`). Rows attack, columns defend; blank means it can't attack that\n";
     s += "unit.\n\n";
+    s += "Split by what is defending so each table fits a page. Column names are shortened: Inf Infantry, Md.T\n";
+    s += "Md.Tank, Arty Artillery, Rkt Rocket, AA Anti-Air, Msl Missile, Neo Neotank, Pipe Piperunner, Mega Mega Tank,\n";
+    s += "B-Cop/T-Cop B-/T-Copter, B.Bomb Black Bomb, B.Ship Battleship, B.Boat Black Boat.\n";
     let names: Vec<&str> = units.iter().map(|(n, _)| n.as_str()).collect();
-    s += "| Attacker |";
-    for n in &names { write!(s, " {n} |").unwrap(); }
-    s += "\n|---|";
-    for _ in &names { s += "---|"; }
-    s += "\n";
-    for a in &names {
-        write!(s, "| {a} |").unwrap();
-        for d in &names {
-            match t.base_damage(a, d) { Some(v) => write!(s, " {v} |").unwrap(), None => s += " |" }
-        }
+    let domain = |n: &str| match t.units[n].move_type.as_str() { "A" => "air", "S" | "L" => "sea", _ => "ground" };
+    for (title, d) in [("Against ground units", "ground"), ("Against air units", "air"), ("Against sea units", "sea")] {
+        let cols: Vec<&str> = names.iter().copied().filter(|n| domain(n) == d).collect();
+        write!(s, "\n### {title}\n\n| Attacker |").unwrap();
+        for n in &cols { write!(s, " {} |", short(n)).unwrap(); }
+        s += "\n|---|";
+        for _ in &cols { s += "---|"; }
         s += "\n";
+        for a in &names {
+            if cols.iter().all(|dd| t.base_damage(a, dd).is_none()) {
+                continue;
+            }
+            write!(s, "| {a} |").unwrap();
+            for dd in &cols {
+                match t.base_damage(a, dd) { Some(v) => write!(s, " {v} |").unwrap(), None => s += " |" }
+            }
+            s += "\n";
+        }
     }
 
     // Terrain, clear weather.
     s += "\n## Terrain\n\nDefence stars and movement cost by move type in clear weather (blank: impassable). Rain and snow\n";
-    s += "costs are in `rules::move_cost_in`. Tiles that share all values are listed together.\n\n";
+    s += "costs are in `rules::move_cost_in`. Tiles that share all values are listed together. Foot is Infantry,\n";
+    s += "Boots is Mech; Lander covers Landers and Black Boats.\n\n";
     s += "| Terrain | Stars |";
     for (_, m) in MOVE_TYPES { write!(s, " {m} |").unwrap(); }
     s += "\n|---|---|";
