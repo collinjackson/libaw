@@ -1,8 +1,8 @@
 # AGENTS.md
 
-Building a bot on libaw? Read [docs/bots.md](docs/bots.md) first: what to ask the engine instead of
-reimplementing the rules, what a seat may know, and where the rules are written down. The same page
-is on the docs site: https://collinjackson.github.io/libaw/bots.html
+Building a bot on libaw? Read [docs/bots.md](docs/bots.md) first: how to play through the
+server, what libaw's engine can answer for you, what a seat may know, and where the rules are
+written down. The same page is on the docs site: https://collinjackson.github.io/libaw/bots.html
 
 Changing the engine itself? See [CONTRIBUTING.md](CONTRIBUTING.md).
 

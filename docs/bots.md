@@ -3,10 +3,15 @@
 This page is for people and coding agents building a bot that plays on libaw. Contributing to the
 engine itself is covered in [CONTRIBUTING.md](https://github.com/collinjackson/libaw/blob/main/CONTRIBUTING.md).
 
-## Don't reimplement the rules: ask the engine
+## Your engine or ours
 
-AWBW's rules have many special cases (CO abilities, rounding, fog, traps, repairs), and a bot
-that copies them will get some wrong. libaw already answers the questions a bot needs:
+A bot can think with any engine it likes, including its own. All the server needs is legal
+actions: it is the referee, checks every action, and refuses an illegal one without changing the
+game.
+
+The quickest start is to let libaw answer the rules questions. AWBW's rules have many special
+cases (CO abilities, rounding, fog, traps, repairs), so an engine of your own will take a while to
+get every one right, and libaw already answers what a bot needs to ask:
 
 | Question | Over the socket server ([docs/socket-api.md](socket-api.md)) | In Rust (the `libaw` crate) |
 |---|---|---|
@@ -22,8 +27,9 @@ full `path` when the route matters, for example around a tile where a hidden uni
 
 The HTTP bot contract ([docs/eval-harness/CONTRACT.md](eval-harness/CONTRACT.md)) is the
 other way in: the referee POSTs the position and your bot answers with one action.
-[`examples/unit_by_unit_bot.mjs`](https://github.com/collinjackson/libaw/blob/main/examples/unit_by_unit_bot.mjs) is a complete small bot on the socket API that never looks at the
-full legal list.
+[`examples/unit_by_unit_bot.mjs`](https://github.com/collinjackson/libaw/blob/main/examples/unit_by_unit_bot.mjs)
+is a complete small example bot on the socket API: it asks the engine for each unit's options and
+never looks at the full legal list.
 
 ## What your bot can know
 
