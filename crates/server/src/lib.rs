@@ -50,7 +50,11 @@ pub struct Game {
     max_days: u32,
     seats: Vec<Seat>,
     spectators: Vec<(ConnId, Format)>,
+    /// Counts applied actions; only spectators see it. A seat gets its own count instead (below),
+    /// since the global one would tell it how many actions it couldn't see.
     seq: u64,
+    /// Per player: the last view sent and how many times it has changed (that seat's `seq`).
+    views: HashMap<PlayerId, (Value, u64)>,
     pub over: Option<Value>,
 }
 
@@ -87,14 +91,14 @@ impl Game {
             (p.id.to_string(), json!(n * (v.funds_per_property + libaw::co::property_fund_increase(&p.co))))
         }).collect();
         json!({"type": "state", "game": self.id, "format": fmt_name(format), "day": v.day,
-               "current": v.current, "seq": self.seq, "income": income, "state": state})
+               "current": v.current, "seq": self.seq_for(who), "income": income, "state": state})
     }
 
     fn turn_msg(&self) -> Value {
         let v = fog::player_view(&self.state, self.state.current);
         let legal: Vec<Value> = legal_actions(&v).iter().map(action_to_contract).collect();
         json!({"type": "turn", "game": self.id, "player": self.state.current, "day": self.state.day,
-               "seq": self.seq, "legal": legal})
+               "seq": self.seq_for(Some(self.state.current)), "legal": legal})
     }
 
     fn players_json(&self) -> Vec<Value> {
@@ -114,9 +118,36 @@ impl Game {
     }
 
     /// After the position changed: per-viewer states, the turn prompt or the game's end.
+    /// Recompute every player's view; the players whose view changed (their `seq` goes up).
+    fn refresh_views(&mut self) -> Vec<PlayerId> {
+        let mut changed = vec![];
+        for p in self.state.players.iter().map(|p| p.id).collect::<Vec<_>>() {
+            let v = serde_json::to_value(fog::player_view(&self.state, p)).unwrap_or(Value::Null);
+            let e = self.views.entry(p).or_insert((Value::Null, 0));
+            if e.0 != v {
+                *e = (v, e.1 + 1);
+                changed.push(p);
+            }
+        }
+        changed
+    }
+
+    /// The `seq` a viewer sees: its own view count for a seat, the action count for a spectator.
+    fn seq_for(&self, who: Option<PlayerId>) -> u64 {
+        match who {
+            Some(p) => self.views.get(&p).map_or(0, |v| v.1),
+            None => self.seq,
+        }
+    }
+
     fn after_change(&mut self, out: &mut Out) {
+        // A seat whose view didn't change gets no state: in fog an unseen enemy action would
+        // otherwise still show up as a message (and its timing).
+        let changed = self.refresh_views();
         for (c, who, f) in self.audience() {
-            out.push((c, self.state_msg(who, f)));
+            if who.is_none_or(|p| changed.contains(&p)) {
+                out.push((c, self.state_msg(who, f)));
+            }
         }
         if self.over.is_none() {
             if let Some(t) = sim::winner(&self.state) {
@@ -199,6 +230,26 @@ impl Hub {
     }
 
     pub fn handle(&mut self, conn: ConnId, msg: &Value) -> Out {
+        let mut out = self.dispatch(conn, msg);
+        self.seat_seqs(&mut out);
+        out
+    }
+
+    /// Every `seq` sent to a seated connection is that seat's own view count, never the game's
+    /// action count (see `Game::seq`).
+    fn seat_seqs(&self, out: &mut Out) {
+        for (c, v) in out.iter_mut() {
+            if v.get("seq").is_none() {
+                continue;
+            }
+            let Some(g) = v["game"].as_str().and_then(|id| self.games.get(id)) else { continue };
+            if let Some(s) = g.seat_of_conn(*c) {
+                v["seq"] = json!(g.seq_for(Some(s.player)));
+            }
+        }
+    }
+
+    fn dispatch(&mut self, conn: ConnId, msg: &Value) -> Out {
         let t = msg["type"].as_str().unwrap_or("");
         match t {
             "hello" => {
@@ -303,8 +354,10 @@ impl Hub {
         let g = Game {
             id: id.clone(), state: s, template, seed, rng: <rand_chacha::ChaCha8Rng as rand_core::SeedableRng>::seed_from_u64(seed),
             spectator_key: secret(),
-            max_days: msg["max_days"].as_u64().unwrap_or(0) as u32, seats, spectators: vec![], seq: 0, over: None,
+            max_days: msg["max_days"].as_u64().unwrap_or(0) as u32, seats, spectators: vec![], seq: 0, views: HashMap::new(), over: None,
         };
+        let mut g = g;
+        g.refresh_views();
         let mut reply = json!({"type": "created", "game": id, "players": g.players_json(),
                                "awbw_format": g.template.is_some(), "spectator_key": g.spectator_key});
         if let Some(sd) = chosen {

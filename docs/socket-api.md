@@ -87,7 +87,9 @@ accounts or passwords, so run it on a trusted network.
 - `error` {`re` (the request's type), `message`}: the request changed nothing. An illegal
   action is an error and the player keeps the turn.
 
-`seq` counts applied actions, so a client can tell if it missed one.
+`seq` counts changes to what the receiver sees: for a seat, each change to its own view (so it can tell
+if it missed one, but not how many enemy actions it didn't see); for a spectator, every applied action.
+A seat whose view didn't change gets no `state`.
 
 ## Rules of play
 
