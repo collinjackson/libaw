@@ -53,8 +53,8 @@ a fix is checked, is in [CONTRIBUTING.md](CONTRIBUTING.md); in short:
 - **A pull request**: say which rule it changes and the evidence (a recorded game and turn, the
   damage calculator, a test game), and run the replay checker before and after.
 
-Describe behaviour (what happens, with numbers), never AWBW's source code: the engine is meant to
-be open-sourced, so its code and cases must stay independent of AWBW's.
+Describe behaviour (what happens, with numbers), never AWBW's source code: libaw is open source,
+so its code and cases must stay independent of AWBW's.
 
 ## Playing over the socket API
 
