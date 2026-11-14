@@ -1,10 +1,10 @@
 # libaw
 
-A rules engine for [Advance Wars By Web](https://awbw.amarriner.com): `(state, action) -> state`,
-deterministic, no I/O. It is built clean-room from recorded AWBW games, AWBW's own pages and the
-AWBW wiki, and checked against every recorded turn we hold. Where the engine and AWBW disagree,
-AWBW is right and the engine has a bug. (The Rust crate is still named `awbw-engine`; a rename
-is coming.)
+A rules engine compatible with [Advance Wars By Web](https://awbw.amarriner.com) (AWBW):
+`(state, action) -> state`, deterministic, no I/O. It is built clean-room from recorded AWBW games,
+AWBW's own pages and the AWBW wiki, and checked against every recorded turn we hold. Where the
+engine and AWBW disagree, AWBW is right and the engine has a bug. libaw is an independent project,
+not affiliated with AWBW.
 
 **How close it is:** across 1,092 recorded games, about 13 million rule checks (moves, legal
 actions, damage, counters, captures, funds, CO powers), 99.96% match AWBW. Some of what's left is
@@ -15,11 +15,11 @@ and what is still open: [docs/awbw-rule-findings.md](docs/awbw-rule-findings.md)
 
 | Part | What it does |
 | --- | --- |
-| `crates/engine` | The rules. `actions.rs` lists legal actions, `sim.rs` applies them, `co.rs` holds CO effects, `combat.rs` and `rules.rs` damage, movement and terrain, `fog.rs` what each player sees, `storyboard.rs` a turn's record as steps to replay. |
-| `crates/replay` | `awbw-replay`: checks recorded games against the engine, plays local matches between bots, and turns a recorded turn into a storyboard. |
+| `crates/engine` | `libaw`, the rules. `actions.rs` lists legal actions, `sim.rs` applies them, `co.rs` holds CO effects, `combat.rs` and `rules.rs` damage, movement and terrain, `fog.rs` what each player sees, `storyboard.rs` a turn's record as steps to replay. |
+| `crates/replay` | `libaw-replay` (binary `awbw-replay`): checks recorded games against the engine, plays local matches between bots, and turns a recorded turn into a storyboard. |
 | `crates/server` | `libaw-server`: runs games any client can play over a WebSocket. |
-| `crates/wasm` | The engine in the browser. |
-| `web/` | A browser client for the server and a turn replay viewer, with original placeholder art (or AWBW's, loaded from AWBW's site). |
+| `crates/wasm` | `libaw-wasm`: the engine in the browser as WebAssembly. |
+| `web/` | A browser client for the server, a move planner and a turn replay viewer, with libaw's own art (or AWBW's, loaded from AWBW's site at view time). |
 | `data/` | Unit, terrain, damage and CO tables; where each comes from is in [docs/sources.md](docs/sources.md). |
 
 ## Build and test
@@ -77,5 +77,16 @@ as a GIF or MP4. Format: [docs/storyboard.md](docs/storyboard.md).
 
 ## License
 
-Not chosen yet; until then, all rights reserved. AWBW's art is never stored here: the replay
-viewer loads it from AWBW's site.
+Dual-licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as
+above, without any additional terms or conditions.
+
+libaw's art (`web/assets`) is original; it is proposed for release under CC0, separately
+([web/assets/LICENSE.md](web/assets/LICENSE.md)). AWBW's art is never stored
+here: the web client can load it from AWBW's site at view time, and it remains its owners'.
+Advance Wars is a trademark of Nintendo; libaw is not affiliated with Nintendo or AWBW.

@@ -2,17 +2,17 @@
 //! cap on power costs, Jake's Piperunners, who a heal reaches, Eagle's copters out of fuel,
 //! counterattacks on hidden units, and Kindle on pipes. See docs/awbw-rule-findings.md.
 
-use awbw_engine::actions::{Action, Pos, Then};
-use awbw_engine::data::tables;
-use awbw_engine::rules::{base_damage_now, move_cost};
-use awbw_engine::{co, combat, fog, sim, Hp, Player, PlayerId, State, Unit, UnitId};
+use libaw::actions::{Action, Pos, Then};
+use libaw::data::tables;
+use libaw::rules::{base_damage_now, move_cost};
+use libaw::{co, combat, fog, sim, Hp, Player, PlayerId, State, Unit, UnitId};
 
 fn state() -> State {
     let turn: serde_json::Value = serde_json::from_str(include_str!(
         "../../../docs/eval-harness/test-states/game-1755654-turn-020-D11-pid4205798.json"
     ))
     .unwrap();
-    awbw_engine::awbw::state_from(&turn)
+    libaw::awbw::state_from(&turn)
 }
 
 fn unit(id: UnitId, owner: PlayerId, kind: &str, at: Pos) -> Unit {
@@ -176,7 +176,7 @@ fn transports_join_while_their_cargo_fits() {
     let rider = add(&mut s, Unit { carried_by: Some(a), ..unit(2, me, "Infantry", here) });
     s.units.get_mut(&a).unwrap().cargo.push(rider);
     let b = add(&mut s, Unit { hp: Hp::exact(40), ..unit(3, me, "APC", there) });
-    assert!(awbw_engine::actions::options_at(&s, &s.units[&a], there).contains(&Then::Join));
+    assert!(libaw::actions::options_at(&s, &s.units[&a], there).contains(&Then::Join));
     sim::step(&mut s, &Action::Move { unit: a, path: vec![here, there], then: Then::Join }, &mut avg).unwrap();
     assert!(!s.units.contains_key(&a));
     assert_eq!((s.units[&b].hp, s.units[&b].cargo.clone()), (Hp::exact(90), vec![rider]));
@@ -189,7 +189,7 @@ fn transports_join_while_their_cargo_fits() {
         let rider = add(&mut s, Unit { carried_by: Some(apc), ..unit(id + 1, me, "Infantry", at) });
         s.units.get_mut(&apc).unwrap().cargo.push(rider);
     }
-    assert!(!awbw_engine::actions::options_at(&s, &s.units[&1], there).contains(&Then::Join));
+    assert!(!libaw::actions::options_at(&s, &s.units[&1], there).contains(&Then::Join));
 }
 
 #[test]

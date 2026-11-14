@@ -12,7 +12,7 @@ its action menu, or a red one to fire. Click your base, airport or port to build
 ends the turn. The URL keeps `?server=&game=&seat=`, and the seat's token is kept in
 localStorage, so a reload takes the seat back.
 
-- `assets/`: original placeholder art drawn by `assets/make_sprites.py` (CC0 proposal,
+- `assets/`: libaw's original art, drawn by `assets/make_sprites.py` (CC0 proposal,
   `assets/LICENSE.md`). Team colours come from CSS variables.
 - `states/skirmish.json`: an original two-player map at day 1 (`states/make_skirmish.py [CO1] [CO2]`).
 - `parity.html` + `parity.json`: UI feature parity with AWBW's game page.

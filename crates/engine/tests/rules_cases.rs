@@ -1,8 +1,8 @@
 //! Rules cases: one JSON file per rule, in tests/cases/. Each holds a position, one action, and
 //! what AWBW does with it, so a rules bug report is a file that fails `cargo test`. Format and
 //! how to file one: docs/rules-cases.md.
-use awbw_engine::actions::{legal_actions, Action, Pos, Then};
-use awbw_engine::{awbw, sim, State};
+use libaw::actions::{legal_actions, Action, Pos, Then};
+use libaw::{awbw, sim, State};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -61,7 +61,7 @@ fn action(s: &State, v: &Value) -> (Action, Option<Pos>) {
         let to = if m["to"].is_array() { pos(&m["to"]) } else { (u.x, u.y) };
         let path = match m["path"].as_array() {
             Some(p) => p.iter().map(pos).collect(),
-            None => awbw_engine::actions::reachable(s, u).get(&to).map(|r| r.1.clone()).unwrap_or(vec![(u.x, u.y), to]),
+            None => libaw::actions::reachable(s, u).get(&to).map(|r| r.1.clone()).unwrap_or(vec![(u.x, u.y), to]),
         };
         return (Action::Move { unit: id, path, then: then(m.get("then").unwrap_or(&Value::from("wait"))) }, Some(to));
     }

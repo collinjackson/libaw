@@ -39,7 +39,7 @@ wants, add phases of its own ahead of a step (`before`) and draw them (`overlays
 
 ## Art
 
-Without an art set the viewer draws libaw's own placeholder sprites (`web/assets`). `art=awbw`
+Without an art set the viewer draws libaw's own sprites (`web/assets`). `art=awbw`
 draws units with Advance Wars By Web's sprites, loaded from AWBW's site when the page runs: libaw
 carries no AWBW art, only the address pattern (`web/js/art.js`). A sprite that fails to load falls
 back to libaw's.

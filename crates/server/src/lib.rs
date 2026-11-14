@@ -6,9 +6,9 @@
 //! `Hub::handle` is the whole protocol as a pure function of (message in) -> (messages out), so
 //! it is tested without sockets; `serve` only moves frames between sockets and the hub.
 
-use awbw_engine::actions::{legal_actions, Action, Then};
-use awbw_engine::awbw::{action_from_contract, action_to_contract, state_from, to_turn_json};
-use awbw_engine::{fog, sim, view, Hp, PlayerId, State};
+use libaw::actions::{legal_actions, Action, Then};
+use libaw::awbw::{action_from_contract, action_to_contract, state_from, to_turn_json};
+use libaw::{fog, sim, view, Hp, PlayerId, State};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -81,8 +81,8 @@ impl Game {
         // Income at each player's next turn start, by the engine's own rule (income properties x
         // (funds per property + the CO's bonus, e.g. Sasha)). Property owners are public, fog or not.
         let income: serde_json::Map<String, Value> = v.players.iter().map(|p| {
-            let n = v.buildings.values().filter(|b| b.owner == Some(p.id) && awbw_engine::rules::is_income_property(b.terrain)).count() as i64;
-            (p.id.to_string(), json!(n * (v.funds_per_property + awbw_engine::co::property_fund_increase(&p.co))))
+            let n = v.buildings.values().filter(|b| b.owner == Some(p.id) && libaw::rules::is_income_property(b.terrain)).count() as i64;
+            (p.id.to_string(), json!(n * (v.funds_per_property + libaw::co::property_fund_increase(&p.co))))
         }).collect();
         json!({"type": "state", "game": self.id, "format": fmt_name(format), "day": v.day,
                "current": v.current, "seq": self.seq, "income": income, "state": state})

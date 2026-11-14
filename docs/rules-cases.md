@@ -6,7 +6,7 @@ fails with a line like
 
     tank-vs-tank-plains-min-luck.json: unit 2 hp: engine 51, AWBW 50
 
-Run one case (name substring): `CASE=tank-vs cargo test --release -p awbw-engine --test rules_cases`.
+Run one case (name substring): `CASE=tank-vs cargo test --release -p libaw --test rules_cases`.
 
 ## Format
 

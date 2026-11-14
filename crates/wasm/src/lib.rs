@@ -1,10 +1,10 @@
 //! The engine for the play-a-bot page, as WebAssembly for a server-side function. Every call
 //! takes and returns JSON text; the game state travels with each request (the page holds it).
 
-use awbw_engine::actions::{legal_actions, Action};
-use awbw_engine::awbw::{action_from_contract, action_to_contract, state_from};
-use awbw_engine::view::{describe, frame, log_header};
-use awbw_engine::{baseline, sim, Hp, State};
+use libaw::actions::{legal_actions, Action};
+use libaw::awbw::{action_from_contract, action_to_contract, state_from};
+use libaw::view::{describe, frame, log_header};
+use libaw::{baseline, sim, Hp, State};
 use serde_json::{json, Value};
 use wasm_bindgen::prelude::*;
 
@@ -52,7 +52,7 @@ pub fn start_with(turn_file: &str, opts: &str) -> String {
     }
     for (i, p) in s.players.iter_mut().enumerate() {
         if let Some(co) = o["cos"][i].as_str() {
-            let (c, sc) = awbw_engine::co::power_base(co).unwrap_or((0, 0));
+            let (c, sc) = libaw::co::power_base(co).unwrap_or((0, 0));
             p.co = if c == 0 { "No CO".into() } else { co.to_string() };
             p.cop_cost = c;
             p.scop_cost = sc;
@@ -67,7 +67,7 @@ pub fn start_with(turn_file: &str, opts: &str) -> String {
 /// The COs a game can use, "No CO" first: [{name, powers: "full" | "partial" | "none"}].
 #[wasm_bindgen]
 pub fn cos() -> String {
-    json!(awbw_engine::co::roster().into_iter().map(|(n, st)| json!({"name": n, "powers": st})).collect::<Vec<_>>()).to_string()
+    json!(libaw::co::roster().into_iter().map(|(n, st)| json!({"name": n, "powers": st})).collect::<Vec<_>>()).to_string()
 }
 
 /// Legal actions for the player to move, in the contract's format, with labels.
@@ -87,7 +87,7 @@ pub fn act(state: &str, action: &str, seed: u32) -> String {
     let a = match action_from_contract(&s, &v) { Ok(a) => a, Err(e) => return err(e) };
     let label = describe(&s, &a);
     let mut next = rng(seed);
-    let mut roll = |lo: i32, hi: i32| awbw_engine::co::roll_luck(lo, hi, &mut next);
+    let mut roll = |lo: i32, hi: i32| libaw::co::roll_luck(lo, hi, &mut next);
     if let Err(e) = sim::step(&mut s, &a, &mut roll) {
         return err(e);
     }
@@ -115,7 +115,7 @@ pub fn bot_turn(state: &str, level: &str, seed: u32) -> String {
             _ => (baseline::random(&s, &mut next), vec![]),
         };
         let label = describe(&s, &a);
-        let mut roll = |lo: i32, hi: i32| awbw_engine::co::roll_luck(lo, hi, &mut next);
+        let mut roll = |lo: i32, hi: i32| libaw::co::roll_luck(lo, hi, &mut next);
         if sim::step(&mut s, &a, &mut roll).is_err() {
             let _ = sim::end_turn(&mut s);
         }
@@ -151,7 +151,7 @@ fn planner_roll(mode: &str, seed: u32) -> impl FnMut(i32, i32) -> i32 + '_ {
             "best" => if first { hi } else { lo },
             "worst" => if first { lo } else { hi },
             "average" => (lo + hi).div_euclid(2),
-            _ => awbw_engine::co::roll_luck(lo, hi, &mut next),
+            _ => libaw::co::roll_luck(lo, hi, &mut next),
         }
     }
 }
@@ -174,7 +174,7 @@ pub fn act_luck(state: &str, action: &str, mode: &str, seed: u32) -> String {
 /// highest luck rolls, as HP after. Nothing changes.
 #[wasm_bindgen]
 pub fn preview(state: &str, action: &str) -> String {
-    use awbw_engine::actions::Then;
+    use libaw::actions::Then;
     let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
     let v: Value = match serde_json::from_str(action) { Ok(v) => v, Err(e) => return err(e) };
     let a = match action_from_contract(&s, &v) { Ok(a) => a, Err(e) => return err(e) };
@@ -199,8 +199,8 @@ pub fn preview(state: &str, action: &str) -> String {
 pub fn income(state: &str) -> String {
     let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
     let m: serde_json::Map<String, Value> = s.players.iter().map(|p| {
-        let n = s.buildings.values().filter(|b| b.owner == Some(p.id) && awbw_engine::rules::is_income_property(b.terrain)).count() as i64;
-        (p.id.to_string(), json!(n * (s.funds_per_property + awbw_engine::co::property_fund_increase(&p.co))))
+        let n = s.buildings.values().filter(|b| b.owner == Some(p.id) && libaw::rules::is_income_property(b.terrain)).count() as i64;
+        (p.id.to_string(), json!(n * (s.funds_per_property + libaw::co::property_fund_increase(&p.co))))
     }).collect();
     Value::Object(m).to_string()
 }
@@ -220,7 +220,7 @@ pub fn position(turn_file: &str) -> String {
 pub fn turn_file(state: &str, template: &str) -> String {
     let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
     let t: Value = match serde_json::from_str(template) { Ok(v) => v, Err(e) => return err(e) };
-    awbw_engine::awbw::to_turn_json(&s, &t).to_string()
+    libaw::awbw::to_turn_json(&s, &t).to_string()
 }
 
 /// The engine's greedy baseline's next action for the player to move, in the contract format.

@@ -2,17 +2,17 @@
 //! power weather, transport movement, labs on maps without HQs, unloading over sea, and
 //! ammo on pipe-seam attacks. See docs/sources.md.
 
-use awbw_engine::actions::{Action, Pos, Then};
-use awbw_engine::data::tables;
-use awbw_engine::rules::{at_unit_limit, can_unload_from, is_income_property, league_capture_limit, movement_range};
-use awbw_engine::{fog, sim, Building, Hp, State, Unit, UnitId};
+use libaw::actions::{Action, Pos, Then};
+use libaw::data::tables;
+use libaw::rules::{at_unit_limit, can_unload_from, is_income_property, league_capture_limit, movement_range};
+use libaw::{fog, sim, Building, Hp, State, Unit, UnitId};
 
 fn state() -> State {
     let turn: serde_json::Value = serde_json::from_str(include_str!(
         "../../../docs/eval-harness/test-states/game-1755654-turn-020-D11-pid4205798.json"
     ))
     .unwrap();
-    awbw_engine::awbw::state_from(&turn)
+    libaw::awbw::state_from(&turn)
 }
 
 /// Give the player to move this CO and power state, and return one of their units.
@@ -308,7 +308,7 @@ fn hidden_units_are_out_of_sight_without_fog_too() {
     // It can't be attacked by moving up to it either: it wasn't revealed before the move.
     let (mut s, id, tiles) = hidden_stealth_board(2);
     let start = (s.units[&id].x, s.units[&id].y);
-    assert!(awbw_engine::actions::attack_targets(&s, &s.units[&id], tiles[0], true).is_empty());
+    assert!(libaw::actions::attack_targets(&s, &s.units[&id], tiles[0], true).is_empty());
     let attack = Action::Move { unit: id, path: vec![start, tiles[0]], then: Then::Attack { target: tiles[1] } };
     assert!(sim::step(&mut s, &attack, &mut |l: i32, h: i32| (l + h) / 2).is_err());
 }
@@ -319,7 +319,7 @@ fn a_unit_beside_a_hidden_unit_or_a_property_under_it_reveals_it() {
     let (mut s, id, tiles) = hidden_stealth_board(1);
     let me = s.current;
     assert!(fog::player_view(&s, me).units.contains_key(&7000));
-    assert_eq!(awbw_engine::actions::attack_targets(&s, &s.units[&id], tiles[0], false), vec![tiles[1]]);
+    assert_eq!(libaw::actions::attack_targets(&s, &s.units[&id], tiles[0], false), vec![tiles[1]]);
     let through = Action::Move { unit: id, path: vec![tiles[0], tiles[1], tiles[2]], then: Then::Wait };
     assert!(sim::step(&mut s, &through, &mut |l: i32, h: i32| (l + h) / 2).is_err());
 
@@ -341,11 +341,11 @@ fn no_builds_at_the_unit_limit() {
     s.units.retain(|_, u| (u.x, u.y) != base || u.owner != me);
     let mine = mine.min(s.units.values().filter(|u| u.owner == me).count() as u32);
     s.unit_limit = Some(mine + 1);
-    assert!(!at_unit_limit(&s, me) && !awbw_engine::actions::builds(&s).is_empty());
+    assert!(!at_unit_limit(&s, me) && !libaw::actions::builds(&s).is_empty());
     s.unit_limit = Some(mine);
-    assert!(at_unit_limit(&s, me) && awbw_engine::actions::builds(&s).is_empty());
+    assert!(at_unit_limit(&s, me) && libaw::actions::builds(&s).is_empty());
     s.unit_limit = None;
-    assert!(!awbw_engine::actions::builds(&s).is_empty());
+    assert!(!libaw::actions::builds(&s).is_empty());
     assert_eq!(state().unit_limit, None, "records don't carry the limit, so none by default");
 }
 

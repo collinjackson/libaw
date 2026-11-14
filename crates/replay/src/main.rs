@@ -10,15 +10,15 @@
 
 
 
-use awbw_engine::awbw::*;
+use libaw::awbw::*;
 mod matchrun;
 mod stepcheck;
-use awbw_engine::view::{describe, frame, log_header};
-use awbw_engine::data::tables;
-use awbw_engine::rules::*;
-use awbw_engine::*;
-use awbw_engine::combat::*;
-use awbw_engine::sim::*;
+use libaw::view::{describe, frame, log_header};
+use libaw::data::tables;
+use libaw::rules::*;
+use libaw::*;
+use libaw::combat::*;
+use libaw::sim::*;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -128,13 +128,13 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8, co
             let p = AttackParams {
                 base: base as u32,
                 att_value: att_value(s, att, at, counter),
-                att_milli: awbw_engine::combat::att_milli(s, att),
+                att_milli: libaw::combat::att_milli(s, att),
                 att_hp: ahp,
                 def_value: def_value(s, def, &att.kind),
                 def_terrain: stars(s, def, dt),
                 def_hp: dhp,
-                luck_min: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
-                luck_max: awbw_engine::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).1,
+                luck_min: libaw::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
+                luck_max: libaw::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).1,
             };
             let (dlo, dhi) = damage_range(&p);
             let cand = def.hp.intersect(Hp::from_display(dhp))?;
@@ -169,7 +169,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     continue;
                 };
                 let seen_before = if r.fog {
-                    Some(awbw_engine::fog::vision(s, u.owner))
+                    Some(libaw::fog::vision(s, u.owner))
                 } else { None };
                 let path = path_of(a);
                 r.check("move.path_starts_at_unit", path.first() == Some(&(u.x, u.y)), || {
@@ -179,7 +179,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 // Simulator check: the destination is one the generator offers.
                 if !trapped {
                     let end = *path.last().unwrap_or(&(u.x, u.y));
-                    let reach = awbw_engine::actions::reachable(s, &u);
+                    let reach = libaw::actions::reachable(s, &u);
                     r.check("legal.move_reachable", reach.contains_key(&end), || {
                         tag(c, format!("{} ({}) {:?} -> {end:?} not generated", u.kind, co_of(s, u.owner), (u.x, u.y)))
                     });
@@ -200,7 +200,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                             {
                             let tiles: Vec<String> = path[1..].iter().map(|&(x, y)| {
                                 let t = s.terrain_at(x, y);
-                                format!("{}:{}", tables().tile(t).name, awbw_engine::rules::move_cost_in(t, &tables().unit(&u.kind).move_type, s.weather).unwrap_or(99))
+                                format!("{}:{}", tables().tile(t).name, libaw::rules::move_cost_in(t, &tables().unit(&u.kind).move_type, s.weather).unwrap_or(99))
                             }).collect();
                             tag(c, format!("{} fuel {} -{cost} = {want}, recorded {} [{}] {:?}", u.kind, u.fuel, rec.fuel, s.weather, tiles))
                         }
@@ -280,11 +280,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
             }
             "Build" => {
                 let nu = unit_from(&a["newUnit"]);
-                let offered = awbw_engine::actions::builds(s);
+                let offered = libaw::actions::builds(s);
                 r.check("legal.build", offered.contains(&((nu.x, nu.y), nu.kind.clone())), || {
                     tag(c, format!("{} at {:?} not generated", nu.kind, (nu.x, nu.y)))
                 });
-                let cost = awbw_engine::co::price(tables().unit(&nu.kind).cost as i64,
+                let cost = libaw::co::price(tables().unit(&nu.kind).cost as i64,
                     &co_of(s, nu.owner), &s.player(nu.owner).map(|p| p.power.clone()).unwrap_or_default());
                 let funds = s.player(nu.owner).map(|p| p.funds).unwrap_or(0);
                 r.check("build.affordable", cost <= funds, || {
@@ -326,7 +326,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     continue;
                 };
                 r.check("capt.foot_unit", is_foot(&u.kind), || tag(c, format!("{} capturing", u.kind)));
-                r.check("legal.capture", awbw_engine::actions::options_at(s, &u, (x, y)).contains(&awbw_engine::actions::Then::Capture), || {
+                r.check("legal.capture", libaw::actions::options_at(s, &u, (x, y)).contains(&libaw::actions::Then::Capture), || {
                     tag(c, format!("{} capture at {:?} not generated", u.kind, (x, y)))
                 });
                 let Some(b) = s.buildings.get(&(x, y)).cloned() else {
@@ -402,7 +402,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     if did == 0 && rd.as_str() == Some("?") {
                         if let Some(att) = s.units.get(&aid).cloned() {
                             let moved = r.last_move.is_some_and(|(id, m)| id == att.id && m);
-                            let cands: Vec<UnitId> = awbw_engine::actions::attack_targets(s, &att, (att.x, att.y), moved)
+                            let cands: Vec<UnitId> = libaw::actions::attack_targets(s, &att, (att.x, att.y), moved)
                                 .into_iter().filter_map(|(x, y)| s.unit_at(x, y).map(|u| u.id)).collect();
                             for id in cands {
                                 r.hidden_hp.insert(id);
@@ -433,7 +433,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     continue;
                 };
                 let moved = r.last_move.is_some_and(|(id, m)| id == att.id && m);
-                let targets = awbw_engine::actions::attack_targets(s, &att, (att.x, att.y), moved);
+                let targets = libaw::actions::attack_targets(s, &att, (att.x, att.y), moved);
                 r.check("legal.attack_target", targets.contains(&(def.x, def.y)), || {
                     tag(c, format!("{} ({}, ammo {}) -> {} at distance {} not generated (moved={moved})",
                         att.kind, co_of(s, att.owner), att.ammo, def.kind, dist((att.x, att.y), (def.x, def.y))))
@@ -442,7 +442,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let ai = tables().unit(&att.kind);
                 let mut maxr = ai.range[1] as u32;
                 if maxr > 1 {
-                    maxr = (maxr as i32 + awbw_engine::co::range_bonus(&co_of(s, att.owner), &pw(s, att.owner), &att.kind)).max(2) as u32;
+                    maxr = (maxr as i32 + libaw::co::range_bonus(&co_of(s, att.owner), &pw(s, att.owner), &att.kind)).max(2) as u32;
                 }
                 r.check("fire.range", d >= ai.range[0] as u32 && d <= maxr, || {
                     tag(c, format!("{} -> {} at distance {d}, range {}..{maxr}", att.kind, def.kind, ai.range[0]))
@@ -811,18 +811,18 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     let co = co_of(s, u.owner);
                     let pw = s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default();
                     // Indirects get their CO's range bonus (Grit +1) against seams too.
-                    let maxr = if is_indirect(&u.kind) { (ri[1] as i32 + awbw_engine::co::range_bonus(&co, &pw, &u.kind)).max(2) as u32 } else { ri[1] as u32 };
+                    let maxr = if is_indirect(&u.kind) { (ri[1] as i32 + libaw::co::range_bonus(&co, &pw, &u.kind)).max(2) as u32 } else { ri[1] as u32 };
                     r.check("seam.range", d >= ri[0] as u32 && d <= maxr, || tag(c, format!("{} at {d}", u.kind)));
                     let moved = r.last_move.is_some_and(|(id, m)| id == u.id && m);
-                    r.check("legal.seam_target", awbw_engine::actions::seam_targets(s, &u, (u.x, u.y), moved).contains(&(x, y)), || {
+                    r.check("legal.seam_target", libaw::actions::seam_targets(s, &u, (u.x, u.y), moved).contains(&(x, y)), || {
                         tag(c, format!("{} ({}) -> seam {:?} at distance {d} not generated (moved={moved})", u.kind, co, (x, y)))
                     });
                     if let Some(before) = s.buildings.get(&(x, y)).map(|b| b.capture) {
-                        let want = awbw_engine::sim::seam_damage(s, &u).map(|d| (before - d).max(0));
+                        let want = libaw::sim::seam_damage(s, &u).map(|d| (before - d).max(0));
                         r.check("seam.damage", want == Some(hp.max(0)), || tag(c, format!("{} {}hp ({}) on seam {before}: engine {want:?}, recorded {hp} [base {:?} att {} on {} at {:?}, power {}]",
-                            u.kind, u.hp.display_hi(), co, awbw_engine::rules::base_damage_now(&u, "Neotank"),
-                            awbw_engine::combat::att_value(s, &u, s.terrain_at(u.x, u.y), false),
-                            awbw_engine::data::tables().tile(s.terrain_at(u.x, u.y)).name, (u.x, u.y),
+                            u.kind, u.hp.display_hi(), co, libaw::rules::base_damage_now(&u, "Neotank"),
+                            libaw::combat::att_value(s, &u, s.terrain_at(u.x, u.y), false),
+                            libaw::data::tables().tile(s.terrain_at(u.x, u.y)).name, (u.x, u.y),
                             s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default())));
                     }
                     let m = s.units.get_mut(&aid).unwrap();
@@ -927,7 +927,7 @@ fn export_fire(s: &State, att: &Unit, def: &Unit, def_after: u8, att_after: u8, 
     let side = |u: &Unit| json!({
         "kind": u.kind, "hp": [u.hp.lo, u.hp.hi], "x": u.x, "y": u.y, "ammo": u.ammo,
         "terrain": tables().tile(s.terrain_at(u.x, u.y)).name, "co": co_of(s, u.owner), "power": pw(s, u.owner),
-        "towers": awbw_engine::combat::towers(s, u.owner),
+        "towers": libaw::combat::towers(s, u.owner),
     });
     let line = json!({"attacker": side(att), "defender": side(def), "weather": s.weather.to_string(),
         "def_after": def_after, "att_after": att_after, "ours_ok": ours}).to_string();
@@ -946,7 +946,7 @@ fn meter_check(s: &mut State, a: &Value, r: &mut Report, c: &Ctx, fight: Option<
     }
     if let Some((att, al, def, dl)) = fight {
         let before: Vec<(u32, i64)> = s.players.iter().map(|p| (p.id, p.meter)).collect();
-        awbw_engine::sim::charge(s, &att, al, &def, dl);
+        libaw::sim::charge(s, &att, al, &def, dl);
         for side in ["attacker", "defender"] {
             let pid = num(&cv[side]["playerId"]) as u32;
             let want = num(&cv[side]["copValue"]);
@@ -972,7 +972,7 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     r.check("power.player_is_current", pid == s.current, || tag(c, format!("power by {pid}")));
     if s.player(pid).is_some() {
         let was = s.player(pid).map(|p| p.meter).unwrap_or(0);
-        awbw_engine::sim::spend_power(s, pid, &kind);
+        libaw::sim::spend_power(s, pid, &kind);
         if let Some(want) = opt_num(&a["copValue"]) {
             let ours = s.player(pid).map(|p| p.meter).unwrap_or(-1);
             r.check("power.meter_after_use", ours == want, || {
@@ -984,7 +984,7 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
     // Sasha's Market Crash drains other meters: predict from the state before the record's
     // values are written, then compare.
     let mut drained = s.clone();
-    let drain_modelled = co_of(s, pid) == "Sasha" && kind == "Y" && awbw_engine::sim::power_effects(&mut drained, pid, &kind);
+    let drain_modelled = co_of(s, pid) == "Sasha" && kind == "Y" && libaw::sim::power_effects(&mut drained, pid, &kind);
     if drain_modelled {
         if let Value::Object(m) = &a["playerReplace"] {
             let mut bad = vec![];
@@ -1015,11 +1015,11 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         if r.fog || s.units.values().any(|u| u.carried_by.is_none() && u.hp.display().is_none()) {
             r.skip("power: missile aim not compared (fog or uncertain HP)");
         } else {
-            let ours = awbw_engine::sim::missile_targets(s, pid, &kind);
+            let ours = libaw::sim::missile_targets(s, pid, &kind);
             r.check("power.missile_aim", ours == targets, || tag(c, format!("{} {kind}: engine aims {ours:?}, recorded {targets:?}", co_of(s, pid))));
         }
     }
-    let modelled = awbw_engine::sim::power_effects_at(&mut pred, pid, &kind, if targets.is_empty() { None } else { Some(&targets) });
+    let modelled = libaw::sim::power_effects_at(&mut pred, pid, &kind, if targets.is_empty() { None } else { Some(&targets) });
     // Older records: a movement change for all the player's units ("global").
     if let Some(d) = opt_num(&a["global"]["units_movement_points"]) {
         let ids: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
@@ -1258,12 +1258,12 @@ fn restore_cargo(s: &mut State, prev: &State) {
 /// came into view. Ours: vision before vs after; dived Subs / hidden Stealths count only
 /// from next door.
 fn check_discovered(s: &State, pid: PlayerId, mover: UnitId, from: (u16, u16), dies: bool, before: &[u8], disc: &Value, r: &mut Report, c: &Ctx) {
-    let after = awbw_engine::fog::vision(s, pid);
+    let after = libaw::fog::vision(s, pid);
     // A mover that dies in its own attack sees nothing.
     let after = if dies {
         let mut s2 = s.clone();
         if let Some(m) = s2.units.get_mut(&mover) { m.carried_by = Some(mover); }
-        awbw_engine::fog::vision(&s2, pid)
+        libaw::fog::vision(&s2, pid)
     } else { after };
     let w = s.width as usize;
     let new = |x: u16, y: u16| { let i = y as usize * w + x as usize; after[i] > 0 && before[i] == 0 };
@@ -1283,7 +1283,7 @@ fn check_discovered(s: &State, pid: PlayerId, mover: UnitId, from: (u16, u16), d
         let m = &s.units[&mover];
         let near = |ids: Vec<&UnitId>| ids.iter().filter_map(|id| s.units.get(id)).map(|u| dist((u.x, u.y), (m.x, m.y)).to_string()).collect::<Vec<_>>().join(",");
         tag(c, format!("engine also {:?}; record also {:?} [mover {} at {:?}, vision {}, distances {}; {}]", show(ours_u.difference(&rec_u).collect()), show(rec_u.difference(&ours_u).collect()),
-            m.kind, (m.x, m.y), awbw_engine::fog::vision_range(s, m), near(ours_u.difference(&rec_u).collect()),
+            m.kind, (m.x, m.y), libaw::fog::vision_range(s, m), near(ours_u.difference(&rec_u).collect()),
             tables().tile(s.terrain_at(m.x, m.y)).name) + &format!(" CO {} power {} weather {}", co_of(s, pid), pw(s, pid), s.weather))
     });
     let ours_b: std::collections::BTreeSet<(u16, u16)> = s.buildings.keys().filter(|&&(x, y)| new(x, y)).copied().collect();
@@ -1312,7 +1312,7 @@ fn grid_at(fa: &Value, x: usize, y: usize) -> u64 {
 fn check_vision(s: &State, v: &Value, r: &mut Report, c: &Ctx) {
     let fa = &v["gameState"]["fog_array"];
     if !fa.is_array() && !fa.is_object() { return; }
-    let ours = awbw_engine::fog::vision(s, s.current);
+    let ours = libaw::fog::vision(s, s.current);
     let w = s.width as usize;
     let (mut extra, mut missing, mut count_off) = (vec![], vec![], 0u64);
     for x in 0..s.width as usize {
@@ -1320,7 +1320,7 @@ fn check_vision(s: &State, v: &Value, r: &mut Report, c: &Ctx) {
             let rec = grid_at(fa, x, y);
             let o = ours[y * w + x] as u64;
             if (o > 0) != (rec > 0) {
-                let t = awbw_engine::data::tables().tile(s.terrain_at(x as u16, y as u16)).name.clone();
+                let t = libaw::data::tables().tile(s.terrain_at(x as u16, y as u16)).name.clone();
                 if o > 0 { extra.push(format!("({x},{y}) {t}")) } else { missing.push(format!("({x},{y}) {t}")) }
             } else if o != rec {
                 count_off += 1;
@@ -1431,17 +1431,17 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
     let mut frames = vec![frame(&s, "start")];
     let (mut rt_bad, mut act_bad) = (0u64, 0u64);
     let mut rt_time = std::time::Duration::ZERO; // excluded from actions/s
-    while s.day <= max_days && awbw_engine::sim::winner(&s).is_none() {
-        let view = awbw_engine::fog::player_view(&s, s.current);
-        let legal = awbw_engine::actions::legal_actions(&view);
+    while s.day <= max_days && libaw::sim::winner(&s).is_none() {
+        let view = libaw::fog::player_view(&s, s.current);
+        let legal = libaw::actions::legal_actions(&view);
         legal_total += legal.len() as u64;
         // Prefer acting over ending the turn, so games progress.
         let a = if legal.len() > 1 && next() % 20 != 0 { &legal[next() as usize % (legal.len() - 1)] } else { legal.last().unwrap() };
         let label = describe(&s, a);
-        if let awbw_engine::actions::Action::Move { unit, path, .. } = a {
+        if let libaw::actions::Action::Move { unit, path, .. } = a {
             if let Some(u) = s.units.get(unit) {
-                if awbw_engine::fog::trap(&s, u, path).is_some() { traps += 1; }
-                if matches!(a, awbw_engine::actions::Action::Move { then: awbw_engine::actions::Then::AttackSeam { .. }, .. }) { seam_hits += 1; }
+                if libaw::fog::trap(&s, u, path).is_some() { traps += 1; }
+                if matches!(a, libaw::actions::Action::Move { then: libaw::actions::Then::AttackSeam { .. }, .. }) { seam_hits += 1; }
             }
         }
         // The chosen action must survive the contract format.
@@ -1452,10 +1452,10 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
         }
         rt_time += rt0.elapsed();
         let mut roll = |lo: i32, hi: i32| lo + (next() as i32).rem_euclid(hi - lo + 1);
-        if let Err(e) = awbw_engine::sim::step(&mut s, a, &mut roll) {
+        if let Err(e) = libaw::sim::step(&mut s, a, &mut roll) {
             errors += 1;
             if errors <= 5 { eprintln!("step error: {e} on {a:?}"); }
-            let _ = awbw_engine::sim::end_turn(&mut s);
+            let _ = libaw::sim::end_turn(&mut s);
         }
         actions += 1;
         if log_dir.is_some() {
@@ -1487,14 +1487,14 @@ fn selfplay(file: &Path, seed: u64, max_days: u32) -> u64 {
         let name = format!("{}-seed{seed}", file.file_stem().unwrap().to_string_lossy());
         let mut log = log_header(&s, &format!("random vs random, {name}"));
         log["frames"] = Value::Array(frames);
-        log["winner"] = serde_json::json!(awbw_engine::sim::winner(&s));
+        log["winner"] = serde_json::json!(libaw::sim::winner(&s));
         std::fs::create_dir_all(dir).unwrap();
         std::fs::write(Path::new(dir).join(format!("{name}.json")), log.to_string()).unwrap();
     }
     violations += rt_bad + act_bad;
     println!("selfplay seed {seed}: {rt_bad} state round-trip and {act_bad} action round-trip failures{}", format!("{}{}", if s.fog { format!(", {traps} fog traps") } else { String::new() }, if s.seams { format!(", {seam_hits} seam hits") } else { String::new() }));
     println!("selfplay seed {seed}: {actions} actions, day {}, winner {:?}, {:.1} legal/position, {errors} step errors, {violations} invariant violations, {:.0} actions/s",
-        s.day, awbw_engine::sim::winner(&s), legal_total as f64 / actions.max(1) as f64,
+        s.day, libaw::sim::winner(&s), legal_total as f64 / actions.max(1) as f64,
         actions as f64 / (t0.elapsed() - rt_time).as_secs_f64());
     errors + violations
 }
@@ -1545,7 +1545,7 @@ fn main() {
         // awbw-replay --storyboard TURN.json: the turn as a storyboard (docs/storyboard.md) on stdout.
         let f = args.get(2).expect("usage: awbw-replay --storyboard TURN.json");
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(f).expect("read turn")).expect("turn json");
-        println!("{}", awbw_engine::storyboard::from_awbw_turn(&v));
+        println!("{}", libaw::storyboard::from_awbw_turn(&v));
         return;
     }
     if args.get(1).map(String::as_str) == Some("--step") {

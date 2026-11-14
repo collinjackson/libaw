@@ -1,7 +1,9 @@
 [package]
 name = "libaw-server"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 publish = false
 description = "WebSocket server for the rules engine: clients and bots play games over JSON messages (docs/socket-api.md)."
 
@@ -10,7 +12,7 @@ name = "libaw-server"
 path = "src/main.rs"
 
 [dependencies]
-awbw-engine = { path = "../engine" }
+libaw = { path = "../engine" }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time"] }
 tokio-tungstenite = "0.26"

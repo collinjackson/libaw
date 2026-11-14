@@ -11,7 +11,7 @@
 //
 // One seat plays every side: after each action the client takes the seat of whoever is to move,
 // so a player can try their turn, end it, and try the opponent's reply.
-import init, * as E from '../pkg/awbw_wasm.js';
+import init, * as E from '../pkg/libaw_wasm.js';
 
 let ready = null;
 const engine = (wasm) => (ready ??= init(wasm ? { module_or_path: wasm } : undefined));   // wasm: bytes, for Node

@@ -8,7 +8,7 @@ import { LocalConn } from '../js/local.js';
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const turn = JSON.parse(readFileSync(here('../../docs/eval-harness/test-states/game-1729758-turn-042-D22-pid4151012.json'), 'utf8'));
-const c = await new LocalConn().open(readFileSync(here('../pkg/awbw_wasm_bg.wasm')));
+const c = await new LocalConn().open(readFileSync(here('../pkg/libaw_wasm_bg.wasm')));
 const seen = [];
 c.onMessage = (m) => seen.push(m);
 const tick = () => new Promise((r) => setTimeout(r, 0));

@@ -10,10 +10,10 @@
 //! a viewer log per game too; with POSITIONS_LOG=FILE.jsonl, value-model training rows (each
 //! turn start's army by kind, funds, properties, meter per side, plus the game's winner).
 
-use awbw_engine::actions::Action;
-use awbw_engine::awbw::*;
-use awbw_engine::sim;
-use awbw_engine::*;
+use libaw::actions::Action;
+use libaw::awbw::*;
+use libaw::sim;
+use libaw::*;
 use serde_json::{json, Value};
 use std::path::Path;
 use std::time::Duration;
@@ -48,14 +48,14 @@ impl Agent {
     /// In fog, the agent sees only `fog::player_view` (the caller passes that as `s`).
     fn act(&self, s: &State, template: &Value, seed: u64, game: &str, rng: &mut impl FnMut() -> u32) -> Result<Value, String> {
         match self {
-            Agent::Random => Ok(action_to_contract(&awbw_engine::baseline::random(s, rng))),
+            Agent::Random => Ok(action_to_contract(&libaw::baseline::random(s, rng))),
             Agent::Greedy => {
                 // The reply carries the top candidates (an optional "why" any agent may send).
-                let ranked = awbw_engine::baseline::ranked(s);
+                let ranked = libaw::baseline::ranked(s);
                 let pick = ranked.first().map(|(_, a)| a.clone()).unwrap_or(Action::EndTurn);
                 let mut v = action_to_contract(&pick);
                 v["why"] = json!(ranked.iter().take(5).map(|(g, a)| json!({
-                    "label": awbw_engine::view::describe(s, a), "score": (g * 10.0).round() / 10.0,
+                    "label": libaw::view::describe(s, a), "score": (g * 10.0).round() / 10.0,
                 })).collect::<Vec<_>>());
                 Ok(v)
             }
@@ -128,11 +128,11 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     // MATCH_CAPTURE_LIMIT: "league" (70% of the map's income properties, as AWBW's league
     // games) or a number of properties. Default: off, as in AWBW's custom games.
     if let Ok(v) = std::env::var("MATCH_CAPTURE_LIMIT") {
-        s.capture_limit = if v == "league" { Some(awbw_engine::rules::league_capture_limit(&s)) } else { v.parse().ok() };
+        s.capture_limit = if v == "league" { Some(libaw::rules::league_capture_limit(&s)) } else { v.parse().ok() };
     }
     // MATCH_UNIT_LIMIT: "league" (AWBW's 50) or a number of units. Default: no limit.
     if let Ok(v) = std::env::var("MATCH_UNIT_LIMIT") {
-        s.unit_limit = if v == "league" { Some(awbw_engine::rules::LEAGUE_UNIT_LIMIT) } else { v.parse().ok() };
+        s.unit_limit = if v == "league" { Some(libaw::rules::LEAGUE_UNIT_LIMIT) } else { v.parse().ok() };
     }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
@@ -142,7 +142,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as u32 };
     let mut st = [Stats::default(), Stats::default()];
-    let mut frames = vec![awbw_engine::view::frame(&s, "start")];
+    let mut frames = vec![libaw::view::frame(&s, "start")];
     let mut this_turn = 0u32;
     let mut first_error = None;
     // Training positions for the value model (POSITIONS_LOG=FILE.jsonl): one per turn start.
@@ -196,7 +196,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         let req_seed = seed ^ (st[0].actions + st[1].actions).wrapping_mul(0x9E3779B97F4A7C15);
         // Fog: the agent plans on what its player can see; its reply is read against that
         // view and applied to the real state (a path may run into a hidden unit: a trap).
-        let view = awbw_engine::fog::player_view(&s, s.current);
+        let view = libaw::fog::player_view(&s, s.current);
         let reply = seats[i].act(&view, start, req_seed, name, &mut next);
         let why = reply.as_ref().ok().map(|v| v["why"].clone()).filter(|w| w.is_array());
         // A Supply with nobody to supply does what Wait does: take it as Wait (counted),
@@ -224,8 +224,8 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         let a = if this_turn > 300 { st[i].forced_ends += 1; Action::EndTurn } else { a };
         let ended = a == Action::EndTurn;
         if ended { this_turn = 0; }
-        let label = awbw_engine::view::describe(&s, &a);
-        let mut roll = |lo: i32, hi: i32| awbw_engine::co::roll_luck(lo, hi, &mut next);
+        let label = libaw::view::describe(&s, &a);
+        let mut roll = |lo: i32, hi: i32| libaw::co::roll_luck(lo, hi, &mut next);
         if let Err(e) = sim::step(&mut s, &a, &mut roll) {
             st[i].errors += 1;
             if first_error.is_none() { first_error = Some(format!("referee: {e} on {a:?}")); }
@@ -245,8 +245,8 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
             }
         }
         if log_dir.is_some() {
-            let mut f = awbw_engine::view::frame(&s, &label);
-            f["h"] = json!(awbw_engine::view::state_hash(&s));
+            let mut f = libaw::view::frame(&s, &label);
+            f["h"] = json!(libaw::view::state_hash(&s));
             if let Some(w) = &why { f["why"] = w.clone(); }
             frames.push(f);
         }
@@ -263,7 +263,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
         army + funds + props * 1000
     };
     if let Some(dir) = log_dir {
-        let mut log = awbw_engine::view::log_header(&s, &format!("{} vs {}, {name}", seats[0].name(), seats[1].name()));
+        let mut log = libaw::view::log_header(&s, &format!("{} vs {}, {name}", seats[0].name(), seats[1].name()));
         log["frames"] = Value::Array(frames);
         log["winner"] = json!(win_team);
         std::fs::create_dir_all(dir).unwrap();
@@ -331,7 +331,7 @@ pub fn suggest(args: &[String]) {
     let mut s = state_from(&start);
     // MATCH_UNIT_LIMIT: "league" (AWBW's 50) or a number of units. Default: no limit.
     if let Ok(v) = std::env::var("MATCH_UNIT_LIMIT") {
-        s.unit_limit = if v == "league" { Some(awbw_engine::rules::LEAGUE_UNIT_LIMIT) } else { v.parse().ok() };
+        s.unit_limit = if v == "league" { Some(libaw::rules::LEAGUE_UNIT_LIMIT) } else { v.parse().ok() };
     }
     for u in s.units.values_mut() {
         u.hp = Hp::exact(u.hp.hi);
@@ -346,7 +346,7 @@ pub fn suggest(args: &[String]) {
             Ok(a) => a,
             Err(e) => { illegal += 1; first_error.get_or_insert(e); Action::EndTurn }
         };
-        let label = awbw_engine::view::describe(&s, &a);
+        let label = libaw::view::describe(&s, &a);
         let mut avg = |lo: i32, hi: i32| (lo + hi) / 2;
         if let Err(e) = sim::step(&mut s, &a, &mut avg) {
             first_error.get_or_insert(format!("referee: {e}"));

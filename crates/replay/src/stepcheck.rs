@@ -6,9 +6,9 @@
 //! funds are hidden there), as are turns with records the engine has no action for.
 
 use crate::{compare, print_report, tag, Ctx, Report};
-use awbw_engine::actions::{Action, Pos, Then};
-use awbw_engine::awbw::{items, num, state_from, unit_from};
-use awbw_engine::state::*;
+use libaw::actions::{Action, Pos, Then};
+use libaw::awbw::{items, num, state_from, unit_from};
+use libaw::state::*;
 use serde_json::Value;
 use std::path::Path;
 
@@ -95,7 +95,7 @@ fn then_of(s: &State, a: &Value, mover: Option<(UnitId, Pos)>) -> Option<(UnitId
                 Some((m, end)) if m == aid => end,
                 _ => { let u = s.units.get(&aid)?; (u.x, u.y) }
             };
-            let targets: Vec<Pos> = awbw_engine::actions::legal_actions(s).into_iter().filter_map(|x| match x {
+            let targets: Vec<Pos> = libaw::actions::legal_actions(s).into_iter().filter_map(|x| match x {
                 Action::Move { unit, path, then: Then::Attack { target } } if unit == aid && path.last() == Some(&end) => Some(target),
                 _ => None,
             }).collect();
@@ -233,7 +233,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
                 if !coords.is_empty() {
                     // The server aims missiles: land them where the record says.
                     let kind = a["coPower"].as_str().unwrap_or("");
-                    let res = awbw_engine::sim::use_power(&mut s, kind, Some(&coords));
+                    let res = libaw::sim::use_power(&mut s, kind, Some(&coords));
                     r.check("step.ok", res.is_ok(), || tag(c, format!("power {kind} at {coords:?}: {:?}", res.as_ref().err())));
                     res.map_err(|e| format!("step error: {e}"))?;
                     i += 1;
@@ -290,7 +290,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
                         let key = if u.moved { "drop apart from move: transport had moved" } else { "drop apart from move: transport unmoved" };
                         *r.tally.entry(key.to_string()).or_default() += 1;
                         let a = Action::Move { unit: who, path: vec![(u.x, u.y)], then: then.clone() };
-                        r.check("legal.drop", awbw_engine::actions::legal_actions(&s).contains(&a), || tag(c, format!("{a:?} not generated")));
+                        r.check("legal.drop", libaw::actions::legal_actions(&s).contains(&a), || tag(c, format!("{a:?} not generated")));
                     }
                     Action::Move { unit: who, path: vec![(u.x, u.y)], then }
                 }
@@ -306,7 +306,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
                 for o in s.units.values_mut() {
                     if o.owner == apc.owner && o.id != apc.id && o.carried_by.is_none()
                         && (o.x as i32 - apc.x as i32).abs() + (o.y as i32 - apc.y as i32).abs() == 1 {
-                        let info = awbw_engine::data::tables().unit(&o.kind);
+                        let info = libaw::data::tables().unit(&o.kind);
                         r.maybe_supplied.entry(o.id).or_insert((o.fuel, o.ammo));
                         o.fuel = info.fuel as i32;
                         o.ammo = info.ammo as i32;
@@ -327,13 +327,13 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
         let hits_none = |t: Pos| !s.units.values().any(|o| o.carried_by.is_none()
             && (o.x as i32 - t.0 as i32).abs() + (o.y as i32 - t.1 as i32).abs() <= 2);
         let Then::Launch { target } = then else { unreachable!() };
-        let offered = awbw_engine::actions::legal_actions(s).iter().any(|a| matches!(a,
+        let offered = libaw::actions::legal_actions(s).iter().any(|a| matches!(a,
             Action::Move { unit: u, path: p, then: Then::Launch { target: t } } if u == unit && p.last().copied() == end
                 && (t == target || (hits_none(*t) && hits_none(*target)))));
         r.check("legal.launch", offered, || tag(c, format!("{act:?} not generated")));
     }
     if let Action::Move { then: Then::Delete, .. } = act {
-        r.check("legal.delete", awbw_engine::actions::legal_actions(s).contains(act), || tag(c, format!("{act:?} not generated")));
+        r.check("legal.delete", libaw::actions::legal_actions(s).contains(act), || tag(c, format!("{act:?} not generated")));
     }
     let fire = match act {
         Action::Move { then: Then::Attack { .. }, .. } => rec.clone(),
@@ -352,7 +352,7 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
         let hidden = |side: &str, id: UnitId| {
             let v = &f[side]["units_hit_points"];
             v.as_str() == Some("?") || f[side].as_str() == Some("?")
-                || (num(v) == 0 && s.units.get(&id).is_some_and(|u| awbw_engine::combat::co_of(s, u.owner) == "Sonja") && r.next_alive.contains(&id))
+                || (num(v) == 0 && s.units.get(&id).is_some_and(|u| libaw::combat::co_of(s, u.owner) == "Sonja") && r.next_alive.contains(&id))
         };
         let (ahid, dhid) = (hidden("attacker", aid), hidden("defender", did));
         // Meters after the fight, when the record gives them (copValues): they settle hidden
@@ -390,7 +390,7 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
                             if n == 1 { span1.set(hi - lo); } else { span2.set(hi - lo); }
                             (lo + if n == 1 { k1 } else { k2 }).min(hi)
                         };
-                        let ok = awbw_engine::sim::step(&mut t, act, &mut luck).is_ok();
+                        let ok = libaw::sim::step(&mut t, act, &mut luck).is_ok();
                         let calls = n;
                         if ok && fits(shown(&t, aid), ah, ahid, aid, r) && fits(shown(&t, did), dh, dhid, did, r) {
                             if let Some(u) = t.units.get(&aid) { alo = alo.min(u.hp.lo); ahi = ahi.max(u.hp.hi); }
@@ -431,14 +431,14 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
         let probe = |k: i32| {
             let mut t = s.clone();
             let mut l = |lo: i32, hi: i32| (lo + k).min(hi);
-            let ok = awbw_engine::sim::step(&mut t, act, &mut l).is_ok();
+            let ok = libaw::sim::step(&mut t, act, &mut l).is_ok();
             format!("{}{}/{}", if ok { "" } else { "err " }, shown(&t, aid), shown(&t, did))
         };
         r.check("step.fire", false, || tag(c, format!("no luck roll gives attacker {ah} / defender {dh}; engine {} vs {}; luck 0 gives {}, luck 9 gives {}; {act:?}",
             desc(aid), desc(did), probe(0), probe(9))));
         // Go on from the recorded result so one miss doesn't spread through the turn.
         let mut mid = |lo: i32, hi: i32| (lo + hi) / 2;
-        let res = awbw_engine::sim::step(s, act, &mut mid);
+        let res = libaw::sim::step(s, act, &mut mid);
         r.check("step.ok", res.is_ok(), || tag(c, format!("{act:?}: {}", res.as_ref().err().cloned().unwrap_or_default())));
         res.map_err(|e| format!("step error: {e}"))?;
         for (id, d) in [(aid, ah), (did, dh)] {
@@ -453,7 +453,7 @@ fn step(s: &mut State, act: &Action, rec: &Value, r: &mut Report, c: &Ctx) -> Re
         return Ok(());
     }
     let mut mid = |lo: i32, hi: i32| (lo + hi) / 2;
-    let res = awbw_engine::sim::step(s, act, &mut mid);
+    let res = libaw::sim::step(s, act, &mut mid);
     r.check("step.ok", res.is_ok(), || tag(c, format!("{act:?}: {}", res.as_ref().err().cloned().unwrap_or_default())));
     res.map_err(|e| format!("step error: {e}"))
 }
@@ -493,7 +493,7 @@ fn fire_fits(s: &State, aid: UnitId, end: Pos, target: Pos, f: &Value) -> bool {
             let act = match &act { Action::Move { unit, then, .. } => Action::Move { unit: *unit, path: vec![end], then: then.clone() }, a => a.clone() };
             let mut n = 0;
             let mut luck = |lo: i32, hi: i32| { n += 1; (lo + if n == 1 { k1 } else { k2 }).min(hi) };
-            if awbw_engine::sim::step(&mut t, &act, &mut luck).is_err() { continue; }
+            if libaw::sim::step(&mut t, &act, &mut luck).is_err() { continue; }
             let shown = t.units.get(&aid).and_then(|u| u.hp.display()).map(|d| d as i64).unwrap_or(0);
             if shown == ah && meters.iter().all(|(p, m)| t.player(*p).is_none_or(|pl| pl.meter == *m)) {
                 return true;

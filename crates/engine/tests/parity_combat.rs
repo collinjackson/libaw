@@ -1,10 +1,10 @@
 //! Combat rules that recorded games can't settle on their own (rounding, counterattack
 //! bonuses, rarely used CO powers, out-of-ammo attacks), from AWBW's rules as clarified for this project. See docs/sources.md.
 
-use awbw_engine::combat::{att_milli, att_value, def_value};
-use awbw_engine::data::tables;
-use awbw_engine::rules::{damage_range, is_urban_property, mg_damage, AttackParams};
-use awbw_engine::{co, State, Unit};
+use libaw::combat::{att_milli, att_value, def_value};
+use libaw::data::tables;
+use libaw::rules::{damage_range, is_urban_property, mg_damage, AttackParams};
+use libaw::{co, State, Unit};
 
 /// A neutral attack: 100% attack and defence, the given base damage, HP, terrain and luck.
 fn params(base: u32, att_hp: u8, def_terrain: u32, def_hp: u8, luck: i32) -> AttackParams {
@@ -16,7 +16,7 @@ fn state() -> State {
         "../../../docs/eval-harness/test-states/game-1755654-turn-020-D11-pid4205798.json"
     ))
     .unwrap();
-    awbw_engine::awbw::state_from(&turn)
+    libaw::awbw::state_from(&turn)
 }
 
 /// Give the player to move this CO and power state, and return one of their units.

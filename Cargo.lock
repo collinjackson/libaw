@@ -9,32 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "awbw-engine"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "awbw-replay"
-version = "0.1.0"
-dependencies = [
- "awbw-engine",
- "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "awbw-wasm"
-version = "0.1.0"
-dependencies = [
- "awbw-engine",
- "serde_json",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "base64"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -415,14 +389,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "libaw"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "libaw-replay"
+version = "0.1.0"
+dependencies = [
+ "libaw",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
 name = "libaw-server"
 version = "0.1.0"
 dependencies = [
- "awbw-engine",
  "futures-util",
+ "libaw",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "libaw-wasm"
+version = "0.1.0"
+dependencies = [
+ "libaw",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]
