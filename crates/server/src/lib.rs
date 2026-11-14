@@ -469,8 +469,19 @@ impl Hub {
         // learn it from their next state.
         let event = json!({"type": "event", "game": g.id, "seq": g.seq, "by": me, "day": before.day,
                            "action": action_to_contract(&a), "label": label, "ended_turn": a == Action::EndTurn});
+        // Without fog a dived Sub or hidden Stealth is still out of sight: a seat that couldn't see the
+        // mover before or after the action doesn't hear it either (the path would give it away).
+        let mover = match &a { Action::Move { unit, .. } => Some(*unit), _ => None };
+        let unseen = |p: PlayerId| mover.is_some_and(|id| {
+            before.units.get(&id).is_some_and(|u| fog::concealed(&before, u, p))
+                || g.state.units.get(&id).is_some_and(|u| fog::concealed(&g.state, u, p))
+        });
         for (c, who, _) in g.audience() {
-            if !g.state.fog || who.is_none_or(|p| g.state.allied(p, me)) {
+            let hears = match who {
+                None => true,
+                Some(p) => g.state.allied(p, me) || (!g.state.fog && !unseen(p)),
+            };
+            if hears {
                 out.push((c, event.clone()));
             }
         }
