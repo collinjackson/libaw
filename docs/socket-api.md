@@ -17,7 +17,8 @@ so a client can match them up. Broadcasts (`state`, `event`, `turn`, `game_over`
 - **Actions** use the bot contract's shapes (docs/eval-harness/CONTRACT.md):
   - `{"type": "move", "unit_id": 12, "path": [[3,4],[3,5]], "then": THEN}`. The path starts on
     the unit's tile; `[[x,y]]` alone acts in place. A path that differs from the engine's but is
-    valid is kept.
+    valid is kept. Or give only the destination, `"to": [3,5]`, instead of `path`: the engine
+    uses its cheapest path (send a path when the route matters, e.g. around a possible trap).
   - `THEN`: `{"type": "wait"}`, `{"type": "attack", "target": [x,y]}`, `{"type": "capture"}`,
     `{"type": "load"}`, `{"type": "join"}`, `{"type": "supply"}`,
     `{"type": "repair", "target": [x,y]}`, `{"type": "unload", "cargo_id": 13, "to": [x,y]}`,
@@ -59,10 +60,11 @@ seat with `format: "awbw"` and forwards each `turn` to the bot's `POST /act`.
 | `hello` | `name`? | `welcome` {`protocol`: 1, `server`, `version`} |
 | `list` | | `games` {`games`: [summary]} |
 | `create` | `turn` (AWBW turn file) or `state` (libaw state); `seed`?, `max_days`?, `fog`?, `powers`?, `banned`? [unit names], `name`? (game id) | `created` {`game`, `players`, `awbw_format`, `spectator_key`, `seed` (only if you chose it)} |
-| `join` | `game`; `player` (id) or `seat` (index), else the first free seat; `token`? (to take a seat back); `format`? | `joined` {`game`, `player`, `seat`, `token`, `format`, `info`}, then `state`, then `turn` if it's this player's |
+| `join` | `game`; `player` (id) or `seat` (index), else the first free seat; `token`? (to take a seat back); `format`?; `legal`? (`"summary"`: short `turn` messages, see below) | `joined` {`game`, `player`, `seat`, `token`, `format`, `info`}, then `state`, then `turn` if it's this player's |
 | `spectate` | `game`, `key` (the game's `spectator_key`, while it runs), `format`? | `joined` {`spectator`: true, `info`}, then `state` |
 | `state` | `game` | `state` |
-| `legal` | `game` | `turn` (only for the player to move) |
+| `legal` | `game`, `filter`? {`unit`, `to`, `then`, `kind`} | `turn` (only for the player to move); with a filter, only the matching actions |
+| `options` | `game`, `unit` | `options` {`unit`, `tiles`: [{`to`, `path`, `then`: [THEN]}]}: one unit's choices, by destination |
 | `act` | `game`, `action` | `ok` {`seq`}, then broadcasts |
 | `resign` | `game` | `ok`, then broadcasts |
 | `leave` | `game` | `left` |
@@ -137,7 +139,26 @@ their next turn start, by the engine's rule (income properties times funds per p
 CO's bonus), counted on the receiving seat's own view: in fog, properties out of sight look neutral
 and don't count.
 
-### Hidden information
+### A turn without the full list
+
+`turn` lists every legal action by default, and a mid-game turn has hundreds of them (597 for 13
+units in a day-22 position, 62 KB), sent again after each action. A bot that plans one unit at a
+time can ask for less:
+
+- Join with `"legal": "summary"`. Its `turn` then carries `count` and a `summary` instead of
+  `legal`: the units that can still act (`id`, `kind`, `at`, `hp`, `actions`), each Base's
+  affordable builds (`at`, `units`), the powers ready, and `end_turn` (about 1 KB for that
+  position).
+- `options` for a unit: each tile it can end on, the path there, and what it can do there
+  (wait, capture, each attack target, load, join, unload spots, ...).
+- `legal` with a `filter`: `unit` (an id), `to` ([x, y], where a move ends), `then` (follow-up
+  types, e.g. `["attack", "capture"]`), `kind` (`"move"`, `"build"`, `"power"`, `"end_turn"`).
+  Fields combine; `{"all": true}` is everything.
+- Act with `"to"` instead of a `path`.
+
+All of these come from the seat's own view, like `legal`: they never show a hidden unit.
+
+## Hidden information
 
 A seat sees only its fog view. What else the server keeps back while a game runs:
 

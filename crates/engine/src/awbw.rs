@@ -418,9 +418,15 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
         }
         Some("move") => {
             let unit = v["unit_id"].as_u64().ok_or("move: no unit_id")? as u32;
-            let path: Vec<(u16, u16)> = v["path"].as_array().ok_or("move: no path")?
-                .iter().map(xy).collect::<Option<_>>().ok_or("move: bad path")?;
-            let end = *path.last().ok_or("move: empty path")?;
+            // A path, or just the destination (`to`): then the engine's cheapest path is used.
+            let path: Vec<(u16, u16)> = match v["path"].as_array() {
+                Some(a) => a.iter().map(xy).collect::<Option<_>>().ok_or("move: bad path")?,
+                None => vec![],
+            };
+            let end = match path.last() {
+                Some(&e) => e,
+                None => xy(&v["to"]).ok_or("move: no path (or to)")?,
+            };
             let t = &v["then"];
             let then = match t["type"].as_str() {
                 Some("wait") => Then::Wait,
@@ -445,7 +451,7 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
                 if *u == unit && p.last() == Some(&end) && *th == then))
                 .ok_or_else(|| format!("move: not legal here ({unit} to {end:?}, {then:?})"))?;
             let Action::Move { path: lp, .. } = m else { unreachable!() };
-            let keep = path.len() >= 1 && path[0] == lp[0] && path_ok(s, unit, &path, lp);
+            let keep = !path.is_empty() && path[0] == lp[0] && path_ok(s, unit, &path, lp);
             Ok(Action::Move { unit, path: if keep { path } else { lp.clone() }, then })
         }
         other => Err(format!("unknown type {other:?}")),

@@ -37,6 +37,9 @@ struct Seat {
     token: Option<String>,
     format: Format,
     name: String,
+    /// What `turn` carries for this seat: every legal action, or a short summary (`legal`
+    /// "summary" on join) with the details on request (`legal` with filters, `options`).
+    summary: bool,
 }
 
 pub struct Game {
@@ -95,10 +98,24 @@ impl Game {
     }
 
     fn turn_msg(&self) -> Value {
+        let summary = self.seats.iter().find(|s| s.player == self.state.current).is_some_and(|s| s.summary);
+        let f = if summary { Value::Null } else { json!({"all": true}) };
+        self.turn_with(&f)
+    }
+
+    /// The turn prompt for the player to move, from its own view. `filter` null: the summary;
+    /// otherwise the legal actions that pass it (see `legal_filter`).
+    fn turn_with(&self, filter: &Value) -> Value {
         let v = fog::player_view(&self.state, self.state.current);
-        let legal: Vec<Value> = legal_actions(&v).iter().map(action_to_contract).collect();
-        json!({"type": "turn", "game": self.id, "player": self.state.current, "day": self.state.day,
-               "seq": self.seq_for(Some(self.state.current)), "legal": legal})
+        let all = legal_actions(&v);
+        let mut m = json!({"type": "turn", "game": self.id, "player": self.state.current, "day": self.state.day,
+                           "seq": self.seq_for(Some(self.state.current)), "count": all.len()});
+        if filter.is_null() {
+            m["summary"] = legal_summary(&v, &all);
+        } else {
+            m["legal"] = all.iter().filter(|a| legal_filter(a, filter)).map(action_to_contract).collect::<Vec<_>>().into();
+        }
+        m
     }
 
     fn players_json(&self) -> Vec<Value> {
@@ -186,6 +203,72 @@ pub struct Hub {
     pub games: BTreeMap<String, Game>,
     next_game: u64,
     names: HashMap<ConnId, String>,
+}
+
+/// The short form of a turn: the units that can still act, what each Base can build, the
+/// powers ready, and whether the turn can end. The details come from `legal` with a filter
+/// or from `options`.
+fn legal_summary(v: &State, all: &[Action]) -> Value {
+    let mut units: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut builds: BTreeMap<(u16, u16), Vec<String>> = BTreeMap::new();
+    let mut powers = vec![];
+    for a in all {
+        match a {
+            Action::Move { unit, .. } => *units.entry(*unit).or_default() += 1,
+            Action::Build { at, kind } => builds.entry(*at).or_default().push(kind.clone()),
+            Action::Power { kind } => powers.push(kind.clone()),
+            Action::EndTurn => {}
+        }
+    }
+    json!({
+        "units": units.iter().filter_map(|(id, n)| v.units.get(id).map(|u| json!({
+            "id": id, "kind": u.kind, "at": [u.x, u.y], "hp": u.hp.hi, "actions": n}))).collect::<Vec<_>>(),
+        "builds": builds.iter().map(|(at, k)| json!({"at": [at.0, at.1], "units": k})).collect::<Vec<_>>(),
+        "powers": powers,
+        "end_turn": all.contains(&Action::EndTurn),
+    })
+}
+
+/// A `legal` request's filter: `all` (everything), `unit` (a unit id), `to` ([x, y], where a
+/// move ends), `then` (follow-up types, e.g. ["attack", "capture"]), `kind` (action types:
+/// "move", "build", "power", "end_turn"). Fields combine with AND.
+fn legal_filter(a: &Action, f: &Value) -> bool {
+    let kind = match a { Action::Move { .. } => "move", Action::Build { .. } => "build", Action::Power { .. } => "power", Action::EndTurn => "end_turn" };
+    let listed = |field: &Value, x: &str| field.as_array().is_none_or(|l| l.iter().any(|y| y.as_str() == Some(x)));
+    if !listed(&f["kind"], kind) {
+        return false;
+    }
+    let c = action_to_contract(a);
+    if let Some(u) = f["unit"].as_u64() {
+        if c["unit_id"].as_u64() != Some(u) {
+            return false;
+        }
+    }
+    if f["to"].is_array() && c["path"].as_array().and_then(|p| p.last()) != Some(&f["to"]) {
+        return false;
+    }
+    if f["then"].is_array() && !c["then"]["type"].as_str().is_some_and(|t| listed(&f["then"], t)) {
+        return false;
+    }
+    true
+}
+
+/// One unit's choices, by destination: each tile it can end on, the path there, and what it can
+/// do on arrival.
+fn unit_options(v: &State, unit: u32) -> Value {
+    let mut by_tile: BTreeMap<(u16, u16), (Value, Vec<Value>)> = BTreeMap::new();
+    for a in legal_actions(v) {
+        if let Action::Move { unit: u, path, .. } = &a {
+            if *u != unit {
+                continue;
+            }
+            let c = action_to_contract(&a);
+            let end = *path.last().unwrap_or(&(0, 0));
+            let e = by_tile.entry(end).or_insert_with(|| (c["path"].clone(), vec![]));
+            e.1.push(c["then"].clone());
+        }
+    }
+    json!(by_tile.iter().map(|(to, (path, then))| json!({"to": [to.0, to.1], "path": path, "then": then})).collect::<Vec<_>>())
 }
 
 /// 128 random bits from the OS, as hex.
@@ -288,7 +371,24 @@ impl Hub {
             "legal" => {
                 let Some(g) = self.game(msg) else { return vec![err(conn, msg, "no such game")] };
                 match g.seat_of_conn(conn) {
-                    Some(s) if s.player == g.state.current && g.over.is_none() => vec![(conn, with_id(g.turn_msg(), msg))],
+                    // Filters (see legal_filter); none: this seat's usual turn prompt.
+                    Some(s) if s.player == g.state.current && g.over.is_none() => {
+                        let f = &msg["filter"];
+                        let t = if f.is_object() { g.turn_with(f) } else { g.turn_msg() };
+                        vec![(conn, with_id(t, msg))]
+                    }
+                    Some(_) => vec![err(conn, msg, "not your turn")],
+                    None => vec![err(conn, msg, "you hold no seat in this game")],
+                }
+            }
+            "options" => {
+                let Some(g) = self.game(msg) else { return vec![err(conn, msg, "no such game")] };
+                match g.seat_of_conn(conn) {
+                    Some(s) if s.player == g.state.current && g.over.is_none() => {
+                        let Some(u) = msg["unit"].as_u64() else { return vec![err(conn, msg, "options: which unit?")] };
+                        let v = fog::player_view(&g.state, s.player);
+                        vec![(conn, with_id(json!({"type": "options", "game": g.id, "unit": u, "tiles": unit_options(&v, u as u32)}), msg))]
+                    }
                     Some(_) => vec![err(conn, msg, "not your turn")],
                     None => vec![err(conn, msg, "you hold no seat in this game")],
                 }
@@ -350,7 +450,7 @@ impl Hub {
         self.next_game += 1;
         let id = msg["name"].as_str().filter(|n| !n.is_empty() && !self.games.contains_key(*n))
             .map(String::from).unwrap_or_else(|| format!("g{}", self.next_game));
-        let seats = s.players.iter().map(|p| Seat { player: p.id, conn: None, token: None, format: Format::Libaw, name: String::new() }).collect();
+        let seats = s.players.iter().map(|p| Seat { player: p.id, conn: None, token: None, format: Format::Libaw, name: String::new(), summary: false }).collect();
         let g = Game {
             id: id.clone(), state: s, template, seed, rng: <rand_chacha::ChaCha8Rng as rand_core::SeedableRng>::seed_from_u64(seed),
             spectator_key: secret(),
@@ -407,6 +507,7 @@ impl Hub {
         seat.conn = Some(conn);
         seat.token = Some(token.clone());
         seat.format = format;
+        seat.summary = msg["legal"].as_str() == Some("summary");
         if !name.is_empty() {
             seat.name = name;
         }

@@ -67,6 +67,8 @@ Response, exactly one of:
 
 - `path` starts at the unit's current tile and ends where it stops; `[[x,y]]` alone
   means it acts without moving. Coordinates are AWBW's `(x, y)`, x across, y down.
+  Instead of `path` a move may give only `"to": [x,y]`, its destination; the referee then
+  uses the engine's cheapest path there.
 - `THEN` is one of:
   - `{"type": "wait"}`
   - `{"type": "attack", "target": [x,y]}` (the defender's tile)
