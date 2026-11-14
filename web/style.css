@@ -60,7 +60,9 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; margin-right
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; align-items: start; }
 @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
 .boardwrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 12px; min-height: 320px; overflow: auto; }
-.board { display: block; width: 100%; max-width: calc(100vh * 1.6); height: auto; border-radius: 8px; user-select: none; }
+/* The whole map fits the window: as wide as the column, no taller than the window under the bars
+   (the viewBox keeps its shape and centres it), so no part of it is ever out of reach. */
+.board { display: block; width: 100%; height: auto; max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); border-radius: 8px; user-select: none; }
 .empty { padding: 40px 24px; text-align: center; color: var(--muted); }
 .empty h2 { color: var(--text); margin: 0 0 8px; font-size: 20px; }
 

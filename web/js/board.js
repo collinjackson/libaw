@@ -36,10 +36,13 @@ export class Board {
   }
 
   tileOf(e) {
-    const r = this.svg.getBoundingClientRect();
     if (!this.state) return null;
-    const sx = this.state.width * TILE / r.width, sy = this.state.height * TILE / r.height;
-    const x = Math.floor((e.clientX - r.left) * sx / TILE), y = Math.floor((e.clientY - r.top) * sy / TILE);
+    // Through the SVG's own transform, so a board letterboxed to fit the window (CSS max-height
+    // with the viewBox's aspect kept) still maps clicks to the right tile.
+    const m = this.svg.getScreenCTM();
+    if (!m) return null;
+    const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    const x = Math.floor(q.x / TILE), y = Math.floor(q.y / TILE);
     return x >= 0 && y >= 0 && x < this.state.width && y < this.state.height ? [x, y] : null;
   }
 

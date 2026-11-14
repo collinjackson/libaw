@@ -4,6 +4,7 @@
 import { Conn } from './net.js';
 import { LocalConn } from './local.js';
 import { Board, TILE } from './board.js';
+import { awbwArt } from './art.js';
 import * as L from './logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -424,10 +425,11 @@ function openMenu(x, y, items, head) {
     m.append(b);
   }
   const svg = $('board'), wrap = $('boardwrap');
-  const r = svg.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
-  const scale = r.width / (ui.state.width * TILE);
-  m.style.left = `${r.left - wr.left + wrap.scrollLeft + (x + 1) * TILE * scale + 6}px`;
-  m.style.top = `${r.top - wr.top + wrap.scrollTop + y * TILE * scale}px`;
+  // The tile's corner on screen through the SVG's transform (right with the board letterboxed).
+  const wr = wrap.getBoundingClientRect(), ctm = svg.getScreenCTM();
+  const at = new DOMPoint((x + 1) * TILE, y * TILE).matrixTransform(ctm);
+  m.style.left = `${at.x - wr.left + wrap.scrollLeft + 6}px`;
+  m.style.top = `${at.y - wr.top + wrap.scrollTop}px`;
   m.hidden = false;
 }
 
@@ -486,7 +488,7 @@ async function plannerLoad(source) {
       turn = await fetch(st.path).then((r) => r.json()); what = st.label;
     }
   } catch (e) {
-    if ($('gamestatus')) $('gamestatus').textContent = e.message;
+    if ($('gamestatus')) $('gamestatus').textContent = `could not load: ${e.message}`;
     log(`could not load: ${e.message}`, 'err'); return;
   }
   resetGame();
@@ -504,8 +506,31 @@ async function plannerLoad(source) {
     sel.disabled = false;
     if ([...sel.options].some((o) => o.value === had)) sel.value = had;
     if (sel.value) await plannerBot();
+    plannerArt();
     log(`loaded ${what}: day ${ui.conn.game.state.day}, ${playerName(ui.conn.game.state.current)} to move, luck ${$('luck').value}`);
-  } catch (e) { log(`load: ${e.message}`, 'err'); }
+  } catch (e) {
+    if ($('gamestatus')) $('gamestatus').textContent = `could not load: ${e.message}`;
+    log(`load: ${e.message}`, 'err');
+  }
+}
+
+/** {player id: AWBW country code} from the loaded turn file's players; players without one (the
+ * bundled states) get AWBW's first countries by seat. */
+function plannerCountries() {
+  const g = ui.conn?.game;
+  if (!g) return {};
+  const codes = {};
+  for (const p of Object.values(g.template?.gameState?.players ?? {})) if (p.countries_code) codes[Number(p.players_id)] = p.countries_code;
+  const spare = ['os', 'bm', 'ge', 'yc', 'bh', 'rf'];
+  g.state.players.forEach((p, i) => { codes[p.id] ??= spare[i % spare.length]; });
+  return codes;
+}
+
+/** The board's art: AWBW's sprites (loaded from AWBW's site at view time; libaw ships none) or
+ * libaw's own. A sprite AWBW doesn't serve falls back to libaw's. */
+function plannerArt() {
+  board.b.art = $('art')?.value === 'awbw' ? awbwArt(plannerCountries()) : null;
+  render();
 }
 
 async function plannerRequest(type) {
@@ -540,6 +565,10 @@ function setupPlanner() {
   }
   // FlakBot answers from awbw-bot on the viewer's own machine; elsewhere the engine baseline.
   if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) $('botkind').value = 'engine';
+  if ($('art')) {
+    if (['awbw', 'libaw'].includes(params.get('art'))) $('art').value = params.get('art');
+    $('art').onchange = plannerArt;
+  }
   $('btn-undo').onclick = () => plannerRequest('undo');
   $('btn-reset').onclick = () => plannerRequest('reset');
   $('luck').onchange = () => { ui.conn?.request({ type: 'luck', game: ui.game, luck: $('luck').value }).catch(() => {}); log(`luck: ${$('luck').value}`); };
