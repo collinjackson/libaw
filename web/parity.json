@@ -77,7 +77,7 @@
    "feature": "Unit sprite art",
    "awbw": true,
    "ours": "partial",
-   "notes": "original placeholder SVGs (CC0 proposal); no idle animation"
+   "notes": "original SVGs (CC0); no idle animation"
   },
   {
    "area": "Moving",

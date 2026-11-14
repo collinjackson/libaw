@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """An original two-player skirmish map, written as an AWBW-style turn file (day 1, no units), so
 any bot that reads the bot contract's format (FlakBot through examples/http_bot_adapter.py) can
-play it from the start. The map is ours (CC0 proposal, like web/assets).
+play it from the start. The map is ours (CC0, like web/assets).
 
     python3 -I web/states/make_skirmish.py [CO1] [CO2]     -> web/states/skirmish.json
 
@@ -98,7 +98,7 @@ def turn(co1="Andy", co2="Andy"):
         "players": [{"id": p["players_id"], "funds": p["players_funds"], "order": p["players_order"]} for p in players],
         "gameState": {"terrain": terrain, "buildings": buildings, "units": [], "players": players,
                       "gameWeather": {"code": "C"}, "currentTurnPId": P1},
-        "libaw": {"map": "skirmish", "license": "CC0 proposal (web/assets/LICENSE.md)", "rows": ["".join(r) for r in rows]},
+        "libaw": {"map": "skirmish", "license": "CC0 (web/assets/LICENSE.md)", "rows": ["".join(r) for r in rows]},
     }
 
 

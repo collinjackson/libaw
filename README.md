@@ -86,7 +86,7 @@ at your option. Unless you explicitly state otherwise, any contribution intentio
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as
 above, without any additional terms or conditions.
 
-libaw's art (`web/assets`) is original; it is proposed for release under CC0, separately
+libaw's art (`web/assets`) is original and dedicated to the public domain under CC0 1.0
 ([web/assets/LICENSE.md](web/assets/LICENSE.md)). AWBW's art is never stored
 here: the web client can load it from AWBW's site at view time, and it remains its owners'.
 Advance Wars is a trademark of Nintendo; libaw is not affiliated with Nintendo or AWBW.
