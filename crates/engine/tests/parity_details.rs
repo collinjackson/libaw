@@ -399,3 +399,21 @@ fn repairs_of_an_uncertain_hp_heal_each_end_by_the_rule() {
         assert_eq!(s.units[&id].hp, want, "{co} {lo}-{hi}");
     }
 }
+
+/// Fog-leak audit (2026-11-14): a movement power's per-unit movement must not list units the
+/// viewer can't see; their ids (and foot vs vehicle by the value) would give them away.
+#[test]
+fn a_fog_view_keeps_move_overrides_only_for_units_in_sight() {
+    let (mut s, me, foe) = board("Andy", "N", "Andy");
+    let (here, _) = land_pair(&s);
+    let mine = add(&mut s, unit(1, me, "Infantry", here));
+    let far = (s.width - 1, s.height - 1);
+    let theirs = add(&mut s, unit(2, foe, "Tank", far));
+    s.move_override.insert(mine, 4);
+    s.move_override.insert(theirs, 7);
+    s.fog = true;
+    let view = fog::player_view(&s, me);
+    assert!(!view.units.contains_key(&theirs), "the Tank is out of sight");
+    assert_eq!(view.move_override.get(&mine), Some(&4));
+    assert_eq!(view.move_override.get(&theirs), None, "so is its movement");
+}

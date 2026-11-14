@@ -139,6 +139,7 @@ pub fn player_view(s: &State, pid: PlayerId) -> State {
         }
         // With units missing, "no units left" no longer proves a player is out.
         v.partial |= !unseen.is_empty();
+        drop_unseen_overrides(&mut v);
         return v;
     }
     v.partial = true;
@@ -168,5 +169,19 @@ pub fn player_view(s: &State, pid: PlayerId) -> State {
         b.terrain = crate::awbw::owned_tile(b.terrain, None);
         v.terrain[k.1 as usize * w + k.0 as usize] = b.terrain;
     }
+    // An HQ out of sight keeps its owner, but a capture under way on it can't be seen.
+    for (&(x, y), b) in v.buildings.iter_mut() {
+        if seen[y as usize * w + x as usize] == 0 && tables().tile(b.terrain).building.as_deref() == Some("HQ") {
+            b.capture = crate::rules::CAPTURE_POINTS;
+        }
+    }
+    drop_unseen_overrides(&mut v);
     v
+}
+
+/// A movement power's per-unit movement (`move_override`) is kept only for units the viewer
+/// can see: the ids of the others, and foot vs vehicle by their value, would give them away.
+fn drop_unseen_overrides(v: &mut State) {
+    let units = &v.units;
+    v.move_override.retain(|id, _| units.contains_key(id));
 }
