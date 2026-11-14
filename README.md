@@ -43,6 +43,9 @@ Run both before and after a rules change: a change should fix games without brea
 
 ## Reporting or fixing a rules bug
 
+Rules bugs are the most useful contribution. The full guide, including the clean-room rule and how
+a fix is checked, is in [CONTRIBUTING.md](CONTRIBUTING.md); in short:
+
 - **A rules case** is the most useful report: a small JSON file that fails `cargo test` until the
   engine is fixed. Format and template: [docs/rules-cases.md](docs/rules-cases.md).
 - **An issue** is fine too (the "Rules mismatch" template): the AWBW game and turn, what AWBW
