@@ -181,6 +181,9 @@ function onMessage(m) {
       render();
       break;
     }
+    case 'bot_done':
+      render();
+      break;
     case 'error':
       if (m.id == null) log(`error: ${m.message}`, 'err');
       break;
@@ -221,7 +224,12 @@ function render() {
   setTurnInfo(`<b>Day ${s.day}</b> · ${myTurn ? '<b>your turn</b>' : `${esc(playerName(s.current))} to move`}${cur ? ` · ${esc(cur.co)}` : ''}${ui.spectator ? ' · watching' : ''}${ui.over ? ' · <b>game over</b>' : ''}`);
   $('btn-end').disabled = !myTurn;
   $('btn-resign').disabled = !(ui.game && ui.me != null && !ui.over);
-  if (PLANNER) { $('btn-undo').disabled = !ui.conn?.canUndo; $('btn-reset').disabled = !ui.conn?.canUndo; }
+  if (PLANNER) {
+    const busy = !!ui.conn?.game?.busy;
+    $('btn-undo').disabled = busy || !ui.conn?.canUndo;
+    $('btn-reset').disabled = busy || !ui.conn?.canUndo;
+    if (busy) setTurnInfo(`<b>Day ${s.day}</b> · ${esc(playerName(s.current))} (bot) is moving…`);
+  }
   const pw = L.powersNow(ui.legal);
   $('btn-power').disabled = !myTurn || !pw.some((a) => a.power === 'Y');
   $('btn-super').disabled = !myTurn || !pw.some((a) => a.power === 'S');
@@ -458,6 +466,10 @@ async function plannerLoad() {
     const c = await ui.conn.request({ type: 'create', turn, luck: $('luck').value, name: 'plan' });
     const j = await ui.conn.request({ type: 'join', game: c.game });
     Object.assign(ui, { game: c.game, me: j.player, spectator: false, info: j.info });
+    const sel = $('botseat');
+    sel.replaceChildren(new Option('Nobody: I play every side', ''));
+    ui.conn.game.state.players.forEach((p) => sel.append(new Option(`${playerName(p.id)}`, p.id)));
+    if (!ui.conn.game.template) $('botkind').value = 'engine';
     log(`loaded: day ${ui.conn.game.state.day}, ${playerName(ui.conn.game.state.current)} to move, luck ${$('luck').value}`);
   } catch (e) { log(`load: ${e.message}`, 'err'); }
 }
@@ -469,7 +481,20 @@ async function plannerRequest(type) {
   catch (e) { log(e.message, 'err'); }
 }
 
+async function plannerBot() {
+  if (!ui.conn) return;
+  const v = $('botseat').value;
+  const kind = $('botkind').value;
+  try {
+    await ui.conn.request({ type: 'bot', game: ui.game, player: v === '' ? null : Number(v), kind, url: $('boturl').value.trim() });
+    log(v === '' ? 'no bot: you play every side' : `${kind === 'flakbot' ? 'FlakBot' : 'the engine baseline'} plays ${playerName(Number(v))}`);
+  } catch (e) { log(e.message, 'err'); }
+}
+
 function setupPlanner() {
+  $('botseat').onchange = plannerBot;
+  $('botkind').onchange = plannerBot;
+  $('boturl').onchange = plannerBot;
   $('btn-create').onclick = plannerLoad;
   $('btn-undo').onclick = () => plannerRequest('undo');
   $('btn-reset').onclick = () => plannerRequest('reset');

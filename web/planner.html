@@ -48,7 +48,16 @@
           </select></label>
           <button id="btn-create" class="primary">Load</button>
         </div>
-        <p class="muted small">Attacks show their damage range first. You play every side.</p>
+        <label>Bot plays <select id="botseat"><option value="">Nobody: I play every side</option></select></label>
+        <div class="row">
+          <label class="inline">Bot <select id="botkind">
+            <option value="flakbot">FlakBot (on this machine)</option>
+            <option value="engine">Engine baseline (in page)</option>
+          </select></label>
+          <input id="boturl" value="http://127.0.0.1:18410" spellcheck="false" title="awbw-bot serve PORT">
+        </div>
+        <p class="muted small">Attacks show their damage range first. With a bot on, end your turn and it
+          answers; Undo takes back its whole turn.</p>
       </div>
 
       <div class="card" id="players-card" hidden>

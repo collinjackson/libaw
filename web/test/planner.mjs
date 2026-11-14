@@ -47,3 +47,29 @@ await tick();
 assert.deepEqual(seen.findLast((m) => m.type === 'state').state, st0);
 assert.ok(!c.canUndo);
 console.log(`planner ok: attack ${JSON.stringify(attack.then)} leaves the defender at ${best}-${worst} (preview ${p.high_luck.defender_hp}-${p.low_luck.defender_hp})`);
+
+// A bot on the other side: end the turn, the bot answers with its whole turn, undo takes it back.
+// FlakBot runs when FLAKBOT_URL points at `awbw-bot serve PORT`; the engine baseline always.
+const bots = [['engine', '']];
+if (process.env.FLAKBOT_URL) bots.push(['flakbot', process.env.FLAKBOT_URL]);
+for (const [kind, url] of bots) {
+  await c.request({ type: 'reset', game: 'plan' });
+  const me = st0.current, other = st0.players.find((q) => q.id !== me).id;
+  await c.request({ type: 'bot', game: 'plan', player: other, kind, url });
+  const done = new Promise((r) => { const prev = c.onMessage; c.onMessage = (m) => { prev(m); if (m.type === 'bot_done') { c.onMessage = prev; r(); } }; });
+  const n0 = seen.length;
+  await c.request({ type: 'act', game: 'plan', action: { type: 'end_turn' } });
+  await done;
+  const after = seen.findLast((m) => m.type === 'state').state;
+  const moves = seen.slice(n0).filter((m) => m.type === 'event' && m.by === other).length;
+  const errs = seen.slice(n0).filter((m) => m.type === 'error');
+  if (after.current !== me && !seen.slice(n0).some((m) => m.type === "game_over")) console.log(seen.slice(n0).map((m) => m.type + " by " + m.by + " " + (m.label ?? m.message ?? m.current ?? JSON.stringify(m.winner))).slice(0, 12));
+  const over = seen.slice(n0).some((m) => m.type === 'game_over');
+  assert.ok(after.current === me || over, `${kind}: the move comes back (or the bot won)`);
+  assert.equal(seen.slice(n0).find((m) => m.type === 'event')?.label?.toLowerCase().includes('end'), true, `${kind}: end_turn's event comes first`);
+  assert.equal(errs.length, 0, `${kind}: ${errs.map((e) => e.message)}`);
+  await c.request({ type: 'undo', game: 'plan' });
+  await tick();
+  assert.deepEqual(seen.findLast((m) => m.type === 'state').state, st0, `${kind}: undo takes back the bot's turn`);
+  console.log(`bot ${kind}: ${moves} actions, ${over ? 'and won' : `then back to player ${me}`}`);
+}

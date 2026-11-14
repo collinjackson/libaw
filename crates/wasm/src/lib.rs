@@ -214,6 +214,23 @@ pub fn position(turn_file: &str) -> String {
     done(&s, json!({"header": log_header(&s, "")}))
 }
 
+/// The position as an AWBW turn file (the bot contract's state), using the turn file the planner
+/// loaded as the template for what the engine doesn't model.
+#[wasm_bindgen]
+pub fn turn_file(state: &str, template: &str) -> String {
+    let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let t: Value = match serde_json::from_str(template) { Ok(v) => v, Err(e) => return err(e) };
+    awbw_engine::awbw::to_turn_json(&s, &t).to_string()
+}
+
+/// The engine's greedy baseline's next action for the player to move, in the contract format.
+#[wasm_bindgen]
+pub fn bot_move(state: &str) -> String {
+    let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let a = baseline::ranked(&s).into_iter().next().map(|(_, a)| a).unwrap_or(Action::EndTurn);
+    json!({"action": action_to_contract(&a), "label": describe(&s, &a)}).to_string()
+}
+
 #[cfg(test)]
 mod planner_tests {
     use super::*;

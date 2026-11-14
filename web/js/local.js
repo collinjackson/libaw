@@ -2,7 +2,12 @@
 // here as WebAssembly (web/pkg, built by `wasm-pack build crates/wasm --target web --out-dir
 // ../../web/pkg`), so a position can be played forward with no server and nothing leaves the page.
 // It speaks the subset app.js uses (hello, list, create, join, act, preview, state, leave) with the
-// same reply and broadcast shapes, plus planner requests: undo, reset, luck.
+// same reply and broadcast shapes, plus planner requests: undo, reset, luck, bot.
+//
+// A bot can take one player: FlakBot through awbw-bot's HTTP contract on this machine (POST /act
+// with an AWBW turn file; awbw-bot allows localhost pages), or the engine's greedy baseline in the
+// page. Its whole turn is one step back for undo: undo returns to before the end_turn that gave
+// it the move.
 //
 // One seat plays every side: after each action the client takes the seat of whoever is to move,
 // so a player can try their turn, end it, and try the opponent's reply.
@@ -40,7 +45,8 @@ export class LocalConn {
     }
     // The caller handles its reply before the broadcasts, as over a socket (a macrotask: an
     // awaiting caller resumes only after microtasks queued now, so a microtask would beat it).
-    setTimeout(() => out.forEach((m) => this.onMessage(m)), 0);
+    // A bot that now has the move starts after these are out, so its moves follow them.
+    setTimeout(() => { out.forEach((m) => this.onMessage(m)); this.wakeBot(); }, 0);
     return reply;
   }
 
@@ -55,7 +61,7 @@ export class LocalConn {
         const r = msg.turn ? parse(E.position(JSON.stringify(msg.turn))) : { state: msg.state };
         const id = msg.name || 'plan';
         this.game = { id, start: r.state, state: r.state, history: [], seq: 0, luck: msg.luck || 'random',
-          seed: (msg.seed >>> 0) || ((Math.random() * 2 ** 32) >>> 0), log: [] };
+          seed: (msg.seed >>> 0) || ((Math.random() * 2 ** 32) >>> 0), template: msg.turn ?? null, bot: null, busy: false };
         return { type: 'created', game: id, seed: this.game.seed, players: r.state.players.map((p) => p.id), awbw_format: false };
       }
       case 'join':
@@ -77,19 +83,21 @@ export class LocalConn {
       }
       case 'act': {
         need(g);
-        const before = g.state;
-        const r = parse(E.act_luck(JSON.stringify(before), JSON.stringify(msg.action), g.luck, (g.seed + g.seq * 7919) >>> 0));
-        g.history.push(before);
-        g.state = r.state;
-        g.seq += 1;
-        out.push({ type: 'event', game: g.id, seq: g.seq, by: before.current, day: before.day, action: msg.action,
-          label: r.label, ended_turn: r.state.current !== before.current || r.state.day !== before.day });
-        this.broadcast(out);
-        if (r.winner != null) out.push({ type: 'game_over', game: g.id, winner: r.winner, reason: 'last_standing', day: r.state.day });
+        if (g.busy || this.botMoves()) throw new Error('the bot has the move');
+        g.history.push(g.state);
+        this.apply(msg.action, out);
         return { type: 'ok', seq: g.seq };
+      }
+      case 'bot': {
+        need(g);
+        g.bot = msg.player == null ? null : { player: msg.player, kind: msg.kind || 'engine', url: msg.url || '' };
+        this.broadcast(out);
+        return { type: 'ok' };
       }
       case 'undo': {
         need(g);
+        g.over = false;
+        if (g.busy) throw new Error('the bot is still moving');
         if (!g.history.length) throw new Error('nothing to undo');
         g.state = g.history.pop();
         g.seq += 1;
@@ -99,7 +107,9 @@ export class LocalConn {
       case 'reset': {
         need(g);
         if (g.history.length) g.history = [];
+        if (g.busy) throw new Error('the bot is still moving');
         g.state = g.start;
+        g.over = false;
         g.seq += 1;
         this.broadcast(out);
         return { type: 'ok', seq: g.seq };
@@ -114,6 +124,72 @@ export class LocalConn {
       default:
         throw new Error(`the planner doesn't do ${msg.type}`);
     }
+  }
+
+  /** One action by the luck mode: state, event and broadcasts into `out`. */
+  apply(action, out) {
+    const g = this.game, before = g.state;
+    const r = parse(E.act_luck(JSON.stringify(before), JSON.stringify(action), g.luck, (g.seed + g.seq * 7919) >>> 0));
+    g.state = r.state;
+    g.seq += 1;
+    out.push({ type: 'event', game: g.id, seq: g.seq, by: before.current, day: before.day, action,
+      label: r.label, ended_turn: r.state.current !== before.current || r.state.day !== before.day });
+    this.broadcast(out);
+    g.over = r.winner != null;
+    if (r.winner != null) out.push({ type: 'game_over', game: g.id, winner: r.winner, reason: 'last_standing', day: r.state.day });
+    return r;
+  }
+
+  botMoves() {
+    const g = this.game;
+    return !!g?.bot && g.state.current === g.bot.player && !g.over && parse(E.legal(JSON.stringify(g.state))).actions.length > 0;
+  }
+
+  /** Plays the bot's turn if it has the move (after the caller's reply and broadcasts). */
+  wakeBot() {
+    const g = this.game;
+    if (!g || g.busy || !this.botMoves()) return;
+    g.busy = true;
+    setTimeout(() => this.botTurn(g).finally(() => { g.busy = false; this.onMessage({ type: 'bot_done', game: g.id }); }), 0);
+  }
+
+  async botTurn(g) {
+    const emit = (out) => out.forEach((m) => this.onMessage(m));
+    for (let n = 0; n < 400 && this.game === g && this.botMoves(); n++) {
+      const player = g.state.current;
+      let action;
+      try {
+        action = g.bot.kind === 'flakbot' ? await this.askFlakBot(g) : this.engineMove(g);
+      } catch (e) {
+        this.onMessage({ type: 'error', message: `bot: ${e.message}; it ends its turn` });
+        action = { type: 'end_turn' };
+      }
+      if (this.game !== g || g.state.current !== player) return;   // reset or undone meanwhile
+      const out = [];
+      try { this.apply(action, out); } catch (e) {
+        this.onMessage({ type: 'error', message: `bot move refused (${e.message}); it ends its turn` });
+        this.apply({ type: 'end_turn' }, out);
+      }
+      emit(out);
+      if (g.bot.kind === 'flakbot') await new Promise((r) => setTimeout(r, 150));   // watchable
+    }
+  }
+
+  /** The engine's greedy baseline, one action at a time. */
+  engineMove(g) {
+    return parse(E.bot_move(JSON.stringify(g.state))).action;
+  }
+
+  async askFlakBot(g) {
+    if (!g.template) throw new Error('FlakBot needs a position loaded from an AWBW turn file');
+    const s = g.state;
+    const body = { player_id: s.current, seed: g.seq, game: `planner-${g.seed}`, powers: !!s.powers, banned: s.banned ?? [],
+      state: parse(E.turn_file(JSON.stringify(s), JSON.stringify(g.template))), bot: 'plan2~FlakBot' };
+    const r = await fetch(`${g.bot.url.replace(/\/$/, '')}/act`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const a = await r.json();
+    if (a.error) throw new Error(a.error);
+    delete a.why;
+    return a;
   }
 
   summary() {
@@ -134,7 +210,8 @@ export class LocalConn {
 
   turnMsg() {
     const g = this.game;
-    const legal = parse(E.legal(JSON.stringify(g.state))).actions.map((a) => a.action);
+    // The bot's seat gets no legal actions here, so the board can't move its units.
+    const legal = g.bot && g.state.current === g.bot.player ? [] : parse(E.legal(JSON.stringify(g.state))).actions.map((a) => a.action);
     return { type: 'turn', game: g.id, player: g.state.current, day: g.state.day, seq: g.seq, legal };
   }
 
