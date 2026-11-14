@@ -29,6 +29,10 @@ rules: moves, attacks (damage range shown first, then rolled), counters, capture
 Undo (U) and Reset go back; ending the turn hands the board to the next player, so one person
 can try a turn and the reply. Luck: random, average, best or worst for the attacker. No AI hints.
 
+With a game loader (`data-game-api` on the body; the War College site has one), an AWBW game id
+loads its current position, or with a turn like `18.0` (day 18, first player; `18.1` the second)
+the start of that turn from AWBW's replay. Links: `?game=ID&turn=18.0`.
+
     wasm-pack build crates/wasm --release --target web --out-dir ../../web/pkg
     python3 -m http.server 8000 --bind 127.0.0.1      # from the repo root
     open http://127.0.0.1:8000/web/planner.html

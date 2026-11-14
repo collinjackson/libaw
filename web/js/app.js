@@ -458,10 +458,10 @@ function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // ---------- planner ----------
 /** An AWBW game by id through the site's loader (api/awbw-game: the public game page; live
  * league games and fog games in progress are refused there). */
-async function awbwGame(id) {
+async function awbwGame(id, turn) {
   const api = document.body.dataset.gameApi;
   if (!api) throw new Error('loading AWBW games needs the site (this copy has no game loader)');
-  const r = await fetch(`${api}?id=${encodeURIComponent(id)}`);
+  const r = await fetch(`${api}?id=${encodeURIComponent(id)}${turn ? `&turn=${encodeURIComponent(turn)}` : ''}`);
   const v = await r.json().catch(() => ({ error: `loader answered ${r.status}` }));
   if (!r.ok || v.error) throw new Error(v.error || `loader answered ${r.status}`);
   return v;
@@ -474,8 +474,9 @@ async function plannerLoad(source) {
     const f = $('turnfile').files?.[0];
     if (source === 'game' && id) {
       $('gamestatus').textContent = 'loading…';
-      const g = await awbwGame(id);
-      turn = g.turn; what = `game ${id}: ${g.name}${g.finished ? ' (finished)' : ''}`;
+      const at = $('gameturn')?.value.trim() || '';
+      const g = await awbwGame(id, at);
+      turn = g.turn; what = `game ${id}${g.at ? ` at ${g.at}` : ''}: ${g.name}${g.finished ? ' (finished)' : ''}`;
       opts = { powers: g.powers, banned: g.banned };
       $('gamestatus').textContent = '';
     } else if (f) {
@@ -534,6 +535,8 @@ function setupPlanner() {
     $('btn-game').onclick = () => plannerLoad('game');
     $('gameid').onkeydown = (e) => { if (e.key === 'Enter') plannerLoad('game'); };
     if (params.get('game')) { $('gameid').value = params.get('game'); }
+    if (params.get('turn') && $('gameturn')) $('gameturn').value = params.get('turn');
+    if ($('gameturn')) $('gameturn').onkeydown = (e) => { if (e.key === 'Enter') plannerLoad('game'); };
   }
   // FlakBot answers from awbw-bot on the viewer's own machine; elsewhere the engine baseline.
   if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) $('botkind').value = 'engine';
