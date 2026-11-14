@@ -59,6 +59,13 @@ export class LocalConn {
         return { type: 'games', games: g ? [this.summary()] : [] };
       case 'create': {
         const r = msg.turn ? parse(E.position(JSON.stringify(msg.turn))) : { state: msg.state };
+        // AWBW usernames, for the player list and the log.
+        const names = {};
+        for (const p of Object.values(msg.turn?.gameState?.players ?? {})) names[Number(p.players_id)] = p.users_username;
+        for (const p of r.state.players) if (names[p.id] && !p.name) p.name = names[p.id];
+        // The game's settings when the caller knows them (the site's AWBW loader does).
+        if (msg.powers != null) r.state.powers = !!msg.powers;
+        if (Array.isArray(msg.banned)) r.state.banned = msg.banned;
         const id = msg.name || 'plan';
         this.game = { id, start: r.state, state: r.state, history: [], seq: 0, luck: msg.luck || 'random',
           seed: (msg.seed >>> 0) || ((Math.random() * 2 ** 32) >>> 0), template: msg.turn ?? null, bot: null, busy: false };

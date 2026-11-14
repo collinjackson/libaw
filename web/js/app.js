@@ -11,7 +11,9 @@ const params = new URLSearchParams(location.search);
 // planner.html: the engine runs in the page (js/local.js) and one seat plays every side.
 const PLANNER = document.body.dataset.planner === '1';
 
-const STATES = [
+// A deployed planner names its own data dir and positions (data-data, window.PLANNER_STATES).
+const DATA = document.body.dataset.data || '../data/';
+const STATES = window.PLANNER_STATES ?? [
   { label: 'Skirmish (original map, day 1)', path: 'states/skirmish.json' },
   { label: 'Test state: game 1755106, day 5', path: '../docs/eval-harness/test-states/game-1755106-turn-008-D5-pid4204600.json' },
   { label: 'Test state: game 1755654, day 11', path: '../docs/eval-harness/test-states/game-1755654-turn-020-D11-pid4205798.json' },
@@ -27,8 +29,8 @@ const ui = {
 // ---------- setup ----------
 async function loadData() {
   const [units, terrain, tmap, sprites] = await Promise.all([
-    fetch('../data/units.json').then((r) => r.json()),
-    fetch('../data/terrain.json').then((r) => r.json()),
+    fetch(`${DATA}units.json`).then((r) => r.json()),
+    fetch(`${DATA}terrain.json`).then((r) => r.json()),
     fetch('assets/terrain-map.json').then((r) => r.json()),
     fetch('assets/sprites.svg').then((r) => r.text()),
   ]);
@@ -452,25 +454,54 @@ function banner(text, ms = 1600) {
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 // ---------- planner ----------
-async function plannerLoad() {
-  let turn;
+/** An AWBW game by id through the site's loader (api/awbw-game: the public game page; live
+ * league games and fog games in progress are refused there). */
+async function awbwGame(id) {
+  const api = document.body.dataset.gameApi;
+  if (!api) throw new Error('loading AWBW games needs the site (this copy has no game loader)');
+  const r = await fetch(`${api}?id=${encodeURIComponent(id)}`);
+  const v = await r.json().catch(() => ({ error: `loader answered ${r.status}` }));
+  if (!r.ok || v.error) throw new Error(v.error || `loader answered ${r.status}`);
+  return v;
+}
+
+async function plannerLoad(source) {
+  let turn, what, opts = {};
   try {
+    const id = $('gameid')?.value.trim().replace(/.*games_id=/, '').replace(/\D.*$/, '');
     const f = $('turnfile').files?.[0];
-    turn = f ? JSON.parse(await f.text()) : await fetch(STATES[Number($('newstate').value)].path).then((r) => r.json());
-  } catch (e) { log(`could not read the position: ${e.message}`, 'err'); return; }
+    if (source === 'game' && id) {
+      $('gamestatus').textContent = 'loading…';
+      const g = await awbwGame(id);
+      turn = g.turn; what = `game ${id}: ${g.name}${g.finished ? ' (finished)' : ''}`;
+      opts = { powers: g.powers, banned: g.banned };
+      $('gamestatus').textContent = '';
+    } else if (f) {
+      turn = JSON.parse(await f.text()); what = f.name;
+    } else {
+      const st = STATES[Number($('newstate').value)];
+      turn = await fetch(st.path).then((r) => r.json()); what = st.label;
+    }
+  } catch (e) {
+    if ($('gamestatus')) $('gamestatus').textContent = e.message;
+    log(`could not load: ${e.message}`, 'err'); return;
+  }
   resetGame();
   $('log').replaceChildren();
   ui.conn = await new LocalConn().open();
   ui.conn.onMessage = onMessage;
   try {
-    const c = await ui.conn.request({ type: 'create', turn, luck: $('luck').value, name: 'plan' });
+    const c = await ui.conn.request({ type: 'create', turn, luck: $('luck').value, name: 'plan', ...opts });
     const j = await ui.conn.request({ type: 'join', game: c.game });
     Object.assign(ui, { game: c.game, me: j.player, spectator: false, info: j.info });
-    const sel = $('botseat');
+    // The bot list is this position's players; the bot keeps playing the side it had, else nobody.
+    const sel = $('botseat'), had = sel.value;
     sel.replaceChildren(new Option('Nobody: I play every side', ''));
     ui.conn.game.state.players.forEach((p) => sel.append(new Option(`${playerName(p.id)}`, p.id)));
-    if (!ui.conn.game.template) $('botkind').value = 'engine';
-    log(`loaded: day ${ui.conn.game.state.day}, ${playerName(ui.conn.game.state.current)} to move, luck ${$('luck').value}`);
+    sel.disabled = false;
+    if ([...sel.options].some((o) => o.value === had)) sel.value = had;
+    if (sel.value) await plannerBot();
+    log(`loaded ${what}: day ${ui.conn.game.state.day}, ${playerName(ui.conn.game.state.current)} to move, luck ${$('luck').value}`);
   } catch (e) { log(`load: ${e.message}`, 'err'); }
 }
 
@@ -492,10 +523,18 @@ async function plannerBot() {
 }
 
 function setupPlanner() {
+  if (document.body.dataset.gameApi) $('gamebox').hidden = false;
   $('botseat').onchange = plannerBot;
   $('botkind').onchange = plannerBot;
   $('boturl').onchange = plannerBot;
-  $('btn-create').onclick = plannerLoad;
+  $('btn-create').onclick = () => plannerLoad('list');
+  if ($('btn-game')) {
+    $('btn-game').onclick = () => plannerLoad('game');
+    $('gameid').onkeydown = (e) => { if (e.key === 'Enter') plannerLoad('game'); };
+    if (params.get('game')) { $('gameid').value = params.get('game'); }
+  }
+  // FlakBot answers from awbw-bot on the viewer's own machine; elsewhere the engine baseline.
+  if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) $('botkind').value = 'engine';
   $('btn-undo').onclick = () => plannerRequest('undo');
   $('btn-reset').onclick = () => plannerRequest('reset');
   $('luck').onchange = () => { ui.conn?.request({ type: 'luck', game: ui.game, luck: $('luck').value }).catch(() => {}); log(`luck: ${$('luck').value}`); };
@@ -534,6 +573,7 @@ async function main() {
     if (e.key === 'Escape') { ui.selected = null; ui.mode = null; closeMenu(); render(); }
     if ((e.key === 'e' || e.key === 'E') && isMyTurn() && !e.metaKey && !e.ctrlKey) act({ type: 'end_turn' });
   });
+  if (PLANNER && params.get('game') && $('btn-game')) await plannerLoad('game');
   if (!PLANNER && params.get('game')) {
     if (await connect()) {
       if (params.get('spectate')) await spectate(params.get('game'));
