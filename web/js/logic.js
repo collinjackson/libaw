@@ -17,8 +17,17 @@ export function buildingsByTile(state) {
   return new Map(state.buildings.map(([x, y, b]) => [key(x, y), b]));
 }
 
-/** Terrain id at a tile. */
-export const terrainAt = (state, x, y) => state.terrain[y * state.width + x];
+/** Terrain id at a tile: a building's own tile where there is one. AWBW's turn files list
+ *  buildings apart from the terrain grid, so the grid can hold a plain under each building. */
+const buildingTerrain = new WeakMap(); // state.buildings -> Map "x,y" -> terrain id
+export function terrainAt(state, x, y) {
+  let m = state.buildings && buildingTerrain.get(state.buildings);
+  if (state.buildings && !m) {
+    m = new Map(state.buildings.filter(([, , b]) => b?.terrain != null).map(([bx, by, b]) => [key(bx, by), b.terrain]));
+    buildingTerrain.set(state.buildings, m);
+  }
+  return m?.get(key(x, y)) ?? state.terrain[y * state.width + x];
+}
 
 /** A unit's move actions grouped by the tile they end on: Map "x,y" -> [actions]. */
 export function movesByDest(legal, unitId) {
