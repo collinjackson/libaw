@@ -29,7 +29,8 @@ rules: moves, attacks (damage range shown first, then rolled), counters, capture
 Undo (U) and Reset go back; ending the turn hands the board to the next player, so one person
 can try a turn and the reply. Luck: random, average, best or worst for the attacker. No AI hints.
 
-With a game loader (`data-game-api` on the body; the War College site has one), an AWBW game id
+With a game loader (`data-game-api` on the body, pointing at a service that reads AWBW's public
+game pages), an AWBW game id
 loads its current position, or with a turn like `18.0` (day 18, first player; `18.1` the second)
 the start of that turn from AWBW's replay. Links: `?game=ID&turn=18.0`.
 

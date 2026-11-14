@@ -69,13 +69,13 @@ both directions.
 If a pull request stalls, ask its author before taking it over, and credit them when you do
 (`Co-authored-by:` in the commit message).
 
-## Bots and the leaderboard
+## Bots
 
-libaw's own matches rate bots against each other on AWBW's rating scale (the War College
-leaderboard). To enter a bot, register it: (form link to come). Open-source bots, bots whose code
-you'd share privately and bots behind an API are all welcome; the form asks which. A bot plays
-through the HTTP bot contract ([docs/eval-harness/CONTRACT.md](docs/eval-harness/CONTRACT.md)) or
-the WebSocket API ([docs/socket-api.md](docs/socket-api.md)).
+Any bot can play on libaw: through the HTTP bot contract
+([docs/eval-harness/CONTRACT.md](docs/eval-harness/CONTRACT.md)) or the WebSocket API
+([docs/socket-api.md](docs/socket-api.md)). A public leaderboard that rates bots on AWBW's scale is
+planned; open-source bots, bots whose code you'd share privately and bots behind an API will all
+be welcome on it.
 
 ## License
 
