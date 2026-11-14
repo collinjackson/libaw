@@ -9,6 +9,9 @@ sites and deploy kits live in other repos, not here.
 - **Never read, clone, search, or fetch the source or docs of `carsonhu/awbw-ai`**, beyond
   its top-level README. Never paste its code here. This applies to every session and every
   subagent.
+  One exception (2026-11-14, the owner's call): a single isolated audit agent, outside this repo,
+  may read it to report rules bugs back to its author. Its report describes behaviour only and is
+  kept outside this repo; nothing from that code comes here.
 - Ground truth for the rules is **recorded AWBW games** (the replay API) plus AWBW's own pages
   and the AWBW wiki. When the engine disagrees with a replay, the replay wins.
 - Other open-source projects may be read only after checking that their license allows it, and
