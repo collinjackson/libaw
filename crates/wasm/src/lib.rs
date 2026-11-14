@@ -134,3 +134,97 @@ pub fn bot_turn(state: &str, level: &str, seed: u32) -> String {
     }
     done(&s, json!({"frames": frames}))
 }
+
+// ---------- the move planner (web/planner.html): the whole engine runs in the page ----------
+
+/// A luck roll by planner mode. Rolls come in attack order (the strike, then the counter;
+/// Sonja's Counter Break reverses them, and "best"/"worst" then favour the wrong side).
+/// "best": the mover's strike rolls high and the counter low; "worst" the reverse;
+/// "average": the middle of the range (rounded down); anything else rolls with the seed.
+fn planner_roll(mode: &str, seed: u32) -> impl FnMut(i32, i32) -> i32 + '_ {
+    let mut next = rng(seed);
+    let mut n = 0u32;
+    move |lo: i32, hi: i32| {
+        n += 1;
+        let first = n % 2 == 1;
+        match mode {
+            "best" => if first { hi } else { lo },
+            "worst" => if first { lo } else { hi },
+            "average" => (lo + hi).div_euclid(2),
+            _ => awbw_engine::co::roll_luck(lo, hi, &mut next),
+        }
+    }
+}
+
+/// Apply one action with the planner's luck mode ("random", "average", "best", "worst").
+#[wasm_bindgen]
+pub fn act_luck(state: &str, action: &str, mode: &str, seed: u32) -> String {
+    let mut s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let v: Value = match serde_json::from_str(action) { Ok(v) => v, Err(e) => return err(e) };
+    let a = match action_from_contract(&s, &v) { Ok(a) => a, Err(e) => return err(e) };
+    let label = describe(&s, &a);
+    let mut roll = planner_roll(mode, seed);
+    if let Err(e) = sim::step(&mut s, &a, &mut roll) {
+        return err(e);
+    }
+    done(&s, json!({"label": label}))
+}
+
+/// The server's `preview` (docs/socket-api.md): an attack played on copies at the lowest and the
+/// highest luck rolls, as HP after. Nothing changes.
+#[wasm_bindgen]
+pub fn preview(state: &str, action: &str) -> String {
+    use awbw_engine::actions::Then;
+    let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let v: Value = match serde_json::from_str(action) { Ok(v) => v, Err(e) => return err(e) };
+    let a = match action_from_contract(&s, &v) { Ok(a) => a, Err(e) => return err(e) };
+    let Action::Move { unit, then: Then::Attack { target }, .. } = &a else { return err("preview takes a move that attacks") };
+    let Some(def) = s.unit_at(target.0, target.1).map(|u| u.id) else { return err("no unit at the target") };
+    let hp = |s: &State, id| s.units.get(&id).map_or(0, |u| u.hp.hi);
+    let run = |high: bool| -> Result<Value, String> {
+        let mut t = s.clone();
+        let mut roll = |lo: i32, hi: i32| if high { hi } else { lo };
+        sim::step(&mut t, &a, &mut roll)?;
+        Ok(json!({"attacker_hp": hp(&t, *unit), "defender_hp": hp(&t, def)}))
+    };
+    match (run(false), run(true)) {
+        (Ok(low), Ok(high)) => json!({"type": "preview", "target": [target.0, target.1], "attacker_hp": hp(&s, *unit),
+            "defender_hp": hp(&s, def), "low_luck": low, "high_luck": high}).to_string(),
+        (Err(e), _) | (_, Err(e)) => err(e),
+    }
+}
+
+/// Each player's income at their next turn start: {"<player id>": funds}.
+#[wasm_bindgen]
+pub fn income(state: &str) -> String {
+    let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let m: serde_json::Map<String, Value> = s.players.iter().map(|p| {
+        let n = s.buildings.values().filter(|b| b.owner == Some(p.id) && awbw_engine::rules::is_income_property(b.terrain)).count() as i64;
+        (p.id.to_string(), json!(n * (s.funds_per_property + awbw_engine::co::property_fund_increase(&p.co))))
+    }).collect();
+    Value::Object(m).to_string()
+}
+
+/// A position from an AWBW turn file as it stands (HP ranges kept, unlike `start`), for planning
+/// the turn of a game in progress.
+#[wasm_bindgen]
+pub fn position(turn_file: &str) -> String {
+    let v: Value = match serde_json::from_str(turn_file) { Ok(v) => v, Err(e) => return err(e) };
+    let s = state_from(&v);
+    done(&s, json!({"header": log_header(&s, "")}))
+}
+
+#[cfg(test)]
+mod planner_tests {
+    use super::*;
+
+    #[test]
+    fn best_rolls_high_then_low() {
+        let mut r = planner_roll("best", 1);
+        assert_eq!((r(0, 9), r(0, 9)), (9, 0));
+        let mut w = planner_roll("worst", 1);
+        assert_eq!((w(0, 9), w(0, 9)), (0, 9));
+        let mut a = planner_roll("average", 1);
+        assert_eq!(a(-10, 9), -1);
+    }
+}

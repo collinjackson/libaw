@@ -2,11 +2,14 @@
 // (docs/socket-api.md). Static files only; serve the repo root (web/play_flakbot.sh does) so
 // the page can read ../data/*.json and the bundled states.
 import { Conn } from './net.js';
+import { LocalConn } from './local.js';
 import { Board, TILE } from './board.js';
 import * as L from './logic.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
+// planner.html: the engine runs in the page (js/local.js) and one seat plays every side.
+const PLANNER = document.body.dataset.planner === '1';
 
 const STATES = [
   { label: 'Skirmish (original map, day 1)', path: 'states/skirmish.json' },
@@ -152,6 +155,7 @@ function onMessage(m) {
   if (m.game && m.game !== ui.game) return;
   switch (m.type) {
     case 'state':
+      if (PLANNER) ui.me = m.state.current;
       ui.state = m.state;
       ui.income = m.income ?? null;   // per player id, from the server (engine rule, CO bonus included)
       ui.previews = new Map();   // damage previews hold for one state only
@@ -164,7 +168,7 @@ function onMessage(m) {
       render();
       break;
     case 'event': {
-      const who = m.by === ui.me ? 'You' : playerName(m.by);
+      const who = m.by === ui.me && !PLANNER ? 'You' : playerName(m.by);
       log(`Day ${m.day} · ${who}: ${m.label ?? L.describe(m.action, ui.state)}`, m.by === ui.me ? 'me' : '');
       if (m.ended_turn) { const nx = nextPlayer(m.by); banner(nx === ui.me ? 'Your turn' : `${playerName(nx)}'s turn`); }
       break;
@@ -217,6 +221,7 @@ function render() {
   setTurnInfo(`<b>Day ${s.day}</b> · ${myTurn ? '<b>your turn</b>' : `${esc(playerName(s.current))} to move`}${cur ? ` · ${esc(cur.co)}` : ''}${ui.spectator ? ' · watching' : ''}${ui.over ? ' · <b>game over</b>' : ''}`);
   $('btn-end').disabled = !myTurn;
   $('btn-resign').disabled = !(ui.game && ui.me != null && !ui.over);
+  if (PLANNER) { $('btn-undo').disabled = !ui.conn?.canUndo; $('btn-reset').disabled = !ui.conn?.canUndo; }
   const pw = L.powersNow(ui.legal);
   $('btn-power').disabled = !myTurn || !pw.some((a) => a.power === 'Y');
   $('btn-super').disabled = !myTurn || !pw.some((a) => a.power === 'S');
@@ -438,6 +443,43 @@ function banner(text, ms = 1600) {
 
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// ---------- planner ----------
+async function plannerLoad() {
+  let turn;
+  try {
+    const f = $('turnfile').files?.[0];
+    turn = f ? JSON.parse(await f.text()) : await fetch(STATES[Number($('newstate').value)].path).then((r) => r.json());
+  } catch (e) { log(`could not read the position: ${e.message}`, 'err'); return; }
+  resetGame();
+  $('log').replaceChildren();
+  ui.conn = await new LocalConn().open();
+  ui.conn.onMessage = onMessage;
+  try {
+    const c = await ui.conn.request({ type: 'create', turn, luck: $('luck').value, name: 'plan' });
+    const j = await ui.conn.request({ type: 'join', game: c.game });
+    Object.assign(ui, { game: c.game, me: j.player, spectator: false, info: j.info });
+    log(`loaded: day ${ui.conn.game.state.day}, ${playerName(ui.conn.game.state.current)} to move, luck ${$('luck').value}`);
+  } catch (e) { log(`load: ${e.message}`, 'err'); }
+}
+
+async function plannerRequest(type) {
+  if (!ui.conn) return;
+  ui.selected = null; ui.mode = null; ui.over = null; closeMenu();
+  try { await ui.conn.request({ type, game: ui.game }); log(type === 'undo' ? 'undone' : 'back to the loaded position'); }
+  catch (e) { log(e.message, 'err'); }
+}
+
+function setupPlanner() {
+  $('btn-create').onclick = plannerLoad;
+  $('btn-undo').onclick = () => plannerRequest('undo');
+  $('btn-reset').onclick = () => plannerRequest('reset');
+  $('luck').onchange = () => { ui.conn?.request({ type: 'luck', game: ui.game, luck: $('luck').value }).catch(() => {}); log(`luck: ${$('luck').value}`); };
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, select') || e.metaKey || e.ctrlKey) return;
+    if (e.key === 'u' || e.key === 'U') plannerRequest('undo');
+  });
+}
+
 // ---------- wire up ----------
 async function main() {
   setupTheme();
@@ -446,11 +488,14 @@ async function main() {
   board.b.onTile = onTile;
   board.b.onHover = showInfo;
   STATES.forEach((s, i) => { const o = document.createElement('option'); o.value = i; o.textContent = s.label; $('newstate').append(o); });
-  if (params.get('server')) $('server').value = params.get('server');
-  $('btn-connect').onclick = connect;
-  $('btn-create').onclick = createGame;
-  $('btn-refresh').onclick = refreshGames;
-  $('btn-leave').onclick = () => { resetGame(); $('players-card').hidden = true; render(); refreshGames(); };
+  if (PLANNER) setupPlanner();
+  else {
+    if (params.get('server')) $('server').value = params.get('server');
+    $('btn-connect').onclick = connect;
+    $('btn-create').onclick = createGame;
+    $('btn-refresh').onclick = refreshGames;
+    $('btn-leave').onclick = () => { resetGame(); $('players-card').hidden = true; render(); refreshGames(); };
+  }
   $('btn-end').onclick = () => act({ type: 'end_turn' });
   // Resigning is final: ask first. The server answers with game_over to every seat and spectator.
   $('btn-resign').onclick = async () => {
@@ -464,7 +509,7 @@ async function main() {
     if (e.key === 'Escape') { ui.selected = null; ui.mode = null; closeMenu(); render(); }
     if ((e.key === 'e' || e.key === 'E') && isMyTurn() && !e.metaKey && !e.ctrlKey) act({ type: 'end_turn' });
   });
-  if (params.get('game')) {
+  if (!PLANNER && params.get('game')) {
     if (await connect()) {
       if (params.get('spectate')) await spectate(params.get('game'));
       else await join(params.get('game'), Number(params.get('seat') ?? 0));

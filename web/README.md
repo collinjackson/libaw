@@ -20,3 +20,16 @@ localStorage, so a reload takes the seat back.
   AWBW's (loaded from AWBW's site); `capture.mjs` records it as GIF/MP4. See docs/storyboard.md.
 - `test/headless.mjs`: plays a game against a running server using the page's own modules
   (`node web/test/headless.mjs ws://127.0.0.1:8765`).
+
+## Move planner (`planner.html`)
+
+The same board with the engine running in the page as WebAssembly (`js/local.js` stands in for
+the server): load a position (a bundled state or an AWBW turn file), then play the turn out by the
+rules: moves, attacks (damage range shown first, then rolled), counters, captures, builds, powers.
+Undo (U) and Reset go back; ending the turn hands the board to the next player, so one person
+can try a turn and the reply. Luck: random, average, best or worst for the attacker. No AI hints.
+
+    wasm-pack build crates/wasm --release --target web --out-dir ../../web/pkg
+    python3 -m http.server 8000 --bind 127.0.0.1      # from the repo root
+    open http://127.0.0.1:8000/web/planner.html
+    node web/test/planner.mjs                          # engine checks: luck modes vs preview, undo, reset
