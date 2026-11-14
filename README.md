@@ -66,7 +66,8 @@ so its code and cases must stay independent of AWBW's.
     python3 examples/random_bot.py ws://127.0.0.1:8765 $GAME &        # one seat
     node examples/first_legal_bot.mjs ws://127.0.0.1:8765 $GAME        # the other
 
-`examples/unit_by_unit_bot.mjs` plays one unit at a time, from a short turn summary and each unit's
+Writing a bot? Start with [AGENTS.md](AGENTS.md): what to ask the engine and where the rules are
+written down. `examples/unit_by_unit_bot.mjs` plays one unit at a time, from a short turn summary and each unit's
 options, without the full legal-action list. `examples/spectator.html` watches a game in a browser. `examples/http_bot_adapter.py` seats any
 bot that speaks the HTTP bot contract ([docs/eval-harness/CONTRACT.md](docs/eval-harness/CONTRACT.md)).
 To play in the browser yourself, see [web/README.md](web/README.md).
