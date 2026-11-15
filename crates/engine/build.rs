@@ -1,6 +1,6 @@
 //! Turns data/units.json, terrain.json and damage.json into typed Rust tables (enums and
 //! constant arrays) at build time, so the engine parses no JSON and hashes no names at run time.
-//! cos.json is still read at run time (see co.rs).
+//! cos.json becomes the `Co` enum and typed `CoInfo` tables the same way.
 
 use serde_json::Value;
 use std::fmt::Write;
@@ -44,6 +44,8 @@ fn main() {
     let units = read("units.json");
     let terrain = read("terrain.json");
     let damage = read("damage.json");
+    let cos = read("cos.json");
+    let cos = cos.as_object().unwrap();
     let units = units.as_object().unwrap();
     let terrain = terrain.as_object().unwrap();
 
@@ -123,6 +125,73 @@ fn main() {
     }
     let idx: Vec<String> = index.iter().map(|v| v.to_string()).collect();
     writeln!(out, "static TERRAIN_INDEX: [u16; {}] = [{}];", max + 1, idx.join(", ")).unwrap();
+
+    // COs: one CoInfo per CO, in Co order; each phase's boosts in a static slice.
+    let co_names: Vec<String> = cos.keys().cloned().collect();
+    names_enum(&mut out, "A commanding officer.", "Co", &co_names);
+    let hundredths = |v: &Value| -> i64 { (v.as_f64().unwrap() * 100.0).round() as i64 };
+    let mut infos = vec![];
+    for (ci, n) in co_names.iter().enumerate() {
+        let c = &cos[n];
+        let mut phases = vec![];
+        for ph in ["d2d", "cop", "scop"] {
+            let d = &c[ph];
+            let known = ["PowerIncreases", "PowerStars", "LuckRange", "UnitPriceMultiplier", "CounterAttackPower",
+                "PropertyFundIncrease", "AirFuelUsageDecrease", "HiddenHP", "SightIncrease", "SeeIntoHiddenTiles",
+                "AttackFirst", "MoveCostPerTile", "WeatherWithNoMovementAffect", "WeatherWithAdditionalMovementAffect"];
+            for k in d.as_object().unwrap().keys() {
+                assert!(known.contains(&k.as_str()), "cos.json: unknown field {n}.{ph}.{k}");
+            }
+            let mut boosts = vec![];
+            for e in d["PowerIncreases"].as_array().into_iter().flatten() {
+                let mut mask: u32 = 0;
+                for u in e["AffectedUnits"].as_array().unwrap() {
+                    let u = u.as_str().unwrap();
+                    if u == "all" {
+                        mask = u32::MAX;
+                    } else {
+                        let i = unit_names.iter().position(|x| x == u).unwrap_or_else(|| panic!("cos.json: unknown unit {u}"));
+                        mask |= 1 << i;
+                    }
+                }
+                let terrain = match e["ConditionalTerrain"].as_str() {
+                    Some(t) => {
+                        assert!(kinds.iter().any(|k| k == t), "cos.json: unknown terrain kind {t}");
+                        format!("Some(TerrainKind::{})", ident(t))
+                    }
+                    None => "None".into(),
+                };
+                let f = |k: &str| e.get(k).map_or(0, hundredths);
+                boosts.push(format!(
+                    "Boost {{ units: {mask:#x}, terrain: {terrain}, attack: {}, defense: {}, range: {} }}",
+                    f("PowerIncrease"), f("DefenseIncrease"), f("RangeIncrease")
+                ));
+            }
+            let opt = |v: &Value, conv: &dyn Fn(&Value) -> String| if v.is_null() { "None".to_string() } else { format!("Some({})", conv(v)) };
+            let luck = opt(&d["LuckRange"], &|l| format!("({}, {})", l["x"].as_i64().unwrap_or(0), l["y"].as_i64().unwrap_or(9)));
+            let pct = |v: &Value| hundredths(v).to_string();
+            let weather = |k: &str| opt(&d[k], &|w| format!("{:?}", w.as_str().unwrap().chars().next().unwrap()));
+            writeln!(
+                out,
+                "static CO_{ci}_{}: [Boost; {}] = [{}];",
+                ph.to_uppercase(), boosts.len(), boosts.join(", ")
+            ).unwrap();
+            let phu = ph.to_uppercase();
+            phases.push(format!(
+                "Phase {{ stars: {}, boosts: &CO_{ci}_{phu}, luck: {luck}, price_pct: {}, counter_pct: {}, property_fund_increase: {}, \
+                 air_fuel_decrease: {}, hidden_hp: {}, sight_increase: {}, see_hidden: {}, attack_first: {}, move_cost_per_tile: {}, \
+                 weather_no_move_effect: {}, weather_extra_move_effect: {} }}",
+                opt(&d["PowerStars"], &|v| v.to_string()), opt(&d["UnitPriceMultiplier"], &pct), opt(&d["CounterAttackPower"], &pct),
+                d["PropertyFundIncrease"].as_i64().unwrap_or(0), d["AirFuelUsageDecrease"].as_i64().unwrap_or(0),
+                d["HiddenHP"].as_bool().unwrap_or(false), d["SightIncrease"].as_i64().unwrap_or(0),
+                d["SeeIntoHiddenTiles"].as_bool().unwrap_or(false), d["AttackFirst"].as_bool().unwrap_or(false),
+                opt(&d["MoveCostPerTile"], &|v| v.to_string()),
+                weather("WeatherWithNoMovementAffect"), weather("WeatherWithAdditionalMovementAffect"),
+            ));
+        }
+        infos.push(format!("    CoInfo {{ id: {}, d2d: {}, cop: {}, scop: {} }},", c["id"], phases[0], phases[1], phases[2]));
+    }
+    writeln!(out, "pub static COS: [CoInfo; {}] = [\n{}\n];", co_names.len(), infos.join("\n")).unwrap();
 
     let dest = PathBuf::from(env::var("OUT_DIR").unwrap()).join("tables.rs");
     fs::write(dest, out).unwrap();

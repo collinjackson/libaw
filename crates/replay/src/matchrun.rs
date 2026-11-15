@@ -79,9 +79,8 @@ struct Stats {
 
 /// Power stars of a CO's power and super power, from data/cos.json.
 fn stars(co: &str) -> Option<(i64, i64)> {
-    let c = data::tables().cos().get(co)?;
-    let n = |k: &str| c[k]["PowerStars"].as_i64();
-    Some((n("cop")?, n("scop")?))
+    let c = data::Co::from_name(co)?.info();
+    Some((c.cop.stars? as i64, c.scop.stars? as i64))
 }
 
 /// Give every player `co`. The power costs keep the start's value per star (AWBW: 9000 funds a star

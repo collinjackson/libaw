@@ -1,10 +1,9 @@
 //! Static game data. `data/*.json` (from `tools/gen_data.py`) becomes typed enums and constant
 //! tables at build time (build.rs), so looking a unit, a tile or a damage value up is an array
-//! index, with no JSON parse or name hashing at run time. CO data is still JSON (`cos()`).
+//! index, with no JSON parse or name hashing at run time. CO data (`Co::info`) is typed the same way.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::fx::FxMap as HashMap;
 
 /// Serde, Display and comparison with names for the generated name enums. JSON (and any other
 /// human-readable format) carries the name, as AWBW does; binary formats carry the index.
@@ -111,6 +110,80 @@ impl<T: AsUnitType + ?Sized> AsUnitType for &T {
     fn unit_type(&self) -> UnitType { (**self).unit_type() }
 }
 
+/// A CO's stat boost for some unit types, maybe only on one kind of terrain. Values are in
+/// hundredths (attack +20% = 20; range +1 = 100), as data/cos.json's decimals convert exactly.
+#[derive(Debug)]
+pub struct Boost {
+    /// Bit `UnitType as u8` set for each affected type (all bits for "all").
+    pub units: u32,
+    pub terrain: Option<TerrainKind>,
+    pub attack: i16,
+    pub defense: i16,
+    pub range: i16,
+}
+
+impl Boost {
+    pub fn affects(&self, u: UnitType) -> bool {
+        self.units & (1 << u as u32) != 0
+    }
+}
+
+/// One of a CO's three tables: day to day, CO power, super power.
+#[derive(Debug)]
+pub struct Phase {
+    pub stars: Option<u8>,
+    pub boosts: &'static [Boost],
+    /// Luck roll range (low, high) in percent points, replacing the default 0..=9.
+    pub luck: Option<(i8, i8)>,
+    pub price_pct: Option<u16>,
+    pub counter_pct: Option<u16>,
+    pub property_fund_increase: i16,
+    pub air_fuel_decrease: u8,
+    pub hidden_hp: bool,
+    pub sight_increase: u8,
+    pub see_hidden: bool,
+    pub attack_first: bool,
+    pub move_cost_per_tile: Option<u8>,
+    /// Weather (first letter) that doesn't slow this CO, or slows them more.
+    pub weather_no_move_effect: Option<char>,
+    pub weather_extra_move_effect: Option<char>,
+}
+
+#[derive(Debug)]
+pub struct CoInfo {
+    pub id: u32,
+    pub d2d: Phase,
+    pub cop: Phase,
+    pub scop: Phase,
+}
+
+impl Co {
+    pub fn info(self) -> &'static CoInfo {
+        &COS[self as usize]
+    }
+}
+
+/// A CO given as the enum or by name. Unlike units, an unknown name is None (no CO abilities),
+/// as the name-keyed table gave.
+pub trait AsCo {
+    fn as_co(&self) -> Option<Co>;
+}
+impl AsCo for Co {
+    fn as_co(&self) -> Option<Co> { Some(*self) }
+}
+impl AsCo for Option<Co> {
+    fn as_co(&self) -> Option<Co> { *self }
+}
+impl AsCo for str {
+    fn as_co(&self) -> Option<Co> { Co::from_name(self) }
+}
+impl AsCo for String {
+    fn as_co(&self) -> Option<Co> { Co::from_name(self) }
+}
+impl<T: AsCo + ?Sized> AsCo for &T {
+    fn as_co(&self) -> Option<Co> { (**self).as_co() }
+}
+
 /// The game's static tables. All lookups are array indexes.
 pub struct Tables;
 
@@ -145,26 +218,6 @@ impl Tables {
     pub fn base_damage(&self, att: impl AsUnitType, def: impl AsUnitType) -> Option<u8> {
         DAMAGE[att.unit_type() as usize][def.unit_type() as usize]
     }
-    /// CO data from data/cos.json, parsed on first use.
-    pub fn cos(&self) -> &'static HashMap<String, serde_json::Value> {
-        static C: Once<HashMap<String, serde_json::Value>> = Once::new();
-        C.get_or_init(|| serde_json::from_str(include_str!("../../../data/cos.json")).unwrap())
-    }
-}
-
-#[cfg(feature = "std")]
-type Once<T> = std::sync::OnceLock<T>;
-
-/// Without std there are no threads (a zkVM guest runs one), and riscv32im has no atomic
-/// compare-and-swap for a real once-cell, so a plain cell is shared as if it were `Sync`.
-#[cfg(not(feature = "std"))]
-struct Once<T>(core::cell::OnceCell<T>);
-#[cfg(not(feature = "std"))]
-unsafe impl<T> Sync for Once<T> {}
-#[cfg(not(feature = "std"))]
-impl<T> Once<T> {
-    const fn new() -> Self { Once(core::cell::OnceCell::new()) }
-    fn get_or_init(&self, f: impl FnOnce() -> T) -> &T { self.0.get_or_init(f) }
 }
 
 #[cfg(test)]
@@ -196,6 +249,18 @@ mod tests {
             }
         }
         assert!(tables().try_tile(0).is_none() && tables().try_tile(60000).is_none());
+        let cos: serde_json::Value = serde_json::from_str(include_str!("../../../data/cos.json")).unwrap();
+        for (name, c) in cos.as_object().unwrap() {
+            let co = Co::from_name(name).unwrap();
+            assert_eq!(co.info().id as u64, c["id"].as_u64().unwrap());
+            for (ph, p) in [("d2d", &co.info().d2d), ("cop", &co.info().cop), ("scop", &co.info().scop)] {
+                assert_eq!(p.stars.map(u64::from), c[ph]["PowerStars"].as_u64(), "{name} {ph}");
+                let n = c[ph]["PowerIncreases"].as_array().map_or(0, |a| a.len());
+                assert_eq!(p.boosts.len(), n, "{name} {ph}");
+            }
+        }
+        let andy = Co::Andy.info();
+        assert!(andy.scop.boosts[0].affects(UnitType::Tank) && andy.scop.boosts[0].attack == 10);
     }
     #[test]
     fn names_round_trip_in_json_and_index_in_binary_formats() {

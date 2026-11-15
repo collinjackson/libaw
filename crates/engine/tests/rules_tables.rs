@@ -97,11 +97,11 @@ fn render() -> String {
     s += "\n## CO power costs\n\nStars for the CO power and the super power, before the per-use increase (each use adds 20% of\n";
     s += "the base, up to 10 uses). Day-to-day abilities and power effects are in `co.rs` and `docs/rules/`.\n\n";
     s += "| CO | Power | Super |\n|---|---|---|\n";
-    let mut cos: Vec<_> = t.cos().iter().collect();
-    cos.sort_by_key(|(n, _)| n.as_str());
-    for (name, c) in cos {
-        let st = |k: &str| c[k]["PowerStars"].as_u64().map_or("-".into(), |v| v.to_string());
-        writeln!(s, "| {name} | {} | {} |", st("cop"), st("scop")).unwrap();
+    let mut cos: Vec<_> = libaw::data::Co::ALL.to_vec();
+    cos.sort_by_key(|c| c.name());
+    for c in cos {
+        let st = |p: &libaw::data::Phase| p.stars.map_or("-".into(), |v| v.to_string());
+        writeln!(s, "| {} | {} | {} |", c.name(), st(&c.info().cop), st(&c.info().scop)).unwrap();
     }
     s
 }
