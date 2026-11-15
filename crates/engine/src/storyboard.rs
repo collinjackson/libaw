@@ -3,6 +3,8 @@
 //! `gameState` is the turn's start and its `actions` what happened, in order, with AWBW's own
 //! results (damage, captures), so a viewer shows what the game recorded, not a re-simulation.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::awbw::{hp_display, items, num, state_from, unit_from};
 use crate::state::Hp;
 use serde_json::{json, Value};

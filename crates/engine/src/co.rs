@@ -1,6 +1,8 @@
 //! CO day-to-day abilities, read from data/cos.json (the replay player's CO table), plus the
 //! few the table doesn't spell out (Javier, Lash, Rachel, Sami's capture and transports).
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::data::tables;
 use serde_json::Value;
 
@@ -37,7 +39,7 @@ fn sum_field(co: &str, power: &str, kind: &str, terrain_kind: Option<&str>, fiel
             Some(t) => terrain_kind == Some(t),
         })
         .filter_map(|e| e[field].as_f64())
-        .map(|v| (v * 100.0).round() as i32)
+        .map(|v| crate::num::round(v * 100.0) as i32)
         .sum()
 }
 
@@ -90,7 +92,7 @@ pub fn roll_luck(lo: i32, hi: i32, rng: &mut dyn FnMut() -> u32) -> i32 {
 /// Build price multiplier, with an active power's own value taking over (Hachi: 0.5).
 /// Unit price multiplier in per cent (Kanbei 120, Colin 80, Hachi 90, Hachi's super 50).
 pub fn price_pct(co: &str, power: &str) -> i64 {
-    active(co, power).into_iter().rev().find_map(|d| d["UnitPriceMultiplier"].as_f64()).map(|v| (v * 100.0).round() as i64).unwrap_or(100)
+    active(co, power).into_iter().rev().find_map(|d| d["UnitPriceMultiplier"].as_f64()).map(|v| crate::num::round(v * 100.0) as i64).unwrap_or(100)
 }
 
 /// What `cost` costs this CO now, rounded half up (integer arithmetic).
@@ -110,7 +112,7 @@ pub fn air_fuel_decrease(co: &str) -> i32 {
 /// always, Kanbei 150 under Samurai Spirit. An active power's value takes over.
 pub fn counter_pct(co: &str, power: &str) -> u32 {
     active(co, power).into_iter().rev().find_map(|d| d["CounterAttackPower"].as_f64())
-        .map(|v| (v * 100.0).round() as u32).unwrap_or(100)
+        .map(|v| crate::num::round(v * 100.0) as u32).unwrap_or(100)
 }
 
 /// The CO's flat day-to-day attack bonus for a unit kind (no terrain conditions, no power).

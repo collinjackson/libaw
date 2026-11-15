@@ -3,6 +3,8 @@
 //! A test opponent, not the real bot (that lives in the private awbw-bot repo).
 //! Also `random`: a uniformly random legal action, preferring to act over ending the turn.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::actions::{legal_actions, Action, Then};
 use crate::data::tables;
 use crate::rules::dist;
@@ -104,7 +106,7 @@ pub fn ranked(s: &State) -> Vec<(f64, Action)> {
         }
     }
     // Stable: equal gains keep generation order, as `choose` did (first best wins).
-    out.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    out.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(core::cmp::Ordering::Equal));
     out
 }
 

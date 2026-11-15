@@ -1,10 +1,12 @@
 //! Reading AWBW replay-API turn files (one JSON file per player turn, as saved by
 //! awbw_chart's awbw_replay_export.py) into engine state.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::data::tables;
 use crate::*;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 /// PHP arrays come through as either JSON objects or lists. Iterate either.
 pub fn items(v: &Value) -> Vec<&Value> {
@@ -17,8 +19,8 @@ pub fn items(v: &Value) -> Vec<&Value> {
 
 pub fn num(v: &Value) -> i64 {
     match v {
-        Value::Number(n) => n.as_i64().unwrap_or_else(|| n.as_f64().unwrap_or(0.0).round() as i64),
-        Value::String(s) => s.trim().parse::<f64>().map(|f| f.round() as i64).unwrap_or(0),
+        Value::Number(n) => n.as_i64().unwrap_or_else(|| crate::num::round(n.as_f64().unwrap_or(0.0)) as i64),
+        Value::String(s) => s.trim().parse::<f64>().map(|f| crate::num::round(f) as i64).unwrap_or(0),
         _ => 0,
     }
 }
@@ -34,7 +36,7 @@ pub fn opt_num(v: &Value) -> Option<i64> {
 pub fn hp_display(v: &Value) -> u8 {
     // Displayed HP; fractional values (if any) round up the way AWBW displays them.
     match v {
-        Value::Number(n) => n.as_f64().unwrap_or(0.0).ceil() as u8,
+        Value::Number(n) => crate::num::ceil(n.as_f64().unwrap_or(0.0)) as u8,
         _ => num(v) as u8,
     }
 }

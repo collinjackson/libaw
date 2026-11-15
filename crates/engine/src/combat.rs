@@ -1,6 +1,8 @@
 //! Attack and defence values: COs, com towers, terrain. Shared by the simulator and the
 //! replay checker.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::co;
 use crate::data::tables;
 use crate::rules::*;

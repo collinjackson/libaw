@@ -4,11 +4,13 @@
 //! Optional parts, off by default for contract v1 bots: seam attacks (`State::seams`),
 //! diving and hiding (`State::dives`), CO powers (`State::powers`).
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::co;
 use crate::data::tables;
 use crate::rules::*;
 use crate::state::*;
-use std::collections::{BTreeMap, BinaryHeap};
+use alloc::collections::{BTreeMap, BinaryHeap};
 
 pub type Pos = (u16, u16);
 
@@ -54,8 +56,8 @@ pub fn reachable(s: &State, u: &Unit) -> BTreeMap<Pos, (u32, Vec<Pos>)> {
     let mut best: crate::fx::FxMap<Pos, u32> = crate::fx::FxMap::default();
     best.insert(start, 0);
     let mut prev: crate::fx::FxMap<Pos, Pos> = crate::fx::FxMap::default();
-    let mut heap = BinaryHeap::from([std::cmp::Reverse((0u32, start))]);
-    while let Some(std::cmp::Reverse((c, p))) = heap.pop() {
+    let mut heap = BinaryHeap::from([core::cmp::Reverse((0u32, start))]);
+    while let Some(core::cmp::Reverse((c, p))) = heap.pop() {
         if best.get(&p).is_some_and(|&b| b < c) {
             continue;
         }
@@ -78,7 +80,7 @@ pub fn reachable(s: &State, u: &Unit) -> BTreeMap<Pos, (u32, Vec<Pos>)> {
             if best.get(&n).is_none_or(|&b| nc < b) {
                 best.insert(n, nc);
                 prev.insert(n, p);
-                heap.push(std::cmp::Reverse((nc, n)));
+                heap.push(core::cmp::Reverse((nc, n)));
             }
         }
     }
@@ -183,7 +185,7 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
         }
     }
     if is_foot(&u.kind) && s.buildings.get(&to).is_some_and(|b| tables().tile(b.terrain).building.as_deref() == Some("Missile")) {
-        let mut targets = std::collections::BTreeSet::new();
+        let mut targets = alloc::collections::BTreeSet::new();
         for e in s.units.values().filter(|e| !s.allied(e.owner, u.owner) && e.carried_by.is_none()) {
             for dy in -2i32..=2 {
                 for dx in (-2 + dy.abs())..=(2 - dy.abs()) {

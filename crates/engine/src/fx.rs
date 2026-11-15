@@ -2,8 +2,8 @@
 //! std default (SipHash, built to resist hash flooding) was 28% of a self-play server's work
 //! (profile 2026-11-12); none of these maps takes untrusted keys.
 
-use std::collections::{HashMap, HashSet};
-use std::hash::{BuildHasherDefault, Hasher};
+use core::hash::{BuildHasherDefault, Hasher};
+use hashbrown::{HashMap, HashSet};
 
 pub type FxMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 pub type FxSet<K> = HashSet<K, BuildHasherDefault<FxHasher>>;
@@ -53,6 +53,7 @@ impl Hasher for FxHasher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::*;
     #[test]
     fn maps_and_sets_work() {
         let mut m: FxMap<(u16, u16), u32> = FxMap::default();

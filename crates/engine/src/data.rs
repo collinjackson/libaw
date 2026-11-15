@@ -1,8 +1,9 @@
 //! Static game data, generated into `data/*.json` by `tools/gen_data.py`.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use serde::Deserialize;
 use crate::fx::FxMap as HashMap;
-use std::sync::OnceLock;
 
 #[derive(Debug, Deserialize)]
 pub struct TerrainInfo {
@@ -37,8 +38,23 @@ pub struct Tables {
     pub cos: HashMap<String, serde_json::Value>,
 }
 
+#[cfg(feature = "std")]
+type Once<T> = std::sync::OnceLock<T>;
+
+/// Without std there are no threads (a zkVM guest runs one), and riscv32im has no atomic
+/// compare-and-swap for a real once-cell, so a plain cell is shared as if it were `Sync`.
+#[cfg(not(feature = "std"))]
+struct Once<T>(core::cell::OnceCell<T>);
+#[cfg(not(feature = "std"))]
+unsafe impl<T> Sync for Once<T> {}
+#[cfg(not(feature = "std"))]
+impl<T> Once<T> {
+    const fn new() -> Self { Once(core::cell::OnceCell::new()) }
+    fn get_or_init(&self, f: impl FnOnce() -> T) -> &T { self.0.get_or_init(f) }
+}
+
 pub fn tables() -> &'static Tables {
-    static T: OnceLock<Tables> = OnceLock::new();
+    static T: Once<Tables> = Once::new();
     T.get_or_init(|| {
         let terrain: HashMap<String, TerrainInfo> =
             serde_json::from_str(include_str!("../../../data/terrain.json")).unwrap();

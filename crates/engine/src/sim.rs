@@ -1,6 +1,8 @@
 //! Applying actions: the simulator. Turn start (income, fuel, repairs, supply) and unit
 //! removal live here so the replay checker and bots share them.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::co;
 use crate::combat::*;
 use crate::data::tables;
@@ -151,11 +153,11 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
 }
 
 /// End of turn: APCs resupply adjacent own units. Returns the units that needed it.
-pub fn apc_supply(s: &mut State, p: PlayerId) -> std::collections::BTreeSet<UnitId> {
+pub fn apc_supply(s: &mut State, p: PlayerId) -> alloc::collections::BTreeSet<UnitId> {
     let apcs: Vec<(UnitId, u16, u16)> = s.units.values()
         .filter(|u| u.owner == p && u.kind == "APC" && u.carried_by.is_none())
         .map(|u| (u.id, u.x, u.y)).collect();
-    let mut out = std::collections::BTreeSet::new();
+    let mut out = alloc::collections::BTreeSet::new();
     for (aid, x, y) in apcs {
         for u in s.units.values_mut() {
             if u.id != aid && u.owner == p && u.carried_by.is_none() && dist((x, y), (u.x, u.y)) == 1 {
@@ -332,7 +334,7 @@ enum Aim {
 /// Reproduces all 33 recorded Rachel missiles and all 16 of Von Bolt's.
 fn aim_missile(s: &State, pid: PlayerId, aim: Aim) -> Option<(u16, u16)> {
     // Per tile holding an uncarried unit: (score, tie-break value, is an enemy), in tenths.
-    let mut tiles: std::collections::BTreeMap<(i32, i32), (i64, i64, bool)> = Default::default();
+    let mut tiles: alloc::collections::BTreeMap<(i32, i32), (i64, i64, bool)> = Default::default();
     for u in s.units.values().filter(|u| u.carried_by.is_none()) {
         let enemy = !s.allied(u.owner, pid);
         let sign = if enemy { 1 } else { -1 };
@@ -965,6 +967,6 @@ pub fn winner(s: &State) -> Option<String> {
     // Out means eliminated: by capture, or by losing their last unit (`rout`). Having no
     // units is not enough.
     let alive: Vec<&Player> = s.players.iter().filter(|p| !p.eliminated).collect();
-    let teams: std::collections::BTreeSet<&str> = alive.iter().map(|p| p.team.as_str()).collect();
+    let teams: alloc::collections::BTreeSet<&str> = alive.iter().map(|p| p.team.as_str()).collect();
     (teams.len() == 1).then(|| teams.into_iter().next().unwrap().to_string())
 }

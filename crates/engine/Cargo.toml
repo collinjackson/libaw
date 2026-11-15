@@ -6,6 +6,16 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# Off for zkVM guests that have no std (Nexus, Airbender): the engine then needs only `alloc`.
+default = ["std"]
+std = ["serde/std", "serde_json/std"]
+
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+# The same SwissTable std's HashMap is built on, used with and without std so map behaviour is
+# identical in every build.
+hashbrown = { version = "0.15", default-features = false, features = ["serde"] }
+# Exact floor/round/ceil without std (they are std-only methods on f64).
+libm = "0.2"

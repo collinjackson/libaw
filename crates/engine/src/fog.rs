@@ -10,6 +10,8 @@
 //! - Sonja: +1 vision; under either power +1 more, and she sees into forests and reefs at
 //!   any range (AWBW's CO page; fits the fog records' `discovered` lists).
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::combat::{co_of, pw};
 use crate::data::tables;
 use crate::state::*;

@@ -3,6 +3,8 @@
 //! Sources are AWBW's own pages and recorded games (see docs/sources.md). Anything still
 //! unmodelled is listed in docs/awbw-rule-findings.md (Open).
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::data::tables;
 use crate::state::*;
 
@@ -202,7 +204,7 @@ pub fn damage_f64(p: &AttackParams, luck: i32) -> u32 {
     // One decimal the way AWBW rounds it: the whole tenths below the
     // value, one more when the value is at or above the double nearest to "those tenths
     // and a half". Then drop the fraction.
-    let mut tenths = (raw * 10.0).floor();
+    let mut tenths = crate::num::floor(raw * 10.0);
     if (tenths + 1.0) / 10.0 == raw {
         tenths += 1.0; // the product is exactly the next tenth
     }

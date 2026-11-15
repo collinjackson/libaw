@@ -1,7 +1,9 @@
 //! Game state. Coordinates are (x, y) with x across, y down, as AWBW uses them.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 pub type PlayerId = u32;
 pub type UnitId = u32;
@@ -205,7 +207,8 @@ impl State {
 mod pos_map {
     use super::Building;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::collections::BTreeMap;
+    use alloc::collections::BTreeMap;
+    use alloc::vec::Vec;
     pub fn serialize<S: Serializer>(m: &BTreeMap<(u16, u16), Building>, s: S) -> Result<S::Ok, S::Error> {
         m.iter().map(|(&(x, y), b)| (x, y, b)).collect::<Vec<_>>().serialize(s)
     }

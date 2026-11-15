@@ -1,9 +1,11 @@
 //! What a viewer needs: compact per-action frames, a game log header, action labels.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::data::tables;
 use crate::state::*;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 /// One frame of a game log: the position after an action.
 /// A short stable fingerprint of the whole state (FNV-1a over its JSON), so a game log
