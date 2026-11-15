@@ -53,9 +53,13 @@ fn steps_of(a: &Value, out: &mut Vec<Value>) {
         "Capt" => {
             let b = &body["buildingInfo"];
             let left = num(&b["buildings_capture"]);
+            // A finished capture carries the building's new terrain (terrain_id) and its new owner in
+            // buildings_team. A partial capture of an enemy building also names a team, but it's the
+            // current owner, and there is no terrain_id.
             let team = &b["buildings_team"];
+            let done = !team.is_null() && team.as_str() != Some("") && !b["terrain_id"].is_null();
             out.push(json!({"type": "capture", "at": xy(b, "buildings_x", "buildings_y"), "capture": left,
-                            "done": !team.is_null() && team.as_str() != Some(""), "new_owner": team}));
+                            "done": done, "new_owner": if done { team.clone() } else { Value::Null }}));
         }
         "Build" => {
             let u = unit_from(&body["newUnit"]);
@@ -124,5 +128,21 @@ mod tests {
         assert_eq!(out[2]["done"], false);
         assert_eq!(out[3]["unit"]["kind"], "Infantry");
         assert!(out[5]["defender"].is_null());
+    }
+
+    #[test]
+    fn a_partial_capture_of_an_enemy_building_is_not_done() {
+        // Mid-capture of an owned building: the record names the current owner, with no terrain.
+        let partial = json!({"action": "Capt", "buildingInfo": {"buildings_x": 3, "buildings_y": 2,
+            "buildings_capture": 5, "buildings_team": "2"}});
+        let done = json!({"action": "Capt", "buildingInfo": {"buildings_x": 3, "buildings_y": 2,
+            "buildings_capture": 20, "buildings_team": "1", "terrain_id": 48, "buildings_players_id": 1}});
+        let mut out = Vec::new();
+        steps_of(&partial, &mut out);
+        steps_of(&done, &mut out);
+        assert_eq!(out[0]["done"], false);
+        assert!(out[0]["new_owner"].is_null());
+        assert_eq!(out[1]["done"], true);
+        assert_eq!(out[1]["new_owner"], "1");
     }
 }
