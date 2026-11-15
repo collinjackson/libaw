@@ -79,7 +79,7 @@ struct Stats {
 
 /// Power stars of a CO's power and super power, from data/cos.json.
 fn stars(co: &str) -> Option<(i64, i64)> {
-    let c = data::tables().cos.get(co)?;
+    let c = data::tables().cos().get(co)?;
     let n = |k: &str| c[k]["PowerStars"].as_i64();
     Some((n("cop")?, n("scop")?))
 }
@@ -116,7 +116,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     // MATCH_BANS: comma list of unbuildable units (default Stealth,Black Bomb as on AWBW;
     // empty allows everything). Bots are told through the request's "banned" field.
     if let Ok(v) = std::env::var("MATCH_BANS") {
-        s.banned = v.split(',').map(str::trim).filter(|x| !x.is_empty()).map(String::from).collect();
+        s.banned = v.split(',').map(str::trim).filter(|x| !x.is_empty()).map(libaw::data::UnitType::from).collect();
     }
     if std::env::var("MATCH_POWERS").is_ok() {
         s.powers = true;
@@ -159,8 +159,8 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
             let ids: Vec<PlayerId> = order.iter().copied().filter(|&p| seat_of(p) == seat).collect();
             let mut army = serde_json::Map::new();
             for u in s.units.values().filter(|u| ids.contains(&u.owner)) {
-                let v = data::tables().unit(&u.kind).cost as f64 * u.hp.hi as f64 / 100.0;
-                let e = army.entry(u.kind.clone()).or_insert(json!(0.0));
+                let v = data::tables().unit(u.kind).cost as f64 * u.hp.hi as f64 / 100.0;
+                let e = army.entry(u.kind.to_string()).or_insert(json!(0.0));
                 *e = json!(e.as_f64().unwrap_or(0.0) + v);
             }
             let p = s.players.iter().find(|p| ids.contains(&p.id));
@@ -263,7 +263,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
     let worth = |seat: usize| -> i64 {
         let ids: Vec<PlayerId> = order.iter().copied().filter(|&p| seat_of(p) == seat).collect();
         let army: i64 = s.units.values().filter(|u| ids.contains(&u.owner))
-            .map(|u| data::tables().unit(&u.kind).cost as i64 * u.hp.hi as i64 / 100).sum();
+            .map(|u| data::tables().unit(u.kind).cost as i64 * u.hp.hi as i64 / 100).sum();
         let funds: i64 = s.players.iter().filter(|p| ids.contains(&p.id)).map(|p| p.funds).sum();
         let props = s.buildings.values().filter(|b| b.owner.is_some_and(|o| ids.contains(&o))).count() as i64;
         army + funds + props * 1000

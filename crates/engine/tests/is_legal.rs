@@ -48,7 +48,7 @@ fn is_legal_agrees_with_the_full_legal_list() {
                     }
                 }
             }
-            let build_miss = Action::Build { at: (0, 0), kind: "Infantry".into() };
+            let build_miss = Action::Build { at: (0, 0), kind: libaw::data::UnitType::Infantry };
             assert_eq!(is_legal(&s, &build_miss), all.contains(&build_miss));
             let a = all[(rng(&mut x) % all.len() as u64) as usize].clone();
             step(&mut s, &a, &mut |lo, hi| lo + (rng(&mut x) % (hi - lo + 1) as u64) as i32).unwrap();

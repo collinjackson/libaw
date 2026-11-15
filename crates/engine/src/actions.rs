@@ -7,7 +7,7 @@
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::co;
-use crate::data::tables;
+use crate::data::{tables, BuildingKind as B, MoveType as M, UnitType as U};
 use crate::rules::*;
 use crate::state::*;
 use alloc::collections::{BTreeMap, BinaryHeap};
@@ -41,7 +41,7 @@ pub enum Then {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     Move { unit: UnitId, path: Vec<Pos>, then: Then },
-    Build { at: Pos, kind: String },
+    Build { at: Pos, kind: crate::data::UnitType },
     /// Activate the CO power ("Y") or super power ("S"). Only generated when `State::powers`.
     Power { kind: String },
     EndTurn,
@@ -101,11 +101,11 @@ pub fn reachable(s: &State, u: &Unit) -> BTreeMap<Pos, (u32, Vec<Pos>)> {
 /// Enemy tiles `u` can attack from `from`. `moved`: whether it moves first this action
 /// (indirect units can't move and fire).
 pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
-    let info = tables().unit(&u.kind);
+    let info = tables().unit(u.kind);
     if info.range[1] == 0 {
         return vec![];
     }
-    let indirect = is_indirect(&u.kind);
+    let indirect = is_indirect(u.kind);
     if indirect && moved {
         return vec![];
     }
@@ -113,13 +113,13 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
     let co = s.player(u.owner).map(|p| p.co.clone()).unwrap_or_default();
     let mut maxr = info.range[1] as i32;
     if indirect {
-        maxr = (maxr + co::range_bonus(&co, &pw, &u.kind)).max(2);
+        maxr = (maxr + co::range_bonus(&co, &pw, u.kind)).max(2);
     }
     let minr = info.range[0] as u32;
     s.units.values()
         // A hidden Stealth can be hit by Fighters and Stealths, a dived Sub by Cruisers and
         // Subs (game-1692796: a Fighter on a hidden Stealth).
-        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && (!d.dived || can_hit_hidden(&u.kind, &d.kind)))
+        .filter(|d| d.carried_by.is_none() && !s.allied(d.owner, u.owner) && (!d.dived || can_hit_hidden(u.kind, d.kind)))
         // ... and only once it is revealed, as the board stands before this unit moves.
         .filter(|d| !crate::fog::concealed(s, d, u.owner))
         .filter(|d| {
@@ -127,7 +127,7 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
             dd >= minr && dd <= maxr as u32
         })
         // Out of ammo, a machine gun still hits ground vehicles (rules::mg_damage).
-        .filter(|d| base_damage_now(u, &d.kind).is_some())
+        .filter(|d| base_damage_now(u, d.kind).is_some())
         .map(|d| (d.x, d.y))
         .collect()
 }
@@ -135,18 +135,18 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
 /// Pipe seams `u` could hit from `from` (same range rule as units; a seam takes what a
 /// Neotank would).
 pub fn seam_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
-    let info = tables().unit(&u.kind);
-    if info.range[1] == 0 || (is_indirect(&u.kind) && moved) || base_damage_now(u, "Neotank").is_none() {
+    let info = tables().unit(u.kind);
+    if info.range[1] == 0 || (is_indirect(u.kind) && moved) || base_damage_now(u, U::Neotank).is_none() {
         return vec![];
     }
     let mut maxr = info.range[1] as i32;
-    if is_indirect(&u.kind) {
+    if is_indirect(u.kind) {
         let pw = s.player(u.owner).map(|p| p.power.clone()).unwrap_or_else(|| "N".into());
         let co = s.player(u.owner).map(|p| p.co.clone()).unwrap_or_default();
-        maxr = (maxr + co::range_bonus(&co, &pw, &u.kind)).max(2);
+        maxr = (maxr + co::range_bonus(&co, &pw, u.kind)).max(2);
     }
     s.buildings.iter()
-        .filter(|(_, b)| tables().tile(b.terrain).building.as_deref() == Some("PipeSeam") && b.capture > 0)
+        .filter(|(_, b)| tables().tile(b.terrain).building == Some(crate::data::BuildingKind::PipeSeam) && b.capture > 0)
         .map(|(&p, _)| p)
         .filter(|&p| { let d = dist(from, p); d >= info.range[0] as u32 && d <= maxr as u32 })
         .collect()
@@ -159,12 +159,12 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
     let other = s.unit_at(to.0, to.1).filter(|o| o.id != u.id);
     match other {
         Some(o) if o.owner == u.owner => {
-            if capacity(&o.kind) > o.cargo.len() && can_carry(&o.kind, &u.kind) {
+            if capacity(o.kind) > o.cargo.len() && can_carry(o.kind, u.kind) {
                 out.push(Then::Load);
             }
             // Transports may join while their cargo together still fits; it passes to the
             // unit joined.
-            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.len() + u.cargo.len() <= capacity(&o.kind) {
+            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.len() + u.cargo.len() <= capacity(o.kind) {
                 out.push(Then::Join);
             }
             return out;
@@ -184,7 +184,7 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
             out.push(Then::AttackSeam { target: t });
         }
     }
-    if is_foot(&u.kind) && s.buildings.get(&to).is_some_and(|b| tables().tile(b.terrain).building.as_deref() == Some("Missile")) {
+    if is_foot(u.kind) && s.buildings.get(&to).is_some_and(|b| tables().tile(b.terrain).building == Some(crate::data::BuildingKind::Missile)) {
         let mut targets = alloc::collections::BTreeSet::new();
         for e in s.units.values().filter(|e| !s.allied(e.owner, u.owner) && e.carried_by.is_none()) {
             for dy in -2i32..=2 {
@@ -216,14 +216,14 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
     if s.deletes && to == (u.x, u.y) && !u.moved {
         out.push(Then::Delete);
     }
-    if s.dives && matches!(u.kind.as_str(), "Sub" | "Stealth") {
+    if s.dives && matches!(u.kind, U::Sub | U::Stealth) {
         out.push(if u.dived { Then::Unhide } else { Then::Hide });
     }
-    if is_foot(&u.kind) {
+    if is_foot(u.kind) {
         if let Some(b) = s.buildings.get(&to) {
-            let kind = tables().tile(b.terrain).building.as_deref();
+            let kind = tables().tile(b.terrain).building;
             let mine = b.owner.is_some_and(|o| s.allied(o, u.owner));
-            if !mine && !matches!(kind, Some("PipeSeam") | Some("Missile") | None) {
+            if !mine && !matches!(kind, Some(B::PipeSeam) | Some(B::Missile) | None) {
                 out.push(Then::Capture);
             }
         }
@@ -246,7 +246,7 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
         }
     }
     for &c in &u.cargo {
-        if !can_unload_from(&u.kind, s.terrain_at(to.0, to.1)) {
+        if !can_unload_from(u.kind, s.terrain_at(to.0, to.1)) {
             break;
         }
         let Some(cu) = s.units.get(&c) else { continue };
@@ -261,7 +261,7 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
 }
 
 /// Builds the player to move can afford, at their free production buildings.
-pub fn builds(s: &State) -> Vec<(Pos, String)> {
+pub fn builds(s: &State) -> Vec<(Pos, U)> {
     let me = s.current;
     let Some(p) = s.player(me) else { return vec![] };
     if at_unit_limit(s, me) {
@@ -272,20 +272,20 @@ pub fn builds(s: &State) -> Vec<(Pos, String)> {
         if b.owner != Some(me) || s.unit_at(pos.0, pos.1).is_some() {
             continue;
         }
-        let classes: &[&str] = match tables().tile(b.terrain).building.as_deref() {
-            Some("Base") => &["F", "B", "T", "W", "P"],
-            Some("Airport") => &["A"],
-            Some("Port") => &["S", "L"],
+        let classes: &[M] = match tables().tile(b.terrain).building {
+            Some(B::Base) => &[M::F, M::B, M::T, M::W, M::P],
+            Some(B::Airport) => &[M::A],
+            Some(B::Port) => &[M::S, M::L],
             // Hachi's Merchant Union: ground units from cities.
-            Some("City") if p.co == "Hachi" && p.power == "S" => &["F", "B", "T", "W", "P"],
+            Some(B::City) if p.co == "Hachi" && p.power == "S" => &[M::F, M::B, M::T, M::W, M::P],
             _ => continue,
         };
-        for (name, info) in &tables().units {
-            if classes.contains(&info.move_type.as_str())
-                && !s.banned.iter().any(|b| b == name)
+        for (name, info) in tables().units() {
+            if classes.contains(&info.move_type)
+                && !s.banned.contains(&name)
                 && co::price(info.cost as i64, &p.co, &p.power) <= p.funds
             {
-                out.push((pos, name.clone()));
+                out.push((pos, name));
             }
         }
     }

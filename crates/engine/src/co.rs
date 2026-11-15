@@ -3,20 +3,20 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::data::tables;
+use crate::data::{tables, MoveType as M, UnitType as U};
 use serde_json::Value;
 
 fn d2d(co: &str) -> Option<&'static Value> {
-    tables().cos.get(co).map(|c| &c["d2d"])
+    tables().cos().get(co).map(|c| &c["d2d"])
 }
 
-fn affects(entry: &Value, kind: &str) -> bool {
-    entry["AffectedUnits"].as_array().is_some_and(|a| a.iter().any(|u| u == "all" || u == kind))
+fn affects(entry: &Value, kind: U) -> bool {
+    entry["AffectedUnits"].as_array().is_some_and(|a| a.iter().any(|u| u == "all" || u == kind.name()))
 }
 
 /// The CO's active tables: day-to-day, plus the CO power ("Y") or super power ("S") on top.
 fn active(co: &str, power: &str) -> Vec<&'static Value> {
-    let Some(c) = tables().cos.get(co) else { return vec![] };
+    let Some(c) = tables().cos().get(co) else { return vec![] };
     let mut v = vec![&c["d2d"]];
     match power {
         "Y" => v.push(&c["cop"]),
@@ -28,7 +28,7 @@ fn active(co: &str, power: &str) -> Vec<&'static Value> {
 
 /// The sum of a power field over the active entries, in hundredths (the table holds
 /// decimals such as 0.15; each converts exactly to whole hundredths).
-fn sum_field(co: &str, power: &str, kind: &str, terrain_kind: Option<&str>, field: &str) -> i32 {
+fn sum_field(co: &str, power: &str, kind: U, terrain_kind: Option<&str>, field: &str) -> i32 {
     active(co, power)
         .into_iter()
         .filter_map(|d| d["PowerIncreases"].as_array())
@@ -46,7 +46,7 @@ fn sum_field(co: &str, power: &str, kind: &str, terrain_kind: Option<&str>, fiel
 /// Attack bonus in percent points (e.g. +20 for Max's tanks). `terrain_kind` is the
 /// attacker's tile kind ("Plain", "Road", "Building", ...).
 /// Any active power also gives every unit +10% attack and +10% defence.
-pub fn attack_bonus(co: &str, power: &str, kind: &str, terrain_kind: &str, terrain_stars: u32) -> i32 {
+pub fn attack_bonus(co: &str, power: &str, kind: U, terrain_kind: &str, terrain_stars: u32) -> i32 {
     let mut v = sum_field(co, power, kind, Some(terrain_kind), "PowerIncrease");
     if power != "N" {
         v += 10;
@@ -57,12 +57,12 @@ pub fn attack_bonus(co: &str, power: &str, kind: &str, terrain_kind: &str, terra
     v
 }
 
-pub fn defense_bonus(co: &str, power: &str, kind: &str) -> i32 {
+pub fn defense_bonus(co: &str, power: &str, kind: U) -> i32 {
     let v = sum_field(co, power, kind, None, "DefenseIncrease");
     v + if power != "N" { 10 } else { 0 }
 }
 
-pub fn range_bonus(co: &str, power: &str, kind: &str) -> i32 {
+pub fn range_bonus(co: &str, power: &str, kind: U) -> i32 {
     sum_field(co, power, kind, None, "RangeIncrease") / 100
 }
 
@@ -116,7 +116,7 @@ pub fn counter_pct(co: &str, power: &str) -> u32 {
 }
 
 /// The CO's flat day-to-day attack bonus for a unit kind (no terrain conditions, no power).
-pub fn d2d_attack_bonus(co: &str, kind: &str) -> i32 {
+pub fn d2d_attack_bonus(co: &str, kind: U) -> i32 {
     sum_field(co, "N", kind, None, "PowerIncrease")
 }
 
@@ -193,20 +193,20 @@ pub struct Instant {
     pub funds_attack: bool,
     /// A 9 HP unit of this kind on every city the user owns with no unit on it, ready to
     /// act (Sensei: Infantry, Mech).
-    pub spawn: Option<&'static str>,
+    pub spawn: Option<U>,
 }
 
 /// Does a unit of this kind get a power's movement bonus?
-pub fn moves_apply(kind: &str, moves_for: &str) -> bool {
-    let u = tables().unit(kind);
+pub fn moves_apply(kind: U, moves_for: &str) -> bool {
+    let u = kind.info();
     let foot = crate::rules::is_foot(kind);
-    let ground = !matches!(u.move_type.as_str(), "A" | "S" | "L");
+    let ground = !matches!(u.move_type, M::A | M::S | M::L);
     match moves_for {
         "foot" => foot,
         "vehicle" => ground && !foot,
         // Max's powers: every unit that isn't an indirect, a foot soldier or a transport;
         // the unarmed Black Bomb counts.
-        "direct" => (!foot && u.range[0] <= 1 && u.range[1] == 1) || kind == "Black Bomb",
+        "direct" => (!foot && u.range[0] <= 1 && u.range[1] == 1) || kind == U::BlackBomb,
         _ => true,
     }
 }
@@ -239,8 +239,8 @@ pub fn instant(co: &str, power: &str) -> Option<Instant> {
         // funds for damage dealt in sim::attack; Hachi's Merchant Union builds ground units
         // on cities in actions::builds).
         ("Colin", "S") => Some(Instant { funds_attack: true, ..i(0, 0, 100, 0, None).unwrap() }),
-        ("Sensei", "Y") => Some(Instant { spawn: Some("Infantry"), ..i(0, 0, 100, 0, None).unwrap() }),
-        ("Sensei", "S") => Some(Instant { spawn: Some("Mech"), ..i(0, 0, 100, 0, None).unwrap() }),
+        ("Sensei", "Y") => Some(Instant { spawn: Some(U::Infantry), ..i(0, 0, 100, 0, None).unwrap() }),
+        ("Sensei", "S") => Some(Instant { spawn: Some(U::Mech), ..i(0, 0, 100, 0, None).unwrap() }),
         ("Sasha", "S") | ("Hachi", "S") => i(0, 0, 100, 0, None),
         // Luck and stat powers: their ongoing effects come from the CO tables; nothing instant.
         ("Nell", "Y") | ("Flak", _) | ("Jugger", _) | ("Eagle", "Y") | ("Kanbei", _) | ("Grit", _) | ("Hachi", "Y") => i(0, 0, 100, 0, None),
@@ -264,7 +264,7 @@ pub fn instant(co: &str, power: &str) -> Option<Instant> {
 /// "full" (ongoing and instant effects), "partial" (ongoing only; unit-specific or missile
 /// effects not yet), or "none" (No CO).
 pub fn roster() -> Vec<(String, &'static str)> {
-    let mut v: Vec<(String, &'static str)> = tables().cos.keys().cloned().collect::<Vec<_>>()
+    let mut v: Vec<(String, &'static str)> = tables().cos().keys().cloned().collect::<Vec<_>>()
         .into_iter().filter(|c: &String| c != "No CO" && power_base(c).is_some())
         .map(|c| {
             // A CO whose COP costs as much as the super has no COP (Von Bolt).

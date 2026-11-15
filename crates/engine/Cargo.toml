@@ -19,3 +19,6 @@ serde_json = { version = "1", default-features = false, features = ["alloc"] }
 hashbrown = { version = "0.15", default-features = false, features = ["serde"] }
 # Exact floor/round/ceil without std (they are std-only methods on f64).
 libm = "0.2"
+
+[build-dependencies]
+serde_json = "1"

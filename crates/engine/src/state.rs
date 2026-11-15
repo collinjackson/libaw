@@ -51,7 +51,7 @@ impl Hp {
 pub struct Unit {
     pub id: UnitId,
     pub owner: PlayerId,
-    pub kind: String,
+    pub kind: crate::data::UnitType,
     pub x: u16,
     pub y: u16,
     pub hp: Hp,
@@ -147,7 +147,7 @@ pub struct State {
     /// balance rule, not strategy; if a game allows them the bot may build them). The
     /// generator leaves them out; the simulator applies a recorded build either way.
     #[serde(default = "default_bans")]
-    pub banned: Vec<String>,
+    pub banned: Vec<crate::data::UnitType>,
     /// Units a player may have at most, carried ones included: at the limit the generator
     /// offers no builds and Sensei's powers spawn no further (the simulator applies a
     /// recorded build either way). The records don't carry the setting, and AWBW's custom
@@ -166,8 +166,8 @@ pub fn default_unit_limit() -> Option<u32> {
     None
 }
 
-pub fn default_bans() -> Vec<String> {
-    vec!["Stealth".into(), "Black Bomb".into()]
+pub fn default_bans() -> Vec<crate::data::UnitType> {
+    vec![crate::data::UnitType::Stealth, crate::data::UnitType::BlackBomb]
 }
 
 impl State {

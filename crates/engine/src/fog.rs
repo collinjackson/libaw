@@ -18,10 +18,10 @@ use crate::state::*;
 
 /// Vision range of unit `u` where it stands.
 pub fn vision_range(s: &State, u: &Unit) -> u32 {
-    let info = tables().unit(&u.kind);
+    let info = tables().unit(u.kind);
     let mut v = info.vision as i32;
     let t = tables().tile(s.terrain_at(u.x, u.y));
-    if matches!(u.kind.as_str(), "Infantry" | "Mech") && t.kind == "Mountain" {
+    if crate::rules::is_foot(u.kind) && t.kind == crate::data::TerrainKind::Mountain {
         v += 3;
     }
     if co_of(s, u.owner) == "Sonja" {
@@ -41,7 +41,7 @@ pub fn vision_range(s: &State, u: &Unit) -> u32 {
 pub fn hiding_tile(s: &State, x: u16, y: u16) -> bool {
     let t = tables().tile(s.terrain_at(x, y));
     (t.kind == "Forest" || t.name.contains("Reef"))
-        && !s.unit_at(x, y).is_some_and(|u| tables().unit(&u.kind).move_type == "A")
+        && !s.unit_at(x, y).is_some_and(|u| tables().unit(u.kind).move_type == "A")
 }
 
 /// Sonja under a power sees into hiding tiles from anywhere in range.
@@ -163,7 +163,7 @@ pub fn player_view(s: &State, pid: PlayerId) -> State {
     // Properties out of sight: who holds them and any capture under way can't be seen.
     let unseen: Vec<(u16, u16)> = s.buildings.iter()
         .filter(|(&(x, y), b)| seen[y as usize * w + x as usize] == 0
-            && matches!(tables().tile(b.terrain).building.as_deref(), Some("City" | "Base" | "Airport" | "Port" | "ComTower" | "Lab")))
+            && matches!(tables().tile(b.terrain).building, Some(crate::data::BuildingKind::City | crate::data::BuildingKind::Base | crate::data::BuildingKind::Airport | crate::data::BuildingKind::Port | crate::data::BuildingKind::ComTower | crate::data::BuildingKind::Lab)))
         .map(|(&k, _)| k).collect();
     for k in unseen {
         let b = v.buildings.get_mut(&k).unwrap();
@@ -173,7 +173,7 @@ pub fn player_view(s: &State, pid: PlayerId) -> State {
     }
     // An HQ out of sight keeps its owner, but a capture under way on it can't be seen.
     for (&(x, y), b) in v.buildings.iter_mut() {
-        if seen[y as usize * w + x as usize] == 0 && tables().tile(b.terrain).building.as_deref() == Some("HQ") {
+        if seen[y as usize * w + x as usize] == 0 && tables().tile(b.terrain).building == Some(crate::data::BuildingKind::HQ) {
             b.capture = crate::rules::CAPTURE_POINTS;
         }
     }

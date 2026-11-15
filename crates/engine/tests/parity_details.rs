@@ -78,10 +78,10 @@ fn power_costs_stop_growing_after_the_tenth_use() {
 
 #[test]
 fn jakes_powers_lengthen_piperunner_range() {
-    assert_eq!(co::range_bonus("Jake", "N", "Piperunner"), 0);
-    assert_eq!(co::range_bonus("Jake", "Y", "Piperunner"), 1);
-    assert_eq!(co::range_bonus("Jake", "S", "Piperunner"), 1);
-    assert_eq!(co::range_bonus("Jake", "S", "Battleship"), 0);
+    assert_eq!(co::range_bonus("Jake", "N", libaw::data::UnitType::from("Piperunner")), 0);
+    assert_eq!(co::range_bonus("Jake", "Y", libaw::data::UnitType::from("Piperunner")), 1);
+    assert_eq!(co::range_bonus("Jake", "S", libaw::data::UnitType::from("Piperunner")), 1);
+    assert_eq!(co::range_bonus("Jake", "S", libaw::data::UnitType::from("Battleship")), 0);
 }
 
 #[test]
@@ -138,17 +138,17 @@ fn a_counterattack_cannot_hurt_a_hidden_stealth() {
 #[test]
 fn kindles_urban_bonus_is_for_properties_not_pipes() {
     let u = unit(1, 0, "Piperunner", (0, 0));
-    let id = |name: &str| *tables().terrain.iter().find(|(_, t)| t.name == name).unwrap().0;
-    let city = *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some("City")).unwrap().0;
+    let id = |name: &str| tables().terrains().find(|t| t.name == name).unwrap().id;
+    let city = tables().terrains().find(|t| t.building.map(|b| b.name()) == Some("City")).unwrap().id;
     assert_eq!(combat::bonus_terrain(&u, id("HPipe"), "Building"), "Pipe");
     assert_eq!(combat::bonus_terrain(&u, city, "Building"), "Building");
-    assert_eq!(co::attack_bonus("Kindle", "N", "Piperunner", "Pipe", 0), 0);
-    assert_eq!(co::attack_bonus("Kindle", "N", "Piperunner", "Building", 0), 40);
+    assert_eq!(co::attack_bonus("Kindle", "N", libaw::data::UnitType::from("Piperunner"), "Pipe", 0), 0);
+    assert_eq!(co::attack_bonus("Kindle", "N", libaw::data::UnitType::from("Piperunner"), "Building", 0), 40);
 }
 
 /// Two neighbouring tiles that treads can cross, with no building on either.
 fn land_pair(s: &State) -> (Pos, Pos) {
-    let open = |p: Pos| move_cost(s.terrain_at(p.0, p.1), "T").is_some() && !s.buildings.contains_key(&p);
+    let open = |p: Pos| move_cost(s.terrain_at(p.0, p.1), libaw::data::MoveType::from_name("T").unwrap()).is_some() && !s.buildings.contains_key(&p);
     (0..s.height)
         .flat_map(|y| (0..s.width - 1).map(move |x| ((x, y), (x + 1, y))))
         .find(|&(a, b)| open(a) && open(b))
@@ -230,7 +230,7 @@ fn under_sonjas_super_a_defender_that_cannot_fire_voids_the_attack() {
 #[test]
 fn max_speeds_up_the_black_bomb_but_not_transports() {
     for (kind, fast) in [("Black Bomb", true), ("Tank", true), ("Fighter", true), ("APC", false), ("Infantry", false), ("Artillery", false)] {
-        assert_eq!(co::moves_apply(kind, "direct"), fast, "{kind}");
+        assert_eq!(co::moves_apply(libaw::data::UnitType::from(kind), "direct"), fast, "{kind}");
     }
 }
 
@@ -247,8 +247,8 @@ fn sasha_gets_nothing_extra_when_properties_pay_nothing() {
 #[test]
 fn a_cruiser_out_of_ammo_cannot_fire_at_aircraft() {
     let cruiser = unit(1, 0, "Cruiser", (0, 0));
-    assert!(base_damage_now(&cruiser, "B-Copter").is_some());
-    assert!(base_damage_now(&Unit { ammo: 0, ..cruiser }, "B-Copter").is_none());
+    assert!(base_damage_now(&cruiser, libaw::data::UnitType::from("B-Copter")).is_some());
+    assert!(base_damage_now(&Unit { ammo: 0, ..cruiser }, libaw::data::UnitType::from("B-Copter")).is_none());
 }
 
 /// My full-HP Md.Tank beside a 1 HP enemy Infantry: attacking destroys it.
@@ -286,7 +286,7 @@ fn with_three_players_a_rout_frees_the_losers_properties() {
     s.players.push(Player { id: third, team: third.to_string(), order, ..s.player(foe).unwrap().clone() });
     add(&mut s, unit(50, foe, "Infantry", (0, 0))); // the second player plays on
     let held: Vec<Pos> = s.buildings.iter().filter(|(_, b)| b.owner == Some(foe)).map(|(k, _)| *k).take(2).collect();
-    let hq = *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some("HQ")).unwrap().0;
+    let hq = tables().terrains().find(|t| t.building.map(|b| b.name()) == Some("HQ")).unwrap().id;
     for (i, k) in held.iter().enumerate() {
         let b = s.buildings.get_mut(k).unwrap();
         b.owner = Some(third);
@@ -301,7 +301,7 @@ fn with_three_players_a_rout_frees_the_losers_properties() {
         assert_eq!(s.buildings[k].owner, None);
     }
     let was_hq = tables().tile(s.buildings[&held[0]].terrain);
-    assert_eq!((was_hq.building.as_deref(), was_hq.name.starts_with("Neutral")), (Some("City"), true));
+    assert_eq!((was_hq.building.map(|b| b.name()), was_hq.name.starts_with("Neutral")), (Some("City"), true));
 
     // Put out on their own turn (deleting their last unit), a player doesn't finish it.
     let (mut s, me, foe) = board("Andy", "N", "Andy");
@@ -326,7 +326,7 @@ fn in_fog_properties_out_of_sight_look_neutral_except_hqs() {
         .filter(|(k, b)| b.owner == Some(foe) && k.0 + k.1 > 8)
         .map(|(k, _)| *k).take(2).collect();
     assert_eq!(far.len(), 2);
-    let kind = |k: &str| *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some(k) && !t.name.starts_with("Neutral")).unwrap().0;
+    let kind = |k: &str| tables().terrains().find(|t| t.building.map(|b| b.name()) == Some(k) && !t.name.starts_with("Neutral")).unwrap().id;
     (s.buildings.get_mut(&far[0]).unwrap().terrain, s.buildings.get_mut(&far[0]).unwrap().capture) = (kind("City"), 7);
     s.buildings.get_mut(&far[1]).unwrap().terrain = kind("HQ");
     let view = fog::player_view(&s, me);
@@ -384,7 +384,7 @@ fn striking_into_sonjas_super_counts_as_a_counterattack() {
 /// the rule: the low end gains its full 20, not the top end's price (75-85 -> 95-100).
 #[test]
 fn repairs_of_an_uncertain_hp_heal_each_end_by_the_rule() {
-    let city = *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some("City")).unwrap().0;
+    let city = tables().terrains().find(|t| t.building.map(|b| b.name()) == Some("City")).unwrap().id;
     for (co, lo, hi, want) in [("Andy", 75, 85, Hp { lo: 95, hi: 100 }), ("Andy", 1, 100, Hp { lo: 21, hi: 100 }),
                                ("Andy", 50, 60, Hp { lo: 70, hi: 80 }), ("Rachel", 55, 65, Hp { lo: 85, hi: 95 })] {
         let (mut s, me, _) = board(co, "N", "Andy");

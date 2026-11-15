@@ -130,7 +130,7 @@ fn attack_feasible(s: &State, att: &Unit, def: &Unit, recorded: u8, base: u8, co
                 att_value: att_value(s, att, at, counter),
                 att_milli: libaw::combat::att_milli(s, att),
                 att_hp: ahp,
-                def_value: def_value(s, def, &att.kind),
+                def_value: def_value(s, def, att.kind),
                 def_terrain: stars(s, def, dt),
                 def_hp: dhp,
                 luck_min: libaw::co::luck(&co_of(s, att.owner), &pw(s, att.owner)).0,
@@ -200,7 +200,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                             {
                             let tiles: Vec<String> = path[1..].iter().map(|&(x, y)| {
                                 let t = s.terrain_at(x, y);
-                                format!("{}:{}", tables().tile(t).name, libaw::rules::move_cost_in(t, &tables().unit(&u.kind).move_type, s.weather).unwrap_or(99))
+                                format!("{}:{}", tables().tile(t).name, libaw::rules::move_cost_in(t, tables().unit(u.kind).move_type, s.weather).unwrap_or(99))
                             }).collect();
                             tag(c, format!("{} fuel {} -{cost} = {want}, recorded {} [{}] {:?}", u.kind, u.fuel, rec.fuel, s.weather, tiles))
                         }
@@ -235,7 +235,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     let (owner, end) = (u.owner, (rec.x, rec.y));
                     for o in s.units.values_mut() {
                         if o.owner == owner && o.id != u.id && o.carried_by.is_none() && dist(end, (o.x, o.y)) == 1 {
-                            let info = tables().unit(&o.kind);
+                            let info = tables().unit(o.kind);
                             r.maybe_supplied.entry(o.id).or_insert((o.fuel, o.ammo));
                             o.fuel = info.fuel as i32;
                             o.ammo = info.ammo as i32;
@@ -284,28 +284,30 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 r.check("legal.build", offered.contains(&((nu.x, nu.y), nu.kind.clone())), || {
                     tag(c, format!("{} at {:?} not generated", nu.kind, (nu.x, nu.y)))
                 });
-                let cost = libaw::co::price(tables().unit(&nu.kind).cost as i64,
+                let cost = libaw::co::price(tables().unit(nu.kind).cost as i64,
                     &co_of(s, nu.owner), &s.player(nu.owner).map(|p| p.power.clone()).unwrap_or_default());
                 let funds = s.player(nu.owner).map(|p| p.funds).unwrap_or(0);
                 r.check("build.affordable", cost <= funds, || {
                     tag(c, format!("{} costs {cost}, funds {funds}", nu.kind))
                 });
                 let t = s.terrain_at(nu.x, nu.y);
-                let b = tables().tile(t).building.clone().unwrap_or_default();
-                let mt = tables().unit(&nu.kind).move_type.clone();
-                let site_ok = match b.as_str() {
-                    "Base" => matches!(mt.as_str(), "F" | "B" | "T" | "W" | "P"),
-                    "Airport" => mt == "A",
-                    "Port" => matches!(mt.as_str(), "S" | "L"),
+                use libaw::data::{BuildingKind as B, MoveType as M};
+                let b = tables().tile(t).building;
+                let mt = nu.kind.info().move_type;
+                let site_ok = match b {
+                    Some(B::Base) => matches!(mt, M::F | M::B | M::T | M::W | M::P),
+                    Some(B::Airport) => mt == M::A,
+                    Some(B::Port) => matches!(mt, M::S | M::L),
                     _ => false,
                 };
-                r.check("build.site", site_ok, || tag(c, format!("{} built on {b}", nu.kind)));
+                let bn = b.map_or("", |b| b.name());
+                r.check("build.site", site_ok, || tag(c, format!("{} built on {bn}", nu.kind)));
                 let owned = s.buildings.get(&(nu.x, nu.y)).and_then(|b| b.owner) == Some(nu.owner);
                 r.check("build.owns_site", owned, || tag(c, format!("{} at {:?}", nu.kind, (nu.x, nu.y))));
                 r.check("build.tile_free", s.unit_at(nu.x, nu.y).is_none(), || {
                     tag(c, format!("{} at {:?} occupied", nu.kind, (nu.x, nu.y)))
                 });
-                let info = tables().unit(&nu.kind);
+                let info = tables().unit(nu.kind);
                 r.check("build.fresh_stats", nu.fuel == info.fuel as i32 && nu.ammo == info.ammo as i32, || {
                     tag(c, format!("{} fuel {} ammo {}", nu.kind, nu.fuel, nu.ammo))
                 });
@@ -325,7 +327,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     r.check("capt.unit_on_building", false, || tag(c, format!("nobody at {:?}", (x, y))));
                     continue;
                 };
-                r.check("capt.foot_unit", is_foot(&u.kind), || tag(c, format!("{} capturing", u.kind)));
+                r.check("capt.foot_unit", is_foot(u.kind), || tag(c, format!("{} capturing", u.kind)));
                 r.check("legal.capture", libaw::actions::options_at(s, &u, (x, y)).contains(&libaw::actions::Then::Capture), || {
                     tag(c, format!("{} capture at {:?} not generated", u.kind, (x, y)))
                 });
@@ -385,7 +387,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         let (vid, rv) = if s.units.get(&aid).is_some_and(|u| u.owner == pid) { (did, rd) } else { (aid, ra) };
                         if let (Some(d), true) = (s.units.get(&vid), pid != 0) {
                             let lost = d.hp.display_hi() as i64 - hp_display(&rv["units_hit_points"]) as i64;
-                            let want = tables().unit(&d.kind).cost as i64 * lost.max(0) / 20;
+                            let want = tables().unit(d.kind).cost as i64 * lost.max(0) / 20;
                             r.check("fire.war_bonds", want == amt, || tag(c, format!("{} lost {lost}: engine {want}, recorded {amt}", d.kind)));
                         }
                         if let Some(p) = s.player_mut(pid) { p.funds += amt; }
@@ -439,24 +441,24 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         att.kind, co_of(s, att.owner), att.ammo, def.kind, dist((att.x, att.y), (def.x, def.y))))
                 });
                 let d = dist((att.x, att.y), (def.x, def.y));
-                let ai = tables().unit(&att.kind);
+                let ai = tables().unit(att.kind);
                 let mut maxr = ai.range[1] as u32;
                 if maxr > 1 {
-                    maxr = (maxr as i32 + libaw::co::range_bonus(&co_of(s, att.owner), &pw(s, att.owner), &att.kind)).max(2) as u32;
+                    maxr = (maxr as i32 + libaw::co::range_bonus(&co_of(s, att.owner), &pw(s, att.owner), att.kind)).max(2) as u32;
                 }
                 r.check("fire.range", d >= ai.range[0] as u32 && d <= maxr, || {
                     tag(c, format!("{} -> {} at distance {d}, range {}..{maxr}", att.kind, def.kind, ai.range[0]))
                 });
-                if is_indirect(&att.kind) {
-                    r.check("fire.indirect_didnt_move", !moved_this_action(&att), || tag(c, att.kind.clone()));
+                if is_indirect(att.kind) {
+                    r.check("fire.indirect_didnt_move", !moved_this_action(&att), || tag(c, att.kind.to_string()));
                 }
                 let def_rec = hp_display(&rd["units_hit_points"]);
                 let att_rec = hp_display(&ra["units_hit_points"]);
-                let Some(base) = base_damage_now(&att, &def.kind) else {
+                let Some(base) = base_damage_now(&att, def.kind) else {
                     r.check("fire.can_target", false, || tag(c, format!("{} can't hit {}", att.kind, def.kind)));
                     continue;
                 };
-                let primary = uses_primary(&att, &def.kind);
+                let primary = uses_primary(&att, def.kind);
                 let ammo_after = num(&ra["units_ammo"]) as i32;
                 let want_ammo = if primary { att.ammo - 1 } else { att.ammo };
                 r.check("fire.attacker_ammo", ammo_after == want_ammo || att_rec == 0, || {
@@ -486,17 +488,17 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 // that can counter strikes first; the attacker then fires with what's left
                 // (game-1746729 turns 019, 025, 031).
                 {
-                    let di = tables().unit(&def.kind);
+                    let di = tables().unit(def.kind);
                     let first = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
-                        && d == 1 && di.range[1] == 1 && !is_indirect(&def.kind)
-                        && base_damage_now(&def, &att.kind).is_some();
+                        && d == 1 && di.range[1] == 1 && !is_indirect(def.kind)
+                        && base_damage_now(&def, att.kind).is_some();
                     if first {
-                        let b2 = base_damage_now(&def, &att.kind).unwrap();
+                        let b2 = base_damage_now(&def, att.kind).unwrap();
                         // A first strike isn't a counterattack: no x1.5 (all 7 recorded ones fit
                         // without it, none with it).
                         let cf = if att_hidden { hidden_range(s, alive_after(r, actions, i, att.id), &def, &att, b2, false) } else { attack_feasible(s, &def, &att, att_rec, b2, false) };
                         let def_ammo_after = num(&rd["units_ammo"]) as i32;
-                        let want = if uses_primary(&def, &att.kind) { def.ammo - 1 } else { def.ammo };
+                        let want = if uses_primary(&def, att.kind) { def.ammo - 1 } else { def.ammo };
                         // A hidden (Sonja) defender's ammo shows as 0 in the record: keep ours.
                         // A dead defender's ammo shows as 0 too.
                         let def_ammo_after = if def_hidden || (def_ammo_after == 0 && hp_display(&rd["units_hit_points"]) == 0) { want } else { def_ammo_after };
@@ -547,19 +549,19 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         att.kind, att.hp.display_hi(), co_of(s, att.owner), def.kind, def.hp.display_hi(),
                         co_of(s, def.owner), tables().tile(s.terrain_at(def.x, def.y)).name, def_rec))
                         + &format!(" [att {} on {} def {} hp {:?}->{:?}]", att_value(s, &att, s.terrain_at(att.x, att.y), false),
-                            tables().tile(s.terrain_at(att.x, att.y)).name, def_value(s, &def, &att.kind), att.hp, def.hp)
+                            tables().tile(s.terrain_at(att.x, att.y)).name, def_value(s, &def, att.kind), att.hp, def.hp)
                 });
                 let new_def_hp = new_def.unwrap_or(Hp::from_display(def_rec));
                 // Counterattack.
                 let mut new_att_hp = att.hp;
                 if def_rec > 0 {
-                    let di = tables().unit(&def.kind);
-                    let can_counter = d == 1 && di.range[1] == 1 && !is_indirect(&def.kind)
-                        && base_damage_now(&def, &att.kind).is_some();
+                    let di = tables().unit(def.kind);
+                    let can_counter = d == 1 && di.range[1] == 1 && !is_indirect(def.kind)
+                        && base_damage_now(&def, att.kind).is_some();
                     if can_counter {
                         let mut d2 = def.clone();
                         d2.hp = new_def_hp;
-                        let b2 = base_damage_now(&def, &att.kind).unwrap();
+                        let b2 = base_damage_now(&def, att.kind).unwrap();
                         let cf = if att_hidden { hidden_range(s, alive_after(r, actions, i, att.id), &d2, &att, b2, true) } else { attack_feasible(s, &d2, &att, att_rec, b2, true) };
                         let att_rec = if att_hidden { cf.map(|h| h.display_hi()).unwrap_or(0) } else { att_rec };
                         r.check("fire.counter_damage", cf.is_some(), || {
@@ -568,7 +570,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                         });
                         new_att_hp = cf.unwrap_or(Hp::from_display(att_rec));
                         let def_ammo_after = num(&rd["units_ammo"]) as i32;
-                        let want = if uses_primary(&def, &att.kind) { def.ammo - 1 } else { def.ammo };
+                        let want = if uses_primary(&def, att.kind) { def.ammo - 1 } else { def.ammo };
                         r.check("fire.counter_ammo", def_ammo_after == want || def_rec == 0, || {
                             tag(c, format!("{} ammo {} -> {def_ammo_after} countering {}", def.kind, def.ammo, att.kind))
                         });
@@ -608,10 +610,10 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     continue;
                 };
                 r.check("load.same_tile", (l.x, l.y) == (t.x, t.y), || tag(c, format!("{} onto {}", l.kind, t.kind)));
-                r.check("load.capacity", t.cargo.len() < capacity(&t.kind), || {
+                r.check("load.capacity", t.cargo.len() < capacity(t.kind), || {
                     tag(c, format!("{} full ({})", t.kind, t.cargo.len()))
                 });
-                r.check("load.cargo_type", can_carry(&t.kind, &l.kind), || tag(c, format!("{} into {}", l.kind, t.kind)));
+                r.check("load.cargo_type", can_carry(t.kind, l.kind), || tag(c, format!("{} into {}", l.kind, t.kind)));
                 s.units.get_mut(&tid).unwrap().cargo.push(lid);
                 let lu = s.units.get_mut(&lid).unwrap();
                 lu.carried_by = Some(tid);
@@ -629,7 +631,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     tag(c, format!("{} from {:?} to {:?}", uu.kind, (t.x, t.y), (uu.x, uu.y)))
                 });
                 let tt = s.terrain_at(uu.x, uu.y);
-                r.check("unload.passable", move_cost(tt, &tables().unit(&uu.kind).move_type).is_some(), || {
+                r.check("unload.passable", move_cost(tt, tables().unit(uu.kind).move_type).is_some(), || {
                     tag(c, format!("{} onto {}", uu.kind, tables().tile(tt).name))
                 });
                 s.units.get_mut(&tid).unwrap().cargo.retain(|&x| x != uu.id);
@@ -655,7 +657,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 };
                 let sum = a1 as u32 + a2 as u32;
                 let want_hp = sum.min(10) as u8;
-                let refund = (sum.saturating_sub(10)) as i64 * tables().unit(&mover.kind).cost as i64 / 10;
+                let refund = (sum.saturating_sub(10)) as i64 * tables().unit(mover.kind).cost as i64 / 10;
                 r.check("join.hp", hp_display(&a["joinedUnit"]["units_hit_points"]) == want_hp, || {
                     tag(c, format!("{a1}+{a2} -> {}", hp_display(&a["joinedUnit"]["units_hit_points"])))
                 });
@@ -680,19 +682,19 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let hp_after = hp_display(&a["repairedUnit"]["units_hit_points"]);
                 let funds = num(&a["funds"]);
                 if let (Some(b), Some(t)) = (s.units.get(&boat).cloned(), s.units.get(&rid).cloned()) {
-                    r.check("repair.adjacent", dist((b.x, b.y), (t.x, t.y)) == 1, || tag(c, t.kind.clone()));
+                    r.check("repair.adjacent", dist((b.x, b.y), (t.x, t.y)) == 1, || tag(c, t.kind.to_string()));
                     if let Some(before) = t.hp.display() {
                         let have0 = s.player(t.owner).map(|p| p.funds).unwrap_or(0);
-                        let afford = have0 >= tables().unit(&t.kind).cost as i64 / 10;
+                        let afford = have0 >= tables().unit(t.kind).cost as i64 / 10;
                         let want = if afford { (before + 1).min(10) } else { before };
                         r.check("repair.hp", hp_after == want, || tag(c, format!("{} {before} -> {hp_after}", t.kind)));
-                        let cost = if want > before { tables().unit(&t.kind).cost as i64 / 10 } else { 0 };
+                        let cost = if want > before { tables().unit(t.kind).cost as i64 / 10 } else { 0 };
                         let have = s.player(t.owner).map(|p| p.funds).unwrap_or(0);
                         r.check("repair.funds", funds == have - cost, || {
                             tag(c, format!("{} repair: {have} - {cost} vs {funds}", t.kind))
                         });
                     }
-                    let info = tables().unit(&t.kind);
+                    let info = tables().unit(t.kind);
                     let m = s.units.get_mut(&rid).unwrap();
                     m.hp = Hp::from_display(hp_after);
                     m.fuel = info.fuel as i32;
@@ -728,7 +730,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let hidden_steps: Vec<i64> = items(&a["repaired"]).iter()
                     .filter(|x| x["units_hit_points"].as_str() == Some("?"))
                     .filter_map(|x| s.units.get(&(num(&x["units_id"]) as u32)))
-                    .map(|u| tables().unit(&u.kind).cost as i64 / 10).collect();
+                    .map(|u| tables().unit(u.kind).cost as i64 / 10).collect();
                 if r.fog && next_funds == 0 && ours != 0 {
                     r.skip("turn.next_funds: hidden by fog");
                 } else if ours != next_funds && !hidden_steps.is_empty() {
@@ -780,11 +782,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let (sx, sy) = (num(&a["siloX"]) as u16, num(&a["siloY"]) as u16);
                 let (tx, ty) = (num(&a["targetX"]) as u16, num(&a["targetY"]) as u16);
                 let launcher = s.unit_at(sx, sy).cloned();
-                r.check("launch.foot_on_silo", launcher.as_ref().is_some_and(|u| is_foot(&u.kind)), || {
+                r.check("launch.foot_on_silo", launcher.as_ref().is_some_and(|u| is_foot(u.kind)), || {
                     tag(c, format!("silo {:?} has {:?}", (sx, sy), launcher.as_ref().map(|u| u.kind.clone())))
                 });
                 let silo = s.buildings.get(&(sx, sy)).map(|b| b.terrain);
-                r.check("launch.loaded_silo", silo.is_some_and(|t| tables().tile(t).building.as_deref() == Some("Missile")), || {
+                r.check("launch.loaded_silo", silo.is_some_and(|t| tables().tile(t).building == Some(libaw::data::BuildingKind::Missile)), || {
                     tag(c, format!("silo terrain {silo:?}"))
                 });
                 if let Some(b) = s.buildings.get_mut(&(sx, sy)) {
@@ -807,11 +809,11 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 let aid = num(&a["attacker"]["units_id"]) as u32;
                 if let Some(u) = s.units.get(&aid).cloned() {
                     let d = dist((u.x, u.y), (x, y));
-                    let ri = tables().unit(&u.kind).range;
+                    let ri = tables().unit(u.kind).range;
                     let co = co_of(s, u.owner);
                     let pw = s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default();
                     // Indirects get their CO's range bonus (Grit +1) against seams too.
-                    let maxr = if is_indirect(&u.kind) { (ri[1] as i32 + libaw::co::range_bonus(&co, &pw, &u.kind)).max(2) as u32 } else { ri[1] as u32 };
+                    let maxr = if is_indirect(u.kind) { (ri[1] as i32 + libaw::co::range_bonus(&co, &pw, u.kind)).max(2) as u32 } else { ri[1] as u32 };
                     r.check("seam.range", d >= ri[0] as u32 && d <= maxr, || tag(c, format!("{} at {d}", u.kind)));
                     let moved = r.last_move.is_some_and(|(id, m)| id == u.id && m);
                     r.check("legal.seam_target", libaw::actions::seam_targets(s, &u, (u.x, u.y), moved).contains(&(x, y)), || {
@@ -820,7 +822,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                     if let Some(before) = s.buildings.get(&(x, y)).map(|b| b.capture) {
                         let want = libaw::sim::seam_damage(s, &u).map(|d| (before - d).max(0));
                         r.check("seam.damage", want == Some(hp.max(0)), || tag(c, format!("{} {}hp ({}) on seam {before}: engine {want:?}, recorded {hp} [base {:?} att {} on {} at {:?}, power {}]",
-                            u.kind, u.hp.display_hi(), co, libaw::rules::base_damage_now(&u, "Neotank"),
+                            u.kind, u.hp.display_hi(), co, libaw::rules::base_damage_now(&u, libaw::data::UnitType::Neotank),
                             libaw::combat::att_value(s, &u, s.terrain_at(u.x, u.y), false),
                             libaw::data::tables().tile(s.terrain_at(u.x, u.y)).name, (u.x, u.y),
                             s.player(u.owner).map(|p| p.power.clone()).unwrap_or_default())));
@@ -844,7 +846,7 @@ fn apply_actions(s: &mut State, actions: &[Value], r: &mut Report, c: &Ctx) -> R
                 for x in items(&a["suppliedIds"]) {
                     let id = num(x) as u32;
                     if let Some(u) = s.units.get_mut(&id) {
-                        let info = tables().unit(&u.kind);
+                        let info = tables().unit(u.kind);
                         u.fuel = info.fuel as i32;
                         u.ammo = info.ammo as i32;
                     } else {
@@ -1033,7 +1035,7 @@ fn apply_power(s: &mut State, a: &Value, r: &mut Report, c: &Ctx) {
         if let Some(m) = opt_num(&u["units_movement_points"]) {
             // Sami's record lists whatever stands on a foot soldier's tile, so a loaded
             // transport shows its passenger's bonus. It keeps its own movement.
-            let sami_transport = co_of(s, pid) == "Sami" && s.units.get(&id).is_some_and(|x| !is_foot(&x.kind));
+            let sami_transport = co_of(s, pid) == "Sami" && s.units.get(&id).is_some_and(|x| !is_foot(x.kind));
             if !sami_transport {
                 s.move_override.insert(id, m as u32);
             }
@@ -1177,8 +1179,8 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
             tag(c, format!("{} {id} hp {}..{}, recorded {shown}", u.kind, u.hp.display_lo(), u.hp.display_hi()))
         }); }
         let alt = r.maybe_supplied.get(id).copied();
-        let fuel_ok = u.fuel == ru.fuel || alt.is_some_and(|(f, _)| f - (tables().unit(&u.kind).fuel as i32 - u.fuel) == ru.fuel || f == ru.fuel);
-        let ammo_ok = u.ammo == ru.ammo || alt.is_some_and(|(_, a)| a == ru.ammo || a - (tables().unit(&u.kind).ammo as i32 - u.ammo) == ru.ammo);
+        let fuel_ok = u.fuel == ru.fuel || alt.is_some_and(|(f, _)| f - (tables().unit(u.kind).fuel as i32 - u.fuel) == ru.fuel || f == ru.fuel);
+        let ammo_ok = u.ammo == ru.ammo || alt.is_some_and(|(_, a)| a == ru.ammo || a - (tables().unit(u.kind).ammo as i32 - u.ammo) == ru.ammo);
         clean &= r.check("state.unit_fuel", fuel_ok, || {
             let apc = ours.units.values().any(|a| a.kind == "APC" && a.owner == u.owner && dist((a.x, a.y), (u.x, u.y)) == 1);
             tag(c, format!("{} {id} ({}) fuel {}, recorded {} [on {} owner={:?} carried={:?} apc_adj={apc} mine_next={}]", u.kind, co_of(ours, u.owner), u.fuel, ru.fuel,
@@ -1189,7 +1191,7 @@ fn compare(ours: &State, rec: &State, r: &mut Report, c: &Ctx) -> bool {
         });
     }
     for (id, u) in &ours.units {
-        if !rec.units.contains_key(id) && matches!(u.kind.as_str(), "Sub" | "Stealth") && u.owner != rec.current {
+        if !rec.units.contains_key(id) && matches!(u.kind, libaw::data::UnitType::Sub | libaw::data::UnitType::Stealth) && u.owner != rec.current {
             // Replays show the game from the next player's side: dived subs and hidden
             // stealths of other players aren't in the record.
             r.skip("compare: possibly dived/hidden unit absent from record");
@@ -1320,7 +1322,7 @@ fn check_vision(s: &State, v: &Value, r: &mut Report, c: &Ctx) {
             let rec = grid_at(fa, x, y);
             let o = ours[y * w + x] as u64;
             if (o > 0) != (rec > 0) {
-                let t = libaw::data::tables().tile(s.terrain_at(x as u16, y as u16)).name.clone();
+                let t = libaw::data::tables().tile(s.terrain_at(x as u16, y as u16)).name;
                 if o > 0 { extra.push(format!("({x},{y}) {t}")) } else { missing.push(format!("({x},{y}) {t}")) }
             } else if o != rec {
                 count_off += 1;

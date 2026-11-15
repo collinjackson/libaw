@@ -64,7 +64,7 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
     let mut crashed = vec![];
     for id in &ids {
         let u = s.units.get_mut(id).unwrap();
-        let info = tables().unit(&u.kind);
+        let info = tables().unit(u.kind);
         let mut burn = info.fuel_per_turn as i32;
         if u.dived {
             burn = if u.kind == "Sub" { 5 } else { 8 };
@@ -76,7 +76,7 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
         // this turn (an Eagle copter that ended its move on 0).
         if u.carried_by.is_none() && day > 1 {
             u.fuel = (u.fuel - burn).max(0);
-            if u.fuel == 0 && matches!(info.move_type.as_str(), "A" | "S" | "L") {
+            if u.fuel == 0 && matches!(info.move_type, crate::data::MoveType::A | crate::data::MoveType::S | crate::data::MoveType::L) {
                 crashed.push(*id);
             }
         }
@@ -89,13 +89,13 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
             continue;
         }
         let Some(b) = s.buildings.get(&(u.x, u.y)) else { continue };
-        if b.owner != Some(next) || !services(b.terrain, &u.kind) {
+        if b.owner != Some(next) || !services(b.terrain, u.kind) {
             continue;
         }
-        let info = tables().unit(&u.kind);
+        let info = tables().unit(u.kind);
         let funds = s.player(next).map(|p| p.funds).unwrap_or(0);
         // At the owner's price (game-1759750: Colin's repairs cost him 80%).
-        let per_hp = owner_price(s, next, &u.kind) / 10;
+        let per_hp = owner_price(s, next, u.kind) / 10;
         // AWBW's repair, on the 0-100 scale: 80 or more (Rachel: 70 or more) goes to exactly
         // 100; anything lower gains exactly 20 (Rachel 30) and keeps its fraction (74 -> 94).
         // The price is per displayed point restored: nothing for a 9.x unit, 1 from display
@@ -132,9 +132,9 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
         .filter_map(|u| u.carried_by.map(|t| (u.id, t)))
         .collect();
     for (id, t) in carried {
-        if matches!(s.units.get(&t).map(|t| t.kind.as_str()), Some("Carrier" | "Cruiser")) {
+        if matches!(s.units.get(&t).map(|t| t.kind), Some(crate::data::UnitType::Carrier | crate::data::UnitType::Cruiser)) {
             let u = s.units.get_mut(&id).unwrap();
-            let info = tables().unit(&u.kind);
+            let info = tables().unit(u.kind);
             u.fuel = info.fuel as i32;
             u.ammo = info.ammo as i32;
         }
@@ -161,7 +161,7 @@ pub fn apc_supply(s: &mut State, p: PlayerId) -> alloc::collections::BTreeSet<Un
     for (aid, x, y) in apcs {
         for u in s.units.values_mut() {
             if u.id != aid && u.owner == p && u.carried_by.is_none() && dist((x, y), (u.x, u.y)) == 1 {
-                let info = tables().unit(&u.kind);
+                let info = tables().unit(u.kind);
                 // AWBW lists every adjacent unit, needed or not, except a hidden one: a hidden
                 // Stealth is refuelled but not listed (game-1692796).
                 if !u.dived {
@@ -180,7 +180,7 @@ pub fn apc_supply(s: &mut State, p: PlayerId) -> alloc::collections::BTreeSet<Un
         .map(|u| u.id).collect();
     for id in cargo {
         let u = s.units.get_mut(&id).unwrap();
-        let info = tables().unit(&u.kind);
+        let info = tables().unit(u.kind);
         u.fuel = info.fuel as i32;
         u.ammo = info.ammo as i32;
         out.insert(id);
@@ -203,7 +203,7 @@ fn hp_now(u: &Unit) -> u8 {
 /// would do to a Neotank with neutral defence, no terrain and no luck, by the same formula
 /// and rounding as any other attack. Fits all 2241 corpus hits. None: it can't.
 pub fn seam_damage(s: &State, att: &Unit) -> Option<i32> {
-    let base = base_damage_now(att, "Neotank")? as u32;
+    let base = base_damage_now(att, crate::data::UnitType::Neotank)? as u32;
     let p = AttackParams {
         base,
         att_value: att_value(s, att, s.terrain_at(att.x, att.y), false),
@@ -220,7 +220,7 @@ pub fn seam_damage(s: &State, att: &Unit) -> Option<i32> {
 
 /// Damage `att` does to `def` with a given luck roll (internal HP points).
 pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8 {
-    let Some(base) = base_damage_now(att, &def.kind) else { return 0 };
+    let Some(base) = base_damage_now(att, def.kind) else { return 0 };
     let at = s.terrain_at(att.x, att.y);
     let dt = s.terrain_at(def.x, def.y);
     let p = AttackParams {
@@ -228,7 +228,7 @@ pub fn damage(s: &State, att: &Unit, def: &Unit, roll: i32, counter: bool) -> u8
         att_value: att_value(s, att, at, counter),
         att_milli: att_milli(s, att),
         att_hp: display(hp_now(att)),
-        def_value: def_value(s, def, &att.kind),
+        def_value: def_value(s, def, att.kind),
         def_terrain: stars(s, def, dt),
         def_hp: display(hp_now(def)),
         luck_min: roll,
@@ -247,7 +247,7 @@ fn set_hp(s: &mut State, id: UnitId, hp: u8) {
 }
 
 /// What a `kind` costs its owner `pid` now (CO price: Colin 80%, Kanbei 120%, ...).
-pub fn owner_price(s: &State, pid: PlayerId, kind: &str) -> i64 {
+pub fn owner_price(s: &State, pid: PlayerId, kind: crate::data::UnitType) -> i64 {
     let cost = tables().unit(kind).cost as i64;
     s.player(pid).map(|p| co::price(cost, &p.co, &p.power)).unwrap_or(cost)
 }
@@ -258,7 +258,7 @@ pub fn owner_price(s: &State, pid: PlayerId, kind: &str) -> i64 {
 /// at the super power's cost; no charge while a power is on.
 pub fn charge(s: &mut State, att: &Unit, att_lost: u8, def: &Unit, def_lost: u8) {
     // At the owner's price (game-1759750: a Colin Infantry, 800 to him, charges 80%).
-    let value = |u: &Unit, lost: u8| owner_price(s, u.owner, &u.kind) * lost as i64; // x10 /10
+    let value = |u: &Unit, lost: u8| owner_price(s, u.owner, u.kind) * lost as i64; // x10 /10
     let (a_val, d_val) = (value(att, att_lost), value(def, def_lost));
     for (owner, gain) in [(att.owner, a_val + d_val / 2), (def.owner, d_val + a_val / 2)] {
         if let Some(p) = s.player_mut(owner) {
@@ -340,14 +340,14 @@ fn aim_missile(s: &State, pid: PlayerId, aim: Aim) -> Option<(u16, u16)> {
         let sign = if enemy { 1 } else { -1 };
         let h = u.hp.display_hi() as i64;
         let loss = if h <= 1 { 1 } else if h <= 3 { (h - 1) * 10 } else { 30 };
-        let price = owner_price(s, u.owner, &u.kind);
+        let price = owner_price(s, u.owner, u.kind);
         let (score, value) = match aim {
             Aim::Value => (price * loss, price * h),
             Aim::Sturm => (price * h, price * h),
             Aim::Hp => (loss, h),
             Aim::Foot => {
                 let capturing = enemy && s.buildings.get(&(u.x, u.y)).is_some_and(|b| b.capture < CAPTURE_POINTS);
-                let weight = if h <= 1 { 1 } else { (if is_foot(&u.kind) { 4 } else { 1 }) * (if capturing { 2 } else { 1 }) };
+                let weight = if h <= 1 { 1 } else { (if is_foot(u.kind) { 4 } else { 1 }) * (if capturing { 2 } else { 1 }) };
                 (weight * loss, h)
             }
         };
@@ -425,7 +425,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
         let info = crate::data::tables().unit(kind);
         let mut cities: Vec<(u16, u16)> = s.buildings.iter()
             .filter(|(&(x, y), b)| b.owner == Some(pid) && s.unit_at(x, y).is_none()
-                && crate::data::tables().tile(b.terrain).building.as_deref() == Some("City"))
+                && crate::data::tables().tile(b.terrain).building == Some(crate::data::BuildingKind::City))
             .map(|(&p, _)| p).collect();
         // AWBW walks the cities row by row and stops at the unit limit.
         cities.sort_by_key(|&(x, y)| (y, x));
@@ -435,7 +435,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
             }
             let id = s.units.keys().max().copied().unwrap_or(0) + 1;
             s.units.insert(id, Unit {
-                id, owner: pid, kind: kind.to_string(), x, y, hp: Hp::exact(90),
+                id, owner: pid, kind, x, y, hp: Hp::exact(90),
                 fuel: info.fuel as i32, ammo: info.ammo as i32, moved: false, stunned: false,
                 carried_by: None, cargo: vec![], dived: false,
             });
@@ -466,7 +466,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
         }
     }
     if e.moves != 0 {
-        let own: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid && co::moves_apply(&u.kind, e.moves_for)
+        let own: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid && co::moves_apply(u.kind, e.moves_for)
             // Recorded games: class-specific bonuses (Sami, Jess, Max, Jake) skip carried
             // units; whole-army ones (Koal, Adder, Andy) include them.
             && (e.moves_for == "all" || u.carried_by.is_none())).map(|u| u.id).collect();
@@ -479,7 +479,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
         let hit: Vec<UnitId> = s.units.values()
             .filter(|u| !s.allied(u.owner, pid) && u.carried_by.is_none() && s.buildings.get(&(u.x, u.y)).is_some_and(|b| {
                 // Properties only: not silos, pipe seams or their rubble.
-                crate::data::tables().tile(b.terrain).building.as_deref().is_some_and(|k| !matches!(k, "Missile" | "PipeSeam"))
+                crate::data::tables().tile(b.terrain).building.is_some_and(|k| !matches!(k, crate::data::BuildingKind::Missile | crate::data::BuildingKind::PipeSeam))
             }))
             .map(|u| u.id).collect();
         for id in hit {
@@ -499,7 +499,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
     if e.resupply || e.act_again {
         let own: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
         for id in own {
-            let foot = crate::rules::is_foot(&s.units[&id].kind);
+            let foot = crate::rules::is_foot(s.units[&id].kind);
             let info = crate::data::tables().unit(&s.units[&id].kind);
             let u = s.units.get_mut(&id).unwrap();
             if e.resupply {
@@ -521,7 +521,7 @@ pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Optio
 /// owner (Kanbei 120%, Colin 80%, Hachi 90% or 50%).
 fn war_bonds(s: &mut State, sasha: PlayerId, victim: &Unit, lost: u8) {
     if co_of(s, sasha) == "Sasha" && pw(s, sasha) == "S" {
-        let bonus = owner_price(s, victim.owner, &victim.kind) * lost as i64 / 20;
+        let bonus = owner_price(s, victim.owner, victim.kind) * lost as i64 / 20;
         if let Some(p) = s.player_mut(sasha) {
             p.funds += bonus;
         }
@@ -536,17 +536,17 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     // with what's left, as if countering, and there's no second counter.
     {
         let counter_break = co_of(s, def.owner) == "Sonja" && pw(s, def.owner) == "S"
-            && dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind);
+            && dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(def.kind);
         // A defender that could hit the attacker by the chart but can't fire (out of ammo,
         // no second weapon) never strikes, and AWBW then drops the attack altogether.
-        if counter_break && tables().base_damage(&def.kind, &att.kind).is_some() && base_damage_now(&def, &att.kind).is_none() {
+        if counter_break && tables().base_damage(def.kind, att.kind).is_some() && base_damage_now(&def, att.kind).is_none() {
             return Ok(());
         }
-        let first = counter_break && base_damage_now(&def, &att.kind).is_some();
+        let first = counter_break && base_damage_now(&def, att.kind).is_some();
         if first {
             let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
             let dmg = damage(s, &def, &att, luck(lo, hi), false);
-            if uses_primary(&def, &att.kind) {
+            if uses_primary(&def, att.kind) {
                 s.units.get_mut(&def.id).unwrap().ammo -= 1;
             }
             let after = hp_now(&att).saturating_sub(dmg);
@@ -562,7 +562,7 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
             // AWBW resolves the attacker's strike here as a counterattack, so an attacking
             // Sonja, or Kanbei under Samurai Spirit, gets the x1.5 counter bonus on it.
             let dmg = damage(s, &att, &def, luck(lo, hi), true);
-            if uses_primary(&att, &def.kind) {
+            if uses_primary(&att, def.kind) {
                 s.units.get_mut(&aid).unwrap().ammo -= 1;
             }
             let left = hp_now(&def).saturating_sub(dmg);
@@ -575,7 +575,7 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     }
     let (lo, hi) = co::luck(&co_of(s, att.owner), &pw(s, att.owner));
     let dmg = damage(s, &att, &def, luck(lo, hi), false);
-    if uses_primary(&att, &def.kind) {
+    if uses_primary(&att, def.kind) {
         s.units.get_mut(&aid).unwrap().ammo -= 1;
     }
     let left = hp_now(&def).saturating_sub(dmg);
@@ -589,18 +589,18 @@ pub fn attack(s: &mut State, aid: UnitId, target: Pos, luck: Luck) -> Result<(),
     }
     let def = s.units.get(&def.id).cloned().unwrap();
     let att = s.units.get(&aid).cloned().unwrap();
-    let can_counter = dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(&def.kind)
-        && base_damage_now(&def, &att.kind).is_some();
+    let can_counter = dist((att.x, att.y), (def.x, def.y)) == 1 && !is_indirect(def.kind)
+        && base_damage_now(&def, att.kind).is_some();
     if can_counter {
         // A dived Sub or hidden Stealth takes nothing from a counter by a unit that can't
         // hit it; the defender still fires (and spends its ammo).
-        let dmg = if att.dived && !can_hit_hidden(&def.kind, &att.kind) {
+        let dmg = if att.dived && !can_hit_hidden(def.kind, att.kind) {
             0
         } else {
             let (lo, hi) = co::luck(&co_of(s, def.owner), &pw(s, def.owner));
             damage(s, &def, &att, luck(lo, hi), true)
         };
-        if uses_primary(&def, &att.kind) {
+        if uses_primary(&def, att.kind) {
             s.units.get_mut(&def.id).unwrap().ammo -= 1;
         }
         let after = hp_now(&att).saturating_sub(dmg);
@@ -757,9 +757,9 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                             (cu.carried_by, cu.x, cu.y) = (Some(t.id), t.x, t.y);
                         }
                     }
-                    let info = tables().unit(&t.kind);
+                    let info = tables().unit(t.kind);
                     let sum = display(hp_now(&me)) as u32 + display(hp_now(&t)) as u32;
-                    let refund = sum.saturating_sub(10) as i64 * owner_price(s, t.owner, &t.kind) / 10;
+                    let refund = sum.saturating_sub(10) as i64 * owner_price(s, t.owner, t.kind) / 10;
                     let tm = s.units.get_mut(&t.id).unwrap();
                     tm.hp = Hp::exact((sum.min(10) * 10) as u8);
                     tm.fuel = (tm.fuel + me.fuel).min(info.fuel as i32);
@@ -793,11 +793,11 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     let d = seam_damage(s, &u).ok_or("can't hit a seam")?;
                     // A unit that carries ammo spends one on every seam attack, even at 0
                     // (the record then shows -1: game-1751864 turn 32).
-                    if tables().unit(&u.kind).ammo > 0 {
+                    if tables().unit(u.kind).ammo > 0 {
                         s.units.get_mut(unit).unwrap().ammo -= 1;
                     }
                     let b = s.buildings.get_mut(target).ok_or("no seam")?;
-                    if tables().tile(b.terrain).building.as_deref() != Some("PipeSeam") {
+                    if tables().tile(b.terrain).building != Some(crate::data::BuildingKind::PipeSeam) {
                         return Err("not a seam".into());
                     }
                     if b.capture - d <= 0 {
@@ -816,16 +816,16 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     let amt = capture_amount(s, &u, display(hp_now(&u)));
                     let (prev, kind) = {
                         let b = s.buildings.get(&end).ok_or("no building")?;
-                        (b.owner, tables().tile(b.terrain).building.clone())
+                        (b.owner, tables().tile(b.terrain).building)
                     };
-                    let hq = kind.as_deref() == Some("HQ");
+                    let hq = kind == Some(crate::data::BuildingKind::HQ);
                     // On a map without HQs a player's last lab stands in for one: losing it
                     // eliminates them (four recorded games end this way, e.g. game-1724140).
-                    let owns = |p: PlayerId, what: &str| s.buildings.values()
-                        .filter(|x| x.owner == Some(p) && tables().tile(x.terrain).building.as_deref() == Some(what))
+                    let owns = |p: PlayerId, what: crate::data::BuildingKind| s.buildings.values()
+                        .filter(|x| x.owner == Some(p) && tables().tile(x.terrain).building == Some(what))
                         .count();
-                    let last_lab = kind.as_deref() == Some("Lab")
-                        && prev.is_some_and(|p| owns(p, "HQ") == 0 && owns(p, "Lab") <= 1);
+                    let last_lab = kind == Some(crate::data::BuildingKind::Lab)
+                        && prev.is_some_and(|p| owns(p, crate::data::BuildingKind::HQ) == 0 && owns(p, crate::data::BuildingKind::Lab) <= 1);
                     let b = s.buildings.get_mut(&end).ok_or("no building")?;
                     b.capture -= amt;
                     if b.capture <= 0 {
@@ -863,7 +863,7 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                 }
                 Then::Launch { target } => {
                     let b = s.buildings.get_mut(&end).ok_or("no silo")?;
-                    if tables().tile(b.terrain).building.as_deref() != Some("Missile") {
+                    if tables().tile(b.terrain).building != Some(crate::data::BuildingKind::Missile) {
                         return Err("silo is empty".into());
                     }
                     let empty = 112; // Missile Silo Empty: plain ground from now on
@@ -887,7 +887,7 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                     near.extend(cargo);
                     for id in near {
                         let o = s.units.get_mut(&id).unwrap();
-                        let info = tables().unit(&o.kind);
+                        let info = tables().unit(o.kind);
                         o.fuel = info.fuel as i32;
                         o.ammo = info.ammo as i32;
                     }
@@ -895,8 +895,8 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                 }
                 Then::Repair { target } => {
                     let t = s.unit_at(target.0, target.1).cloned().ok_or("no repair target")?;
-                    let info = tables().unit(&t.kind);
-                    let cost = owner_price(s, t.owner, &t.kind) / 10;
+                    let info = tables().unit(t.kind);
+                    let cost = owner_price(s, t.owner, t.kind) / 10;
                     let afford = s.player(t.owner).is_some_and(|p| p.funds >= cost);
                     let low = t.fuel < info.fuel as i32 || t.ammo < info.ammo as i32;
                     let tm = s.units.get_mut(&t.id).unwrap();
@@ -926,7 +926,7 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                         return Ok(());
                     }
                     let carrier = &s.units[unit];
-                    if !can_unload_from(&carrier.kind, s.terrain_at(carrier.x, carrier.y)) {
+                    if !can_unload_from(carrier.kind, s.terrain_at(carrier.x, carrier.y)) {
                         return Err("transport can't unload from sea or reef".into());
                     }
                     let t = s.units.get_mut(unit).unwrap();

@@ -210,12 +210,12 @@ pub struct Hub {
 /// or from `options`.
 fn legal_summary(v: &State, all: &[Action]) -> Value {
     let mut units: BTreeMap<u32, usize> = BTreeMap::new();
-    let mut builds: BTreeMap<(u16, u16), Vec<String>> = BTreeMap::new();
+    let mut builds: BTreeMap<(u16, u16), Vec<libaw::data::UnitType>> = BTreeMap::new();
     let mut powers = vec![];
     for a in all {
         match a {
             Action::Move { unit, .. } => *units.entry(*unit).or_default() += 1,
-            Action::Build { at, kind } => builds.entry(*at).or_default().push(kind.clone()),
+            Action::Build { at, kind } => builds.entry(*at).or_default().push(*kind),
             Action::Power { kind } => powers.push(kind.clone()),
             Action::EndTurn => {}
         }
@@ -433,7 +433,7 @@ impl Hub {
             s.powers = p;
         }
         if let Some(b) = msg["banned"].as_array() {
-            s.banned = b.iter().filter_map(|x| x.as_str().map(String::from)).collect();
+            s.banned = b.iter().filter_map(|x| x.as_str().and_then(libaw::data::UnitType::from_name)).collect();
         }
         // The luck seed: the creator's (reproducible benchmarks) or 64 random bits. It is sent to
         // nobody until the game is over (anyone holding it could predict every luck roll), except

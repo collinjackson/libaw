@@ -19,14 +19,14 @@ pub fn score(s: &State, me: PlayerId) -> f64 {
     let mut v = 0.0;
     for u in s.units.values() {
         let sign = if s.allied(u.owner, me) { 1.0 } else { -1.0 };
-        let cost = tables().unit(&u.kind).cost as f64;
+        let cost = tables().unit(u.kind).cost as f64;
         v += sign * cost * u.hp.hi as f64 / 100.0;
         if sign > 0.0 && u.carried_by.is_none() {
             v -= STEP * goal_distance(s, u) as f64;
         }
     }
     for (&pos, b) in &s.buildings {
-        if tables().tile(b.terrain).building.as_deref().is_some_and(|k| matches!(k, "Missile" | "PipeSeam")) {
+        if tables().tile(b.terrain).building.is_some_and(|k| matches!(k, crate::data::BuildingKind::Missile | crate::data::BuildingKind::PipeSeam)) {
             continue;
         }
         match b.owner {
@@ -56,11 +56,11 @@ pub fn score(s: &State, me: PlayerId) -> f64 {
 /// nearest enemy unit.
 fn goal_distance(s: &State, u: &Unit) -> u32 {
     let here = (u.x, u.y);
-    let foot = matches!(u.kind.as_str(), "Infantry" | "Mech");
+    let foot = crate::rules::is_foot(u.kind);
     let d = if foot {
         s.buildings.iter()
             .filter(|(_, b)| !b.owner.is_some_and(|o| s.allied(o, u.owner))
-                && !tables().tile(b.terrain).building.as_deref().is_some_and(|k| matches!(k, "Missile" | "PipeSeam")))
+                && !tables().tile(b.terrain).building.is_some_and(|k| matches!(k, crate::data::BuildingKind::Missile | crate::data::BuildingKind::PipeSeam)))
             .map(|(&p, _)| dist(here, p)).min()
     } else {
         None

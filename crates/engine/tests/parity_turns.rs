@@ -38,11 +38,11 @@ fn place(s: &mut State, id: UnitId, at: Pos) {
 }
 
 fn building_id(kind: &str) -> u16 {
-    *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some(kind)).unwrap().0
+    tables().terrains().find(|t| t.building.is_some_and(|b| b == kind)).unwrap().id
 }
 
 fn terrain_named(name: &str) -> u16 {
-    *tables().terrain.iter().find(|(_, t)| t.name == name).unwrap().0
+    tables().terrains().find(|t| t.name == name).unwrap().id
 }
 
 fn cast(s: &mut State, co: &str, power: &str) {
@@ -125,13 +125,13 @@ fn losing_the_last_lab_on_a_map_without_hqs_eliminates() {
 fn only_cruisers_and_carriers_unload_over_sea() {
     for water in ["Sea", "Reef"] {
         for t in ["APC", "T-Copter", "Lander", "Black Boat"] {
-            assert!(!can_unload_from(t, terrain_named(water)), "{t} on {water}");
+            assert!(!can_unload_from(libaw::data::UnitType::from(t), terrain_named(water)), "{t} on {water}");
         }
         for t in ["Cruiser", "Carrier"] {
-            assert!(can_unload_from(t, terrain_named(water)), "{t} on {water}");
+            assert!(can_unload_from(libaw::data::UnitType::from(t), terrain_named(water)), "{t} on {water}");
         }
     }
-    assert!(can_unload_from("T-Copter", terrain_named("Plain")));
+    assert!(can_unload_from(libaw::data::UnitType::from("T-Copter"), terrain_named("Plain")));
 }
 
 #[test]

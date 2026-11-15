@@ -33,7 +33,7 @@ fn render() -> String {
     s += "Move types: F foot (Infantry), B boots (Mech), T treads, W tires, A air, S sea, L lander, P pipe.\n\n";
     s += "| Unit | Cost | Move | Type | Fuel | Burn | Ammo | Vision | Range | 2nd gun |\n";
     s += "|---|---|---|---|---|---|---|---|---|---|\n";
-    let mut units: Vec<_> = t.units.iter().collect();
+    let mut units: Vec<_> = t.units().map(|(k, u)| (k.name(), u)).collect();
     units.sort_by_key(|(_, u)| u.id);
     for (name, u) in &units {
         let range = if u.range[1] == 0 { "none".to_string() } else { format!("{}-{}", u.range[0], u.range[1]) };
@@ -48,8 +48,8 @@ fn render() -> String {
     s += "Split by what is defending so each table fits a page. Column names are shortened: Inf Infantry, Md.T\n";
     s += "Md.Tank, Arty Artillery, Rkt Rocket, AA Anti-Air, Msl Missile, Neo Neotank, Pipe Piperunner, Mega Mega Tank,\n";
     s += "B-Cop/T-Cop B-/T-Copter, B.Bomb Black Bomb, B.Ship Battleship, B.Boat Black Boat.\n";
-    let names: Vec<&str> = units.iter().map(|(n, _)| n.as_str()).collect();
-    let domain = |n: &str| match t.units[n].move_type.as_str() { "A" => "air", "S" | "L" => "sea", _ => "ground" };
+    let names: Vec<&str> = units.iter().map(|(n, _)| *n).collect();
+    let domain = |n: &str| match t.unit(n).move_type.name() { "A" => "air", "S" | "L" => "sea", _ => "ground" };
     for (title, d) in [("Against ground units", "ground"), ("Against air units", "air"), ("Against sea units", "sea")] {
         let cols: Vec<&str> = names.iter().copied().filter(|n| domain(n) == d).collect();
         write!(s, "\n### {title}\n\n| Attacker |").unwrap();
@@ -79,10 +79,10 @@ fn render() -> String {
     for _ in MOVE_TYPES { s += "---|"; }
     s += "\n";
     let mut groups: BTreeMap<(String, u8, String), Vec<String>> = BTreeMap::new();
-    for info in t.terrain.values() {
-        let costs: String = MOVE_TYPES.iter().map(|(k, _)| info.r#move.get(*k).map_or("-".into(), |c| c.to_string())).collect::<Vec<_>>().join(",");
-        let family = info.building.clone().unwrap_or_else(|| if info.name.contains("Pipe") { "Pipe".into() } else { info.kind.clone() });
-        groups.entry((family, info.defense, costs)).or_default().push(info.name.clone());
+    for info in t.terrains() {
+        let costs: String = MOVE_TYPES.iter().map(|(k, _)| info.move_cost(libaw::data::MoveType::from_name(k).unwrap()).map_or("-".into(), |c| c.to_string())).collect::<Vec<_>>().join(",");
+        let family = info.building.map(|b| b.name().to_string()).unwrap_or_else(|| if info.name.contains("Pipe") { "Pipe".into() } else { info.kind.name().to_string() });
+        groups.entry((family, info.defense, costs)).or_default().push(info.name.to_string());
     }
     for ((family, stars, costs), mut tiles) in groups {
         tiles.sort();
@@ -97,7 +97,7 @@ fn render() -> String {
     s += "\n## CO power costs\n\nStars for the CO power and the super power, before the per-use increase (each use adds 20% of\n";
     s += "the base, up to 10 uses). Day-to-day abilities and power effects are in `co.rs` and `docs/rules/`.\n\n";
     s += "| CO | Power | Super |\n|---|---|---|\n";
-    let mut cos: Vec<_> = t.cos.iter().collect();
+    let mut cos: Vec<_> = t.cos().iter().collect();
     cos.sort_by_key(|(n, _)| n.as_str());
     for (name, c) in cos {
         let st = |k: &str| c[k]["PowerStars"].as_u64().map_or("-".into(), |v| v.to_string());

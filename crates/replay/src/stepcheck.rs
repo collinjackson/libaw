@@ -306,7 +306,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
                 for o in s.units.values_mut() {
                     if o.owner == apc.owner && o.id != apc.id && o.carried_by.is_none()
                         && (o.x as i32 - apc.x as i32).abs() + (o.y as i32 - apc.y as i32).abs() == 1 {
-                        let info = libaw::data::tables().unit(&o.kind);
+                        let info = libaw::data::tables().unit(o.kind);
                         r.maybe_supplied.entry(o.id).or_insert((o.fuel, o.ammo));
                         o.fuel = info.fuel as i32;
                         o.ammo = info.ammo as i32;

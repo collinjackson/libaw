@@ -14,7 +14,7 @@ pub fn co_of(s: &State, p: PlayerId) -> String {
 
 pub fn towers(s: &State, p: PlayerId) -> u32 {
     s.buildings.values()
-        .filter(|b| b.owner == Some(p) && tables().tile(b.terrain).building.as_deref() == Some("ComTower"))
+        .filter(|b| b.owner == Some(p) && tables().tile(b.terrain).building == Some(crate::data::BuildingKind::ComTower))
         .count() as u32
 }
 
@@ -39,12 +39,12 @@ pub fn att_value(s: &State, att: &Unit, att_terrain: u16, counter: bool) -> u32 
     let t = tables().tile(att_terrain);
     let stars = stars(s, att, att_terrain);
     let counter_bonus = if counter {
-        (100 + co::d2d_attack_bonus(&co, &att.kind)) * (co::counter_pct(&co, &power) as i32 - 100) / 100
+        (100 + co::d2d_attack_bonus(&co, att.kind)) * (co::counter_pct(&co, &power) as i32 - 100) / 100
     } else {
         0
     };
     let v = 100 + 10 * towers(s, att.owner) as i32 * tower_multiplier(s, att.owner)
-        + co::attack_bonus(&co, &power, &att.kind, &bonus_terrain(att, att_terrain, &t.kind), stars)
+        + co::attack_bonus(&co, &power, att.kind, &bonus_terrain(att, att_terrain, t.kind.name()), stars)
         + counter_bonus
         + if co == "Kindle" && power == "S" { 3 * kindle_count(s, att.owner) } else { 0 };
     v.max(0) as u32
@@ -59,9 +59,9 @@ pub fn att_milli(s: &State, att: &Unit) -> u32 {
     }
 }
 
-pub fn def_value(s: &State, def: &Unit, attacker_kind: &str) -> u32 {
+pub fn def_value(s: &State, def: &Unit, attacker_kind: crate::data::UnitType) -> u32 {
     let co = co_of(s, def.owner);
-    let mut v: i32 = 100 + co::defense_bonus(&co, &pw(s, def.owner), &def.kind);
+    let mut v: i32 = 100 + co::defense_bonus(&co, &pw(s, def.owner), def.kind);
     if co == "Javier" {
         let m = tower_multiplier(s, def.owner);
         v += 10 * towers(s, def.owner) as i32 * m;
@@ -106,7 +106,7 @@ pub fn bonus_terrain(u: &Unit, terrain: u16, kind: &str) -> String {
 
 /// Terrain stars a unit gets; Lash's Prime Tactics doubles them.
 pub fn stars(s: &State, u: &Unit, terrain: u16) -> u32 {
-    let st = terrain_stars(terrain, &u.kind);
+    let st = terrain_stars(terrain, u.kind);
     if co_of(s, u.owner) == "Lash" && pw(s, u.owner) == "S" { st * 2 } else { st }
 }
 

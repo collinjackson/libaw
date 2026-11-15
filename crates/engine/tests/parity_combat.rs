@@ -82,13 +82,13 @@ fn javier_defence_against_indirect_fire() {
     let mut s = state();
     for (power, bonus) in [("N", 20), ("Y", 40), ("S", 80)] {
         let u = with_co(&mut s, "Javier", power);
-        assert_eq!(def_value(&s, &u, "Artillery"), def_value(&s, &u, "Tank") + bonus, "power {power}");
+        assert_eq!(def_value(&s, &u, libaw::data::UnitType::from("Artillery")), def_value(&s, &u, libaw::data::UnitType::from("Tank")) + bonus, "power {power}");
     }
 }
 
 #[test]
 fn kindle_high_society_counts_com_towers_and_labs() {
-    let id = |b: &str| *tables().terrain.iter().find(|(_, t)| t.building.as_deref() == Some(b)).unwrap().0;
+    let id = |b: &str| tables().terrains().find(|t| t.building.map(|b| b.name()) == Some(b)).unwrap().id;
     for b in ["HQ", "City", "Base", "Airport", "Port", "ComTower", "Lab"] {
         assert!(is_urban_property(id(b)), "{b}");
     }
@@ -120,17 +120,17 @@ fn colin_power_of_money_uses_the_funds_held_at_each_attack() {
 
 #[test]
 fn out_of_ammo_machine_guns() {
-    assert_eq!(mg_damage("Mech", "Artillery"), Some(32));
+    assert_eq!(mg_damage(libaw::data::UnitType::from("Mech"), libaw::data::UnitType::from("Artillery")), Some(32));
     for (att, dmg) in [("Mech", 6), ("B-Copter", 6), ("Tank", 6), ("Md.Tank", 8), ("Neotank", 10), ("Mega Tank", 10)] {
-        assert_eq!(mg_damage(att, "Piperunner"), Some(dmg), "{att}");
+        assert_eq!(mg_damage(libaw::data::UnitType::from(att), libaw::data::UnitType::from("Piperunner")), Some(dmg), "{att}");
     }
 }
 
 #[test]
 fn rockets_share_the_penalties_of_max_and_sensei() {
-    assert_eq!(co::attack_bonus("Max", "N", "Rocket", "Plain", 0), -10);
-    assert_eq!(co::range_bonus("Max", "N", "Rocket"), -1);
-    assert_eq!(co::attack_bonus("Sensei", "N", "Rocket", "Plain", 0), -10);
+    assert_eq!(co::attack_bonus("Max", "N", libaw::data::UnitType::from("Rocket"), "Plain", 0), -10);
+    assert_eq!(co::range_bonus("Max", "N", libaw::data::UnitType::from("Rocket")), -1);
+    assert_eq!(co::attack_bonus("Sensei", "N", libaw::data::UnitType::from("Rocket"), "Plain", 0), -10);
 }
 
 #[test]

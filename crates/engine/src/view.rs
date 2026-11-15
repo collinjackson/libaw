@@ -48,7 +48,7 @@ pub fn describe(s: &State, a: &crate::actions::Action) -> String {
         Action::Power { kind } => if kind == "S" { "super power".into() } else { "CO power".into() },
         Action::Build { at, kind } => format!("build {kind} at {at:?}"),
         Action::Move { unit, path, then } => {
-            let k = s.units.get(unit).map(|u| u.kind.clone()).unwrap_or_default();
+            let k = s.units.get(unit).map_or("", |u| u.kind.name());
             let to = path.last().copied().unwrap_or_default();
             let t = match then {
                 Then::Wait => "wait".to_string(),

@@ -5,13 +5,13 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::data::tables;
+use crate::data::{tables, BuildingKind as B, MoveType as M, TerrainKind, UnitType as U};
 use crate::state::*;
 
 pub const CAPTURE_POINTS: i32 = 20;
 
-pub fn move_cost(terrain: u16, move_type: &str) -> Option<u8> {
-    tables().tile(terrain).r#move.get(move_type).copied()
+pub fn move_cost(terrain: u16, move_type: M) -> Option<u8> {
+    tables().tile(terrain).move_cost(move_type)
 }
 
 /// The weather a CO's units feel: Olaf ignores snow and treats rain as snow; Drake ignores rain.
@@ -26,23 +26,23 @@ pub fn felt_weather(weather: char, co: &str) -> char {
 
 /// Movement cost in weather, from AWBW's terrain chart (terrain.php). Impassable stays
 /// impassable; only listed cells change.
-pub fn move_cost_in(terrain: u16, move_type: &str, weather: char) -> Option<u8> {
+pub fn move_cost_in(terrain: u16, move_type: M, weather: char) -> Option<u8> {
     let clear = move_cost(terrain, move_type)?;
     let t = tables().tile(terrain);
     // An emptied missile silo is listed as plain but moves like a building in weather.
-    let class = if t.name == "Reef" { "Reef" } else if t.name.starts_with("Missile Silo") { "Building" } else if t.building.as_deref() == Some("Port") || t.name.ends_with("Port") { "Port" } else { t.kind.as_str() };
+    let class = if t.name == "Reef" { "Reef" } else if t.name.starts_with("Missile Silo") { "Building" } else if t.building == Some(B::Port) || t.name.ends_with("Port") { "Port" } else { t.kind.name() };
     let c = match (weather, move_type, class) {
-        ('S', "F", "Plain" | "Forest" | "River") => 2,
-        ('S', "F", "Mountain") => 4,
-        ('S', "B", "Mountain") => 2,
-        ('S', "T", "Plain" | "Forest") => 2,
-        ('S', "W", "Plain" | "Forest") => 3,
-        ('S', "A", _) => 2,
-        ('S', "S" | "L", "Sea" | "Reef" | "Port") => 2,
-        ('R', "T", "Plain") => 2,
-        ('R', "T", "Forest") => 3,
-        ('R', "W", "Plain") => 3,
-        ('R', "W", "Forest") => 4,
+        ('S', M::F, "Plain" | "Forest" | "River") => 2,
+        ('S', M::F, "Mountain") => 4,
+        ('S', M::B, "Mountain") => 2,
+        ('S', M::T, "Plain" | "Forest") => 2,
+        ('S', M::W, "Plain" | "Forest") => 3,
+        ('S', M::A, _) => 2,
+        ('S', M::S | M::L, "Sea" | "Reef" | "Port") => 2,
+        ('R', M::T, "Plain") => 2,
+        ('R', M::T, "Forest") => 3,
+        ('R', M::W, "Plain") => 3,
+        ('R', M::W, "Forest") => 4,
         _ => clear,
     };
     Some(c)
@@ -52,11 +52,11 @@ pub fn move_cost_in(terrain: u16, move_type: &str, weather: char) -> Option<u8> 
 /// passability, movement range and enemy blocking. Returns the movement cost spent.
 /// Cost for `u` to enter a tile of terrain `t` now (weather, CO), or None if impassable.
 pub fn step_cost(s: &State, u: &Unit, t: u16) -> Option<u32> {
-    let info = tables().unit(&u.kind);
+    let info = tables().unit(u.kind);
     let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
     let w = felt_weather(s.weather, co);
     let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
-    let c = move_cost_in(t, &info.move_type, w)?;
+    let c = move_cost_in(t, info.move_type, w)?;
     // Lash's powers, and Sturm always: every passable tile costs 1, except in snow.
     if ((co == "Lash" && pw != "N") || co == "Sturm") && w != 'S' {
         return Some(1);
@@ -90,17 +90,17 @@ pub fn movement_range(s: &State, u: &Unit) -> u32 {
     if let Some(&m) = s.move_override.get(&u.id) {
         return m;
     }
-    let mut m = tables().unit(&u.kind).r#move as u32;
+    let mut m = tables().unit(u.kind).r#move as u32;
     let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
     // Day-to-day movement changes. Sami's and Sensei's transports move one further, and no
     // more under Sami's powers: the +2 a Power record shows for a loaded transport is the
     // bonus of the foot soldier it carries (all 41 recorded transport moves under Victory
     // March stay within +1).
-    if matches!(co, "Sami" | "Sensei") && matches!(u.kind.as_str(), "APC" | "T-Copter" | "Lander" | "Black Boat") {
+    if matches!(co, "Sami" | "Sensei") && matches!(u.kind, U::APC | U::TCopter | U::Lander | U::BlackBoat) {
         m += 1;
     }
     // Drake's naval units move one further (Landers and Black Boats in 3 league games).
-    if co == "Drake" && matches!(tables().unit(&u.kind).move_type.as_str(), "S" | "L") {
+    if co == "Drake" && matches!(u.kind.info().move_type, M::S | M::L) {
         m += 1;
     }
     m
@@ -121,19 +121,13 @@ pub fn capture_amount(s: &State, u: &Unit, display_hp: u8) -> i32 {
 }
 
 pub fn is_income_property(terrain: u16) -> bool {
-    matches!(
-        tables().tile(terrain).building.as_deref(),
-        Some("City" | "Base" | "Airport" | "Port" | "HQ")
-    )
+    matches!(tables().tile(terrain).building, Some(B::City | B::Base | B::Airport | B::Port | B::HQ))
 }
 
 /// Properties Kindle's High Society counts: every kind a player can own, com towers and
 /// labs included (not only the ones that pay income).
 pub fn is_urban_property(terrain: u16) -> bool {
-    matches!(
-        tables().tile(terrain).building.as_deref(),
-        Some("City" | "Base" | "Airport" | "Port" | "HQ" | "ComTower" | "Lab")
-    )
+    matches!(tables().tile(terrain).building, Some(B::City | B::Base | B::Airport | B::Port | B::HQ | B::ComTower | B::Lab))
 }
 
 /// A league game's capture limit: 70% of the map's income properties, rounded down (what
@@ -151,13 +145,13 @@ pub fn at_unit_limit(s: &State, pid: PlayerId) -> bool {
 }
 
 /// Which unit classes a building repairs and resupplies.
-pub fn services(terrain: u16, kind: &str) -> bool {
-    let mt = tables().unit(kind).move_type.as_str();
-    match tables().tile(terrain).building.as_deref() {
-        Some("City" | "HQ") => matches!(mt, "F" | "B" | "T" | "W"),
-        Some("Base") => matches!(mt, "F" | "B" | "T" | "W" | "P"),
-        Some("Airport") => mt == "A",
-        Some("Port") => matches!(mt, "S" | "L"),
+pub fn services(terrain: u16, kind: U) -> bool {
+    let mt = kind.info().move_type;
+    match tables().tile(terrain).building {
+        Some(B::City | B::HQ) => matches!(mt, M::F | M::B | M::T | M::W),
+        Some(B::Base) => matches!(mt, M::F | M::B | M::T | M::W | M::P),
+        Some(B::Airport) => mt == M::A,
+        Some(B::Port) => matches!(mt, M::S | M::L),
         _ => false,
     }
 }
@@ -234,8 +228,8 @@ pub fn damage_exact(p: &AttackParams, luck: i32) -> u32 {
 }
 
 /// Terrain defence stars that apply to a unit (air units get none).
-pub fn terrain_stars(terrain: u16, kind: &str) -> u32 {
-    if tables().unit(kind).move_type == "A" {
+pub fn terrain_stars(terrain: u16, kind: U) -> u32 {
+    if kind.info().move_type == M::A {
         0
     } else {
         tables().tile(terrain).defense as u32
@@ -244,18 +238,18 @@ pub fn terrain_stars(terrain: u16, kind: &str) -> u32 {
 
 /// Uses the primary weapon? Primary needs ammo; units with a second weapon use it against
 /// footsoldiers and copters (AW2/AWBW convention, to be confirmed against replays).
-pub fn uses_primary(att: &Unit, def_kind: &str) -> bool {
-    let info = tables().unit(&att.kind);
+pub fn uses_primary(att: &Unit, def_kind: U) -> bool {
+    let info = att.kind.info();
     if info.ammo == 0 {
         return false;
     }
-    if att.kind == "Cruiser" && tables().unit(def_kind).move_type == "A" {
+    if att.kind == U::Cruiser && def_kind.info().move_type == M::A {
         return false; // anti-air gun, no ammo
     }
     if !info.second_weapon {
         return att.ammo > 0;
     }
-    !secondary_target(&att.kind, def_kind) && att.ammo > 0
+    !secondary_target(att.kind, def_kind) && att.ammo > 0
 }
 
 /// Targets a unit hits with its second weapon (machine gun / anti-air gun), which costs no
@@ -265,13 +259,13 @@ pub fn uses_primary(att: &Unit, def_kind: &str) -> bool {
 /// From the published AW2 damage chart; checked against replays only for B-Copter vs
 /// Neotank and Mech vs Md.Tank (the only out-of-ammo attacks in our records). None: the
 /// machine gun can't hit it.
-pub fn mg_damage(att_kind: &str, def_kind: &str) -> Option<u8> {
-    let row: &[(&str, u8)] = match att_kind {
-        "Mech" => &[("Recon", 18), ("APC", 20), ("Artillery", 32), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
-        "B-Copter" => &[("Recon", 30), ("APC", 20), ("Artillery", 25), ("Rocket", 35), ("Missile", 35), ("Anti-Air", 6), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
-        "Tank" => &[("Recon", 40), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 30), ("Anti-Air", 5), ("Tank", 6), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 6)],
-        "Md.Tank" => &[("Recon", 45), ("APC", 45), ("Artillery", 45), ("Rocket", 55), ("Missile", 35), ("Anti-Air", 7), ("Tank", 8), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 8)],
-        "Neotank" | "Mega Tank" => &[("Recon", 65), ("APC", 65), ("Artillery", 65), ("Rocket", 75), ("Missile", 55), ("Anti-Air", 17), ("Tank", 10), ("Md.Tank", 1), ("Neotank", 1), ("Mega Tank", 1), ("Piperunner", 10)],
+pub fn mg_damage(att_kind: U, def_kind: U) -> Option<u8> {
+    let row: &[(U, u8)] = match att_kind {
+        U::Mech => &[(U::Recon, 18), (U::APC, 20), (U::Artillery, 32), (U::Rocket, 35), (U::Missile, 35), (U::AntiAir, 6), (U::Tank, 6), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 6)],
+        U::BCopter => &[(U::Recon, 30), (U::APC, 20), (U::Artillery, 25), (U::Rocket, 35), (U::Missile, 35), (U::AntiAir, 6), (U::Tank, 6), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 6)],
+        U::Tank => &[(U::Recon, 40), (U::APC, 45), (U::Artillery, 45), (U::Rocket, 55), (U::Missile, 30), (U::AntiAir, 5), (U::Tank, 6), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 6)],
+        U::MdTank => &[(U::Recon, 45), (U::APC, 45), (U::Artillery, 45), (U::Rocket, 55), (U::Missile, 35), (U::AntiAir, 7), (U::Tank, 8), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 8)],
+        U::Neotank | U::MegaTank => &[(U::Recon, 65), (U::APC, 65), (U::Artillery, 65), (U::Rocket, 75), (U::Missile, 55), (U::AntiAir, 17), (U::Tank, 10), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 10)],
         _ => &[],
     };
     row.iter().find(|(k, _)| *k == def_kind).map(|&(_, v)| v)
@@ -280,35 +274,35 @@ pub fn mg_damage(att_kind: &str, def_kind: &str) -> Option<u8> {
 /// Base damage `att` deals `def` with the weapon it would use now, or None if it can't
 /// fire at it: the chart's value; out of ammo, its second weapon's (the chart's value for
 /// second-weapon targets, the machine-gun table otherwise) or nothing.
-pub fn base_damage_now(att: &Unit, def_kind: &str) -> Option<u8> {
-    let info = tables().unit(&att.kind);
+pub fn base_damage_now(att: &Unit, def_kind: U) -> Option<u8> {
+    let info = att.kind.info();
     if info.ammo > 0 && att.ammo == 0 {
         // A Cruiser has no second weapon as AWBW counts them: out of ammo it can't fire at
         // all, not even its guns at aircraft.
-        if att.kind == "Cruiser" {
+        if att.kind == U::Cruiser {
             return None;
         }
-        if secondary_target(&att.kind, def_kind) {
-            return tables().base_damage(&att.kind, def_kind);
+        if secondary_target(att.kind, def_kind) {
+            return tables().base_damage(att.kind, def_kind);
         }
-        if info.second_weapon && att.kind != "Cruiser" {
-            return mg_damage(&att.kind, def_kind);
+        if info.second_weapon && att.kind != U::Cruiser {
+            return mg_damage(att.kind, def_kind);
         }
         return None;
     }
-    tables().base_damage(&att.kind, def_kind)
+    tables().base_damage(att.kind, def_kind)
 }
 
-pub fn secondary_target(att_kind: &str, def_kind: &str) -> bool {
-    if !tables().unit(att_kind).second_weapon && att_kind != "Cruiser" {
+pub fn secondary_target(att_kind: U, def_kind: U) -> bool {
+    if !att_kind.info().second_weapon && att_kind != U::Cruiser {
         return false;
     }
     match att_kind {
-        "Cruiser" => tables().unit(def_kind).move_type == "A",
+        U::Cruiser => def_kind.info().move_type == M::A,
         // The data says it has one, but it fires its cannon (and spends ammo) on Infantry
         // too (game-1750944): an indirect has no machine gun.
-        "Piperunner" => false,
-        _ => matches!(def_kind, "Infantry" | "Mech" | "B-Copter" | "T-Copter"),
+        U::Piperunner => false,
+        _ => matches!(def_kind, U::Infantry | U::Mech | U::BCopter | U::TCopter),
     }
 }
 
@@ -320,29 +314,29 @@ pub fn display(hp: u8) -> u8 {
     hp.div_ceil(10)
 }
 
-pub fn is_foot(kind: &str) -> bool {
-    matches!(kind, "Infantry" | "Mech")
+pub fn is_foot(kind: U) -> bool {
+    matches!(kind, U::Infantry | U::Mech)
 }
 
-pub fn is_indirect(kind: &str) -> bool {
-    tables().unit(kind).range[1] > 1
+pub fn is_indirect(kind: U) -> bool {
+    kind.info().range[1] > 1
 }
 
 /// Transport capacity.
-pub fn capacity(kind: &str) -> usize {
+pub fn capacity(kind: U) -> usize {
     match kind {
-        "APC" | "T-Copter" => 1,
-        "Lander" | "Cruiser" | "Carrier" | "Black Boat" => 2,
+        U::APC | U::TCopter => 1,
+        U::Lander | U::Cruiser | U::Carrier | U::BlackBoat => 2,
         _ => 0,
     }
 }
 
 /// Can `attacker` damage a dived Sub or hidden Stealth of kind `hidden`? Only Cruisers and
 /// Subs hit a dived Sub, only Fighters and Stealths a hidden Stealth. Counterattacks too.
-pub fn can_hit_hidden(attacker: &str, hidden: &str) -> bool {
+pub fn can_hit_hidden(attacker: U, hidden: U) -> bool {
     match hidden {
-        "Stealth" => matches!(attacker, "Fighter" | "Stealth"),
-        "Sub" => matches!(attacker, "Cruiser" | "Sub"),
+        U::Stealth => matches!(attacker, U::Fighter | U::Stealth),
+        U::Sub => matches!(attacker, U::Cruiser | U::Sub),
         _ => false,
     }
 }
@@ -350,18 +344,18 @@ pub fn can_hit_hidden(attacker: &str, hidden: &str) -> bool {
 /// Can this transport unload while standing on `terrain`? APCs, T-Copters, Landers and
 /// Black Boats can't from sea or reef (none of about 3,900 recorded unloads is); Cruisers
 /// and Carriers unload anywhere.
-pub fn can_unload_from(transport: &str, terrain: u16) -> bool {
-    matches!(transport, "Cruiser" | "Carrier") || tables().tile(terrain).kind != "Sea"
+pub fn can_unload_from(transport: U, terrain: u16) -> bool {
+    matches!(transport, U::Cruiser | U::Carrier) || tables().tile(terrain).kind != TerrainKind::Sea
 }
 
 /// Can transport `t` carry unit kind `l`?
-pub fn can_carry(t: &str, l: &str) -> bool {
-    let mt = tables().unit(l).move_type.clone();
+pub fn can_carry(t: U, l: U) -> bool {
+    let mt = l.info().move_type;
     match t {
-        "APC" | "T-Copter" | "Black Boat" => is_foot(l),
-        "Lander" => matches!(mt.as_str(), "F" | "B" | "T" | "W"),
-        "Cruiser" => matches!(l, "B-Copter" | "T-Copter"),
-        "Carrier" => mt == "A",
+        U::APC | U::TCopter | U::BlackBoat => is_foot(l),
+        U::Lander => matches!(mt, M::F | M::B | M::T | M::W),
+        U::Cruiser => matches!(l, U::BCopter | U::TCopter),
+        U::Carrier => mt == M::A,
         _ => false,
     }
 }

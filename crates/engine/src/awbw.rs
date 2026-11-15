@@ -51,7 +51,8 @@ pub fn unit_from(v: &Value) -> Unit {
     Unit {
         id: num(&v["units_id"]) as u32,
         owner: num(&v["units_players_id"]) as u32,
-        kind: v["units_name"].as_str().unwrap_or("?").to_string(),
+        kind: v["units_name"].as_str().and_then(crate::data::UnitType::from_name)
+            .unwrap_or_else(|| panic!("unknown unit {}", v["units_name"])),
         x: num(&v["units_x"]) as u16,
         y: num(&v["units_y"]) as u16,
         hp: hp_of(&v["units_hit_points"]),
@@ -214,10 +215,10 @@ pub fn to_turn_json(s: &State, template: &Value) -> Value {
     let mut units = Map::new();
     for u in s.units.values() {
         let base = by_id.get(&u.id).copied()
-            .or_else(|| tunits.iter().find(|t| t["units_name"].as_str() == Some(&u.kind)).copied())
+            .or_else(|| tunits.iter().find(|t| t["units_name"].as_str() == Some(u.kind.name())).copied())
             .or_else(|| tunits.first().copied());
         let mut o = base.cloned().unwrap_or_else(|| json!({}));
-        let info = tables().unit(&u.kind);
+        let info = tables().unit(u.kind);
         let (x, y) = match u.carried_by.and_then(|t| s.units.get(&t)) {
             Some(t) => (t.x, t.y),
             None => (u.x, u.y),
@@ -328,18 +329,18 @@ pub fn to_turn_json(s: &State, template: &Value) -> Value {
 /// A captured HQ becomes the captor's city, as on AWBW.
 pub fn owned_tile(tid: u16, country: Option<&str>) -> u16 {
     let t = tables().tile(tid);
-    let Some(kind) = t.building.as_deref() else { return tid };
-    if matches!(kind, "Missile" | "PipeSeam") {
+    let Some(kind) = t.building else { return tid };
+    if matches!(kind, crate::data::BuildingKind::Missile | crate::data::BuildingKind::PipeSeam) {
         return tid;
     }
     let prefix = country.unwrap_or("Neutral");
     if t.name.starts_with(prefix) {
         return tid;
     }
-    let want = if kind == "HQ" { "City" } else { kind };
-    tables().terrain.iter()
-        .filter(|(_, i)| i.building.as_deref() == Some(want) && i.name.starts_with(prefix))
-        .map(|(&id, _)| id).min().unwrap_or(tid)
+    let want = if kind == crate::data::BuildingKind::HQ { crate::data::BuildingKind::City } else { kind };
+    tables().terrains()
+        .filter(|i| i.building == Some(want) && i.name.starts_with(prefix))
+        .map(|i| i.id).min().unwrap_or(tid)
 }
 
 /// What the turn files can show of a state, as one comparable string: positions, displayed
@@ -356,7 +357,7 @@ pub fn fingerprint(s: &State) -> String {
             x, y, u.hp.display_hi(), u.fuel, u.ammo, u.moved, u.cargo, u.carried_by, u.dived);
     }
     for (p, b) in &s.buildings {
-        out += &format!("b {:?} {:?} {} {}\n", p, b.owner, b.capture, tables().tile(b.terrain).building.as_deref().unwrap_or(""));
+        out += &format!("b {:?} {:?} {} {}\n", p, b.owner, b.capture, tables().tile(b.terrain).building.map_or("", |k| k.name()));
     }
     out += &format!("fpp {}\n", s.funds_per_property);
     out
@@ -414,7 +415,8 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
         }
         Some("build") => {
             let at = xy(&v["at"]).ok_or("build: bad at")?;
-            let kind = v["unit"].as_str().ok_or("build: no unit")?.to_string();
+            let kind = v["unit"].as_str().ok_or("build: no unit")?;
+            let kind = crate::data::UnitType::from_name(kind).ok_or_else(|| format!("build: unknown unit {kind:?}"))?;
             let a = Action::Build { at, kind };
             legal.contains(&a).then_some(a).ok_or_else(|| "build: not legal here".into())
         }
