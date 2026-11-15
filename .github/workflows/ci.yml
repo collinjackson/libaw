@@ -11,9 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32im-unknown-none-elf
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
       - run: cargo test --release
+      - name: Engine without std (as zkVM guests build it)
+        run: cargo build -p libaw --no-default-features --target riscv32im-unknown-none-elf
       - name: Self-play smoke test (fails on step errors or broken invariants)
         run: |
           mkdir -p out/logs out/games
