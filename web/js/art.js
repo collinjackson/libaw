@@ -19,6 +19,13 @@ export const AWBW_COUNTRIES = {
   ne: 'noireclipse', sc: 'silverclaw', uw: 'umberwilds',
 };
 
+/** The countries whose AWBW unit sprites face left; the rest face right (read off each country's
+ *  Anti-Air guns). AWBW draws them as they are, so a map's sides don't always face each other. */
+export const AWBW_FACES_LEFT = new Set(['bm', 'yc', 'bh', 'rf', 'ab', 'pc', 'tg', 'ar', 'ne', 'sc']);
+
+/** Which way an AWBW country's unit sprites face: 'left' or 'right'. */
+export const awbwFacing = (code) => (AWBW_FACES_LEFT.has(code) ? 'left' : 'right');
+
 // Shoals are the one family whose image names don't follow their terrain names.
 const AWBW_SHOALS = { 29: 'hshoal', 30: 'hshoaln', 31: 'vshoal', 32: 'vshoale' };
 
@@ -38,6 +45,12 @@ export function awbwTileName(id, d, ownerCode) {
 export function awbwArt(countries, { base = AWBW_BASE } = {}) {
   return {
     name: 'awbw',
+    /** Which way u's sprite faces as drawn with flip false ('left' or 'right'), or null when this
+     *  art set has no sprite for it. libaw's own sprites face right. */
+    facing(u) {
+      const code = countries?.[u.owner];
+      return code ? awbwFacing(code) : null;
+    },
     unit(u, parent, { x, y, size, flip }) {
       const code = countries?.[u.owner];
       if (!code) return false;
