@@ -53,13 +53,17 @@ fn steps_of(a: &Value, out: &mut Vec<Value>) {
         "Capt" => {
             let b = &body["buildingInfo"];
             let left = num(&b["buildings_capture"]);
-            // A finished capture carries the building's new terrain (terrain_id) and its new owner in
-            // buildings_team. A partial capture of an enemy building also names a team, but it's the
-            // current owner, and there is no terrain_id.
+            // A finished capture carries the building's new terrain (terrain_id) and its new owner
+            // (buildings_players_id). buildings_team is the owner's team: the player id in a duel, but
+            // "A"/"B" in a team game, so it can't name the owner. A partial capture of an enemy
+            // building also names a team (the current owner's), with no terrain_id.
             let team = &b["buildings_team"];
             let done = !team.is_null() && team.as_str() != Some("") && !b["terrain_id"].is_null();
+            let owner = if !done { Value::Null }
+                else if !b["buildings_players_id"].is_null() { json!(num(&b["buildings_players_id"]).to_string()) }
+                else { team.clone() };
             out.push(json!({"type": "capture", "at": xy(b, "buildings_x", "buildings_y"), "capture": left,
-                            "done": done, "new_owner": if done { team.clone() } else { Value::Null }}));
+                            "done": done, "new_owner": owner}));
         }
         "Build" => {
             let u = unit_from(&body["newUnit"]);
@@ -144,5 +148,15 @@ mod tests {
         assert!(out[0]["new_owner"].is_null());
         assert_eq!(out[1]["done"], true);
         assert_eq!(out[1]["new_owner"], "1");
+    }
+
+    #[test]
+    fn a_team_game_capture_names_the_player_not_the_team() {
+        let done = json!({"action": "Capt", "buildingInfo": {"buildings_x": 7, "buildings_y": 3,
+            "buildings_capture": 20, "buildings_team": "B", "terrain_id": 172, "buildings_players_id": 42}});
+        let mut out = Vec::new();
+        steps_of(&done, &mut out);
+        assert_eq!(out[0]["done"], true);
+        assert_eq!(out[0]["new_owner"], "42");
     }
 }
