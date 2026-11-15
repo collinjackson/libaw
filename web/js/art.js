@@ -26,8 +26,9 @@ export const AWBW_FACES_LEFT = new Set(['bm', 'yc', 'bh', 'rf', 'ab', 'pc', 'tg'
 /** Which way an AWBW country's unit sprites face: 'left' or 'right'. */
 export const awbwFacing = (code) => (AWBW_FACES_LEFT.has(code) ? 'left' : 'right');
 
-// Shoals are the one family whose image names don't follow their terrain names.
-const AWBW_SHOALS = { 29: 'hshoal', 30: 'hshoaln', 31: 'vshoal', 32: 'vshoale' };
+// Shoals and pipe seams have image names that don't follow their terrain names (both seams are
+// "Pipe Seam"; AWBW's images say which way the pipe runs).
+const AWBW_SHOALS = { 29: 'hshoal', 30: 'hshoaln', 31: 'vshoal', 32: 'vshoale', 113: 'hpipeseam', 114: 'vpipeseam' };
 
 /** AWBW's image name for a tile: the terrain's name in lower case without spaces ("ESRoad" ->
  *  "esroad", "Neutral City" -> "neutralcity"); a building takes its current owner's country

@@ -4,6 +4,8 @@ import { awbwTileName, awbwFacing, awbwArt } from '../js/art.js';
 
 assert.equal(awbwTileName(1, { name: 'Plain' }), 'plain');
 assert.equal(awbwTileName(18, { name: 'ESRoad', kind: 'road' }), 'esroad');
+assert.equal(awbwTileName(113, { name: 'Pipe Seam' }), 'hpipeseam');   // AWBW has no pipeseam.gif
+assert.equal(awbwTileName(114, { name: 'Pipe Seam' }), 'vpipeseam');
 assert.equal(awbwTileName(112, { name: 'Missile Silo Empty' }), 'missilesiloempty');
 assert.equal(awbwTileName(30, { name: 'Shoal' }), 'hshoaln');
 assert.equal(awbwTileName(34, { name: 'Neutral City', building: 'city' }, null), 'neutralcity');
