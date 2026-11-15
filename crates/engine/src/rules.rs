@@ -15,11 +15,12 @@ pub fn move_cost(terrain: u16, move_type: M) -> Option<u8> {
 }
 
 /// The weather a CO's units feel: Olaf ignores snow and treats rain as snow; Drake ignores rain.
-pub fn felt_weather(weather: char, co: &str) -> char {
-    match (co, weather) {
-        ("Olaf", 'S') => 'C',
-        ("Olaf", 'R') => 'S',
-        ("Drake", 'R') => 'C',
+pub fn felt_weather(weather: char, co: impl crate::data::AsCo) -> char {
+    use crate::data::Co;
+    match (co.as_co(), weather) {
+        (Some(Co::Olaf), 'S') => 'C',
+        (Some(Co::Olaf), 'R') => 'S',
+        (Some(Co::Drake), 'R') => 'C',
         _ => weather,
     }
 }
@@ -53,9 +54,9 @@ pub fn move_cost_in(terrain: u16, move_type: M, weather: char) -> Option<u8> {
 /// Cost for `u` to enter a tile of terrain `t` now (weather, CO), or None if impassable.
 pub fn step_cost(s: &State, u: &Unit, t: u16) -> Option<u32> {
     let info = tables().unit(u.kind);
-    let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
+    let co = s.player(u.owner).map(|p| p.co).unwrap_or(crate::data::Co::NoCO);
     let w = felt_weather(s.weather, co);
-    let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
+    let pw = s.player(u.owner).map(|p| p.power).unwrap_or_default();
     let c = move_cost_in(t, info.move_type, w)?;
     // Lash's powers, and Sturm always: every passable tile costs 1, except in snow.
     if ((co == "Lash" && pw != "N") || co == "Sturm") && w != 'S' {
@@ -91,12 +92,12 @@ pub fn movement_range(s: &State, u: &Unit) -> u32 {
         return m;
     }
     let mut m = tables().unit(u.kind).r#move as u32;
-    let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
+    let co = s.player(u.owner).map(|p| p.co).unwrap_or(crate::data::Co::NoCO);
     // Day-to-day movement changes. Sami's and Sensei's transports move one further, and no
     // more under Sami's powers: the +2 a Power record shows for a loaded transport is the
     // bonus of the foot soldier it carries (all 41 recorded transport moves under Victory
     // March stay within +1).
-    if matches!(co, "Sami" | "Sensei") && matches!(u.kind, U::APC | U::TCopter | U::Lander | U::BlackBoat) {
+    if matches!(co, crate::data::Co::Sami | crate::data::Co::Sensei) && matches!(u.kind, U::APC | U::TCopter | U::Lander | U::BlackBoat) {
         m += 1;
     }
     // Drake's naval units move one further (Landers and Black Boats in 3 league games).
@@ -108,9 +109,9 @@ pub fn movement_range(s: &State, u: &Unit) -> u32 {
 
 /// How many capture points a unit takes off a building per capture action.
 pub fn capture_amount(s: &State, u: &Unit, display_hp: u8) -> i32 {
-    let co = s.player(u.owner).map(|p| p.co.as_str()).unwrap_or("");
+    let co = s.player(u.owner).map(|p| p.co).unwrap_or(crate::data::Co::NoCO);
     let hp = display_hp as i32;
-    let pw = s.player(u.owner).map(|p| p.power.as_str()).unwrap_or("N");
+    let pw = s.player(u.owner).map(|p| p.power).unwrap_or_default();
     if co == "Sami" && pw == "S" {
         20 // Victory March: captures complete in one action.
     } else if co == "Sami" {

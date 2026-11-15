@@ -53,7 +53,7 @@ pub fn start_with(turn_file: &str, opts: &str) -> String {
     for (i, p) in s.players.iter_mut().enumerate() {
         if let Some(co) = o["cos"][i].as_str() {
             let (c, sc) = libaw::co::power_base(co).unwrap_or((0, 0));
-            p.co = if c == 0 { "No CO".into() } else { co.to_string() };
+            p.co = if c == 0 { libaw::data::Co::NoCO } else { libaw::data::Co::from_name(co).unwrap_or(libaw::data::Co::NoCO) };
             p.cop_cost = c;
             p.scop_cost = sc;
             p.meter = 0;

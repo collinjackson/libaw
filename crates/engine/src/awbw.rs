@@ -130,11 +130,13 @@ pub fn state_from(turn: &Value) -> State {
             id: num(&p["players_id"]) as u32,
             team: p["players_team"].as_str().map(str::to_string)
                 .unwrap_or_else(|| num(&p["players_id"]).to_string()),
-            co: p["co_name"].as_str().unwrap_or("").to_string(),
+            // A CO name the table doesn't know plays as No CO (no abilities), as before.
+            co: p["co_name"].as_str().and_then(crate::data::Co::from_name)
+                .unwrap_or(crate::data::Co::NoCO),
             funds: num(&p["players_funds"]),
             eliminated: p["players_eliminated"].as_str() == Some("Y"),
             order: num(&p["players_order"]) as u32,
-            power: p["players_co_power_on"].as_str().unwrap_or("N").to_string(),
+            power: p["players_co_power_on"].as_str().and_then(crate::data::Power::from_name).unwrap_or_default(),
             meter: num(&p["players_co_power"]),
             cop_cost: num(&p["players_co_max_power"]),
             scop_cost: num(&p["players_co_max_spower"]),
@@ -410,7 +412,8 @@ pub fn action_from_contract(s: &State, v: &Value) -> Result<Action, String> {
     match v["type"].as_str() {
         Some("end_turn") => Ok(Action::EndTurn),
         Some("power") => {
-            let a = Action::Power { kind: v["power"].as_str().unwrap_or("").to_string() };
+            let kind = v["power"].as_str().and_then(crate::data::Power::from_name).ok_or("power: bad kind") ?;
+            let a = Action::Power { kind };
             legal.contains(&a).then_some(a).ok_or_else(|| "power: not ready".into())
         }
         Some("build") => {

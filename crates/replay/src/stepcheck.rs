@@ -245,7 +245,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
                     // record, matched by position. The game's unit limit isn't in the records and
                     // can stop the spawn early (cities go row by row), so the recorded sites must
                     // be the first of the engine's, and only the recorded units stay.
-                    let kind = a["coPower"].as_str().unwrap_or("").to_string();
+                    let kind = libaw::data::AsPower::as_power(a["coPower"].as_str().unwrap_or(""));
                     let before: Vec<UnitId> = s.units.keys().copied().collect();
                     step(&mut s, &Action::Power { kind }, a, r, c)?;
                     let mut new: Vec<UnitId> = s.units.keys().copied().filter(|k| !before.contains(k)).collect();
@@ -273,7 +273,7 @@ fn turn(cur: &Value, next: &Value, actions: &[Value], prev: Option<&State>, r: &
                     i += 1;
                     continue;
                 }
-                Action::Power { kind: a["coPower"].as_str().unwrap_or("").to_string() }
+                Action::Power { kind: libaw::data::AsPower::as_power(a["coPower"].as_str().unwrap_or("")) }
             }
             "NextTurn" => {
                 step(&mut s, &Action::EndTurn, a, r, c)?;

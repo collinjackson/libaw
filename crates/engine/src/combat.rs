@@ -5,11 +5,12 @@
 use crate::prelude::*;
 use crate::co;
 use crate::data::tables;
+use crate::data::Power;
 use crate::rules::*;
 use crate::state::*;
 
-pub fn co_of(s: &State, p: PlayerId) -> String {
-    s.player(p).map(|p| p.co.clone()).unwrap_or_default()
+pub fn co_of(s: &State, p: PlayerId) -> crate::data::Co {
+    s.player(p).map(|p| p.co).unwrap_or(crate::data::Co::NoCO)
 }
 
 pub fn towers(s: &State, p: PlayerId) -> u32 {
@@ -25,8 +26,8 @@ fn kindle_count(s: &State, p: PlayerId) -> i32 {
 }
 
 /// The owner's active power: "N", "Y" (CO power) or "S" (super power).
-pub fn pw(s: &State, p: PlayerId) -> String {
-    s.player(p).map(|p| p.power.clone()).unwrap_or_else(|| "N".into())
+pub fn pw(s: &State, p: PlayerId) -> crate::data::Power {
+    s.player(p).map(|p| p.power).unwrap_or_default()
 }
 
 /// Attack and defence values (100 = neutral) from COs' day-to-day abilities and com towers.
@@ -67,7 +68,7 @@ pub fn def_value(s: &State, def: &Unit, attacker_kind: crate::data::UnitType) ->
         v += 10 * towers(s, def.owner) as i32 * m;
         if is_indirect(attacker_kind) {
             // +20 against indirect fire, +40 under Tower Shield, +80 under Tower of Power.
-            v += match pw(s, def.owner).as_str() { "Y" => 40, "S" => 80, _ => 20 };
+            v += match pw(s, def.owner) { Power::Cop => 40, Power::Scop => 80, Power::None => 20 };
         }
     }
     v as u32
@@ -79,10 +80,10 @@ pub fn tower_multiplier(s: &State, p: PlayerId) -> i32 {
     if co_of(s, p) != "Javier" {
         return 1;
     }
-    match pw(s, p).as_str() {
-        "Y" => 2,
-        "S" => 3,
-        _ => 1,
+    match pw(s, p) {
+        Power::Cop => 2,
+        Power::Scop => 3,
+        Power::None => 1,
     }
 }
 

@@ -163,6 +163,72 @@ impl Co {
     }
 }
 
+/// Which CO power is on: none, the CO power, or the super power. Named as AWBW's
+/// `players_co_power_on` does: "N", "Y", "S".
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+#[repr(u8)]
+pub enum Power {
+    #[default]
+    None,
+    Cop,
+    Scop,
+}
+impl Power {
+    pub const COUNT: usize = 3;
+    pub const ALL: [Power; 3] = [Power::None, Power::Cop, Power::Scop];
+    const NAMES: [&'static str; 3] = ["N", "Y", "S"];
+    pub fn name(self) -> &'static str {
+        Self::NAMES[self as usize]
+    }
+    pub fn from_name(s: &str) -> Option<Self> {
+        Self::NAMES
+            .iter()
+            .position(|n| *n == s)
+            .map(|i| Self::ALL[i])
+    }
+    pub fn from_index(i: u8) -> Option<Self> {
+        Self::ALL.get(i as usize).copied()
+    }
+}
+named_enum!(Power);
+
+/// A power given as the enum or by AWBW's letter. Anything but "Y" or "S" is no power.
+pub trait AsPower {
+    fn as_power(&self) -> Power;
+}
+impl AsPower for Power {
+    fn as_power(&self) -> Power {
+        *self
+    }
+}
+impl AsPower for str {
+    fn as_power(&self) -> Power {
+        Power::from_name(self).unwrap_or_default()
+    }
+}
+impl AsPower for String {
+    fn as_power(&self) -> Power {
+        self.as_str().as_power()
+    }
+}
+impl<T: AsPower + ?Sized> AsPower for &T {
+    fn as_power(&self) -> Power {
+        (**self).as_power()
+    }
+}
+
+/// For tests and callers that hold names: panics on a name that is not a CO.
+impl From<&str> for Co {
+    fn from(s: &str) -> Self {
+        Co::from_name(s).unwrap_or_else(|| panic!("unknown CO {s}"))
+    }
+}
+impl From<&str> for Power {
+    fn from(s: &str) -> Self {
+        Power::from_name(s).unwrap_or_else(|| panic!("unknown power {s}"))
+    }
+}
+
 /// A CO given as the enum or by name. Unlike units, an unknown name is None (no CO abilities),
 /// as the name-keyed table gave.
 pub trait AsCo {

@@ -92,8 +92,8 @@ pub fn set_co(s: &mut State, co: &str) -> Result<(), String> {
 fn set_co_players(players: &mut [Player], co: &str) -> Result<(), String> {
     let (cop, scop) = stars(co).ok_or_else(|| format!("unknown CO {co:?}"))?;
     for p in players.iter_mut() {
-        let star = stars(&p.co).filter(|&(_, sc)| sc > 0 && p.scop_cost > 0).map(|(_, sc)| p.scop_cost / sc).unwrap_or(9000);
-        p.co = co.to_string();
+        let star = stars(p.co.name()).filter(|&(_, sc)| sc > 0 && p.scop_cost > 0).map(|(_, sc)| p.scop_cost / sc).unwrap_or(9000);
+        p.co = libaw::data::Co::from_name(co).ok_or_else(|| format!("unknown CO {co:?}"))?;
         p.cop_cost = cop * star;
         p.scop_cost = scop * star;
     }
@@ -169,7 +169,7 @@ pub fn play(start: &Value, seats: [&Agent; 2], seed: u64, max_days: u32, log_dir
                 "funds": p.map_or(0, |p| p.funds),
                 "props": s.buildings.values().filter(|b| b.owner.is_some_and(|o| ids.contains(&o))).count(),
                 "meter": p.map_or(0.0, |p| p.meter as f64 / (p.scop_cost.max(1)) as f64),
-                "co": p.map_or(String::new(), |p| p.co.clone()),
+                "co": p.map_or(String::new(), |p| p.co.to_string()),
             })
         };
         json!({"day": s.day, "to_move": seat_of(s.current), "sides": [side(0), side(1)]})
@@ -389,12 +389,12 @@ mod co_tests {
         let mut p = Player { id: 1, team: "1".into(), co: "Kanbei".into(), funds: 0, eliminated: false, order: 0, power: "N".into(),
                              meter: 0, cop_cost: 36000, scop_cost: 63000, power_attack: 0 };
         s.push(p.clone());
-        p.id = 2; p.co = "Nobody".into(); p.cop_cost = 0; p.scop_cost = 0;
+        p.id = 2; p.co = libaw::data::Co::NoCO; p.cop_cost = 0; p.scop_cost = 0;
         s.push(p);
         set_co_players(&mut s, "Adder").unwrap();
         assert!(s.iter().all(|p| p.co == "Adder"));
         assert_eq!((s[0].cop_cost, s[0].scop_cost), (18000, 45000)); // 9000 a star kept from Kanbei's 7
-        assert_eq!((s[1].cop_cost, s[1].scop_cost), (18000, 45000)); // unknown CO: 9000 a star
+        assert_eq!((s[1].cop_cost, s[1].scop_cost), (18000, 45000)); // No CO (no stars): 9000 a star
         assert!(set_co_players(&mut s, "Nobody").is_err());
     }
 }

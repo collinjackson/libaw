@@ -3,25 +3,25 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::data::{AsCo, Boost, Co as C, MoveType as M, Phase, UnitType as U};
+use crate::data::{AsCo, AsPower, Boost, Co as C, MoveType as M, Phase, Power as P, UnitType as U};
 
 fn d2d(co: impl AsCo) -> Option<&'static Phase> {
     co.as_co().map(|c| &c.info().d2d)
 }
 
 /// The CO's active tables: day-to-day, plus the CO power ("Y") or super power ("S") on top.
-fn active(co: impl AsCo, power: &str) -> impl Iterator<Item = &'static Phase> {
+fn active(co: impl AsCo, power: impl AsPower) -> impl Iterator<Item = &'static Phase> {
     let c = co.as_co().map(|c| c.info());
-    let p = c.and_then(|c| match power {
-        "Y" => Some(&c.cop),
-        "S" => Some(&c.scop),
-        _ => None,
+    let p = c.and_then(|c| match power .as_power() {
+        P::Cop => Some(&c.cop),
+        P::Scop => Some(&c.scop),
+        P::None => None,
     });
     c.map(|c| &c.d2d).into_iter().chain(p)
 }
 
 /// The sum of a boost field over the active entries, in hundredths.
-fn sum_field(co: impl AsCo, power: &str, kind: U, terrain_kind: Option<&str>, field: fn(&Boost) -> i16) -> i32 {
+fn sum_field(co: impl AsCo, power: impl AsPower, kind: U, terrain_kind: Option<&str>, field: fn(&Boost) -> i16) -> i32 {
     active(co, power)
         .flat_map(|d| d.boosts.iter())
         .filter(|e| e.affects(kind))
@@ -36,10 +36,10 @@ fn sum_field(co: impl AsCo, power: &str, kind: U, terrain_kind: Option<&str>, fi
 /// Attack bonus in percent points (e.g. +20 for Max's tanks). `terrain_kind` is the
 /// attacker's tile kind ("Plain", "Road", "Building", ...).
 /// Any active power also gives every unit +10% attack and +10% defence.
-pub fn attack_bonus(co: impl AsCo, power: &str, kind: U, terrain_kind: &str, terrain_stars: u32) -> i32 {
-    let co = co.as_co();
+pub fn attack_bonus(co: impl AsCo, power: impl AsPower, kind: U, terrain_kind: &str, terrain_stars: u32) -> i32 {
+    let (co, power) = (co.as_co(), power.as_power());
     let mut v = sum_field(co, power, kind, Some(terrain_kind), |b| b.attack);
-    if power != "N" {
+    if power != P::None {
         v += 10;
     }
     if co == Some(C::Lash) {
@@ -48,18 +48,19 @@ pub fn attack_bonus(co: impl AsCo, power: &str, kind: U, terrain_kind: &str, ter
     v
 }
 
-pub fn defense_bonus(co: impl AsCo, power: &str, kind: U) -> i32 {
+pub fn defense_bonus(co: impl AsCo, power: impl AsPower, kind: U) -> i32 {
+    let power = power.as_power();
     let v = sum_field(co, power, kind, None, |b| b.defense);
-    v + if power != "N" { 10 } else { 0 }
+    v + if power != P::None { 10 } else { 0 }
 }
 
-pub fn range_bonus(co: impl AsCo, power: &str, kind: U) -> i32 {
+pub fn range_bonus(co: impl AsCo, power: impl AsPower, kind: U) -> i32 {
     sum_field(co, power, kind, None, |b| b.range) / 100
 }
 
 /// Luck roll range in percent points, inclusive. AWBW default 0..=9.
 /// The power's LuckRange, if it has one, replaces the day-to-day one.
-pub fn luck(co: impl AsCo, power: &str) -> (i32, i32) {
+pub fn luck(co: impl AsCo, power: impl AsPower) -> (i32, i32) {
     let l = active(co, power).filter_map(|d| d.luck).last();
     l.map_or((0, 9), |(lo, hi)| (lo as i32, hi as i32))
 }
@@ -79,12 +80,12 @@ pub fn roll_luck(lo: i32, hi: i32, rng: &mut dyn FnMut() -> u32) -> i32 {
 
 /// Build price multiplier, with an active power's own value taking over (Hachi: 0.5).
 /// Unit price multiplier in per cent (Kanbei 120, Colin 80, Hachi 90, Hachi's super 50).
-pub fn price_pct(co: impl AsCo, power: &str) -> i64 {
+pub fn price_pct(co: impl AsCo, power: impl AsPower) -> i64 {
     active(co, power).filter_map(|d| d.price_pct).last().map_or(100, i64::from)
 }
 
 /// What `cost` costs this CO now, rounded half up (integer arithmetic).
-pub fn price(cost: i64, co: impl AsCo, power: &str) -> i64 {
+pub fn price(cost: i64, co: impl AsCo, power: impl AsPower) -> i64 {
     (cost * price_pct(co, power) + 50) / 100
 }
 
@@ -98,13 +99,13 @@ pub fn air_fuel_decrease(co: impl AsCo) -> i32 {
 
 /// Counterattack multiplier in per cent, applied to the CO's own attack value: Sonja 150
 /// always, Kanbei 150 under Samurai Spirit. An active power's value takes over.
-pub fn counter_pct(co: impl AsCo, power: &str) -> u32 {
+pub fn counter_pct(co: impl AsCo, power: impl AsPower) -> u32 {
     active(co, power).filter_map(|d| d.counter_pct).last().map_or(100, u32::from)
 }
 
 /// The CO's flat day-to-day attack bonus for a unit kind (no terrain conditions, no power).
 pub fn d2d_attack_bonus(co: impl AsCo, kind: U) -> i32 {
-    sum_field(co, "N", kind, None, |b| b.attack)
+    sum_field(co, P::None, kind, None, |b| b.attack)
 }
 
 /// Base power costs (CO power, super power) in meter units (funds of damage x 10), before
@@ -125,17 +126,17 @@ pub fn power_base(co: impl AsCo) -> Option<(i64, i64)> {
 }
 
 /// Powers the player could activate now: none while one is on or when powers are off.
-pub fn powers_ready(s: &crate::state::State, pid: u32) -> Vec<&'static str> {
+pub fn powers_ready(s: &crate::state::State, pid: u32) -> Vec<P> {
     let Some(p) = s.player(pid) else { return vec![] };
-    if !s.powers || p.power != "N" || p.scop_cost == 0 {
+    if !s.powers || p.power != P::None || p.scop_cost == 0 {
         return vec![];
     }
     let mut out = vec![];
     if p.cop_cost < p.scop_cost && p.meter >= p.cop_cost {
-        out.push("Y");
+        out.push(P::Cop);
     }
     if p.meter >= p.scop_cost {
-        out.push("S");
+        out.push(P::Scop);
     }
     out
 }
@@ -198,51 +199,51 @@ pub fn moves_apply(kind: U, moves_for: &str) -> bool {
     }
 }
 
-pub fn instant(co: impl AsCo, power: &str) -> Option<Instant> {
+pub fn instant(co: impl AsCo, power: impl AsPower) -> Option<Instant> {
     let i = |gain, loss, loss_fuel_pct, moves, weather| Some(Instant { gain, loss, loss_fuel_pct, moves, weather, moves_for: "all", resupply: false, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_pct: 100, funds_attack: false, spawn: None });
     let only = |moves, moves_for, resupply| Some(Instant { gain: 0, loss: 0, loss_fuel_pct: 100, moves, weather: None, moves_for, resupply, act_again: false, urban_loss: 0, drain: false, missiles: 0, stun: false, missile_hp: 3, funds_pct: 100, funds_attack: false, spawn: None });
-    match (co.as_co()?, power) {
-        (C::Sami, "Y") => only(1, "foot", false),
-        (C::Sami, "S") => only(2, "foot", false),
-        (C::Jess, "Y") => only(1, "vehicle", true),
-        (C::Jess, "S") => only(2, "vehicle", true),
-        (C::Max, "Y") => only(1, "direct", false),
-        (C::Max, "S") => only(2, "direct", false),
-        (C::Jake, "Y") => only(0, "vehicle", false),
-        (C::Jake, "S") => only(2, "vehicle", false),
-        (C::Eagle, "S") => Some(Instant { act_again: true, ..only(0, "all", false).unwrap() }),
-        (C::Nell, "S") => i(0, 0, 100, 0, None),
-        (C::Kindle, "Y") => Some(Instant { urban_loss: 3, ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Sasha, "Y") => Some(Instant { drain: true, ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Rachel, "S") => Some(Instant { missiles: 3, ..i(0, 0, 100, 0, None).unwrap() }),
+    match (co.as_co()?, power.as_power()) {
+        (C::Sami, P::Cop) => only(1, "foot", false),
+        (C::Sami, P::Scop) => only(2, "foot", false),
+        (C::Jess, P::Cop) => only(1, "vehicle", true),
+        (C::Jess, P::Scop) => only(2, "vehicle", true),
+        (C::Max, P::Cop) => only(1, "direct", false),
+        (C::Max, P::Scop) => only(2, "direct", false),
+        (C::Jake, P::Cop) => only(0, "vehicle", false),
+        (C::Jake, P::Scop) => only(2, "vehicle", false),
+        (C::Eagle, P::Scop) => Some(Instant { act_again: true, ..only(0, "all", false).unwrap() }),
+        (C::Nell, P::Scop) => i(0, 0, 100, 0, None),
+        (C::Kindle, P::Cop) => Some(Instant { urban_loss: 3, ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Sasha, P::Cop) => Some(Instant { drain: true, ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Rachel, P::Scop) => Some(Instant { missiles: 3, ..i(0, 0, 100, 0, None).unwrap() }),
         // Not seen in our recorded games (ballpark until checked): Sturm's meteors, Olaf's
         // Blizzard, Colin's Gold Rush.
-        (C::Sturm, "Y") => Some(Instant { missiles: 1, missile_hp: 4, ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Sturm, "S") => Some(Instant { missiles: 1, missile_hp: 8, ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Olaf, "Y") => i(0, 0, 100, 0, Some('S')),
-        (C::Colin, "Y") => Some(Instant { funds_pct: 150, ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Sturm, P::Cop) => Some(Instant { missiles: 1, missile_hp: 4, ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Sturm, P::Scop) => Some(Instant { missiles: 1, missile_hp: 8, ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Olaf, P::Cop) => i(0, 0, 100, 0, Some('S')),
+        (C::Colin, P::Cop) => Some(Instant { funds_pct: 150, ..i(0, 0, 100, 0, None).unwrap() }),
         // Also unseen in records, from AWBW's published CO rules: Colin's Power of Money,
         // Sensei's spawns, and two ongoing supers handled elsewhere (Sasha's War Bonds pays
         // funds for damage dealt in sim::attack; Hachi's Merchant Union builds ground units
         // on cities in actions::builds).
-        (C::Colin, "S") => Some(Instant { funds_attack: true, ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Sensei, "Y") => Some(Instant { spawn: Some(U::Infantry), ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Sensei, "S") => Some(Instant { spawn: Some(U::Mech), ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Sasha, "S") | (C::Hachi, "S") => i(0, 0, 100, 0, None),
+        (C::Colin, P::Scop) => Some(Instant { funds_attack: true, ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Sensei, P::Cop) => Some(Instant { spawn: Some(U::Infantry), ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Sensei, P::Scop) => Some(Instant { spawn: Some(U::Mech), ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Sasha, P::Scop) | (C::Hachi, P::Scop) => i(0, 0, 100, 0, None),
         // Luck and stat powers: their ongoing effects come from the CO tables; nothing instant.
-        (C::Nell, "Y") | (C::Flak, _) | (C::Jugger, _) | (C::Eagle, "Y") | (C::Kanbei, _) | (C::Grit, _) | (C::Hachi, "Y") => i(0, 0, 100, 0, None),
-        (C::VonBolt, "S") => Some(Instant { missiles: 1, stun: true, ..i(0, 0, 100, 0, None).unwrap() }),
-        (C::Andy, "Y") => i(2, 0, 100, 0, None),
-        (C::Andy, "S") => i(5, 0, 100, 1, None),
-        (C::Hawke, "Y") => i(1, 1, 100, 0, None),
-        (C::Hawke, "S") => i(2, 2, 100, 0, None),
-        (C::Drake, "Y") => i(0, 1, 50, 0, None),
-        (C::Drake, "S") => i(0, 2, 50, 0, Some('R')),
-        (C::Olaf, "S") => i(0, 2, 100, 0, Some('S')),
-        (C::Adder, "Y") | (C::Koal, "Y") => i(0, 0, 100, 1, None),
-        (C::Adder, "S") | (C::Koal, "S") => i(0, 0, 100, 2, None),
+        (C::Nell, P::Cop) | (C::Flak, _) | (C::Jugger, _) | (C::Eagle, P::Cop) | (C::Kanbei, _) | (C::Grit, _) | (C::Hachi, P::Cop) => i(0, 0, 100, 0, None),
+        (C::VonBolt, P::Scop) => Some(Instant { missiles: 1, stun: true, ..i(0, 0, 100, 0, None).unwrap() }),
+        (C::Andy, P::Cop) => i(2, 0, 100, 0, None),
+        (C::Andy, P::Scop) => i(5, 0, 100, 1, None),
+        (C::Hawke, P::Cop) => i(1, 1, 100, 0, None),
+        (C::Hawke, P::Scop) => i(2, 2, 100, 0, None),
+        (C::Drake, P::Cop) => i(0, 1, 50, 0, None),
+        (C::Drake, P::Scop) => i(0, 2, 50, 0, Some('R')),
+        (C::Olaf, P::Scop) => i(0, 2, 100, 0, Some('S')),
+        (C::Adder, P::Cop) | (C::Koal, P::Cop) => i(0, 0, 100, 1, None),
+        (C::Adder, P::Scop) | (C::Koal, P::Scop) => i(0, 0, 100, 2, None),
         // Powers with no instant effect beyond their ongoing ones.
-        (C::Grimm, _) | (C::Javier, _) | (C::Lash, _) | (C::Sonja, _) | (C::Rachel, "Y") | (C::Kindle, "S") => i(0, 0, 100, 0, None),
+        (C::Grimm, _) | (C::Javier, _) | (C::Lash, _) | (C::Sonja, _) | (C::Rachel, P::Cop) | (C::Kindle, P::Scop) => i(0, 0, 100, 0, None),
         _ => None,
     }
 }
@@ -256,7 +257,7 @@ pub fn roster() -> Vec<(String, &'static str)> {
         .map(|c| {
             // A CO whose COP costs as much as the super has no COP (Von Bolt).
             let no_cop = power_base(c).is_some_and(|(y, s)| y == s);
-            let st = if (no_cop || instant(c, "Y").is_some()) && instant(c, "S").is_some() { "full" } else { "partial" };
+            let st = if (no_cop || instant(c, P::Cop).is_some()) && instant(c, P::Scop).is_some() { "full" } else { "partial" };
             (c.name().to_string(), st)
         })
         .collect();

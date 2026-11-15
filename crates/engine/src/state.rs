@@ -80,12 +80,12 @@ pub struct Building {
 pub struct Player {
     pub id: PlayerId,
     pub team: String,
-    pub co: String,
+    pub co: crate::data::Co,
     pub funds: i64,
     pub eliminated: bool,
     pub order: u32,
-    /// "N" none, "Y" CO power, "S" super power (AWBW's players_co_power_on).
-    pub power: String,
+    /// Which power is on; serialized as AWBW's players_co_power_on ("N", "Y", "S").
+    pub power: crate::data::Power,
     /// CO power meter in AWBW units (funds of damage x 10), and the costs of each power.
     #[serde(default)]
     pub meter: i64,
@@ -206,9 +206,9 @@ impl State {
 /// JSON maps need string keys: buildings travel as a list of [x, y, building].
 mod pos_map {
     use super::Building;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use alloc::collections::BTreeMap;
     use alloc::vec::Vec;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     pub fn serialize<S: Serializer>(m: &BTreeMap<(u16, u16), Building>, s: S) -> Result<S::Ok, S::Error> {
         m.iter().map(|(&(x, y), b)| (x, y, b)).collect::<Vec<_>>().serialize(s)
     }

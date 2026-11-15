@@ -34,9 +34,9 @@ pub fn start_turn(s: &mut State, next: PlayerId, day: u32) {
     // A power lasts until its owner's next turn, and so does weather it set (Olaf's snow,
     // Drake's rain), unless another player's active power has since set the same weather.
     // It gives way to clear weather: the records don't carry a game's own weather setting.
-    let sets = |co: &str, power: &str| if power == "N" { None } else { co::instant(co, power).and_then(|e| e.weather) };
-    let mine = s.player(next).and_then(|p| sets(&p.co, &p.power));
-    if mine == Some(s.weather) && !s.players.iter().any(|p| p.id != next && sets(&p.co, &p.power) == Some(s.weather)) {
+    let sets = |co: crate::data::Co, power: crate::data::Power| if power == crate::data::Power::None { None } else { co::instant(co, power).and_then(|e| e.weather) };
+    let mine = s.player(next).and_then(|p| sets(p.co,p.power));
+    if mine == Some(s.weather) && !s.players.iter().any(|p| p.id != next && sets(p.co,p.power) == Some(s.weather)) {
         s.weather = 'C';
     }
     if let Some(p) = s.player_mut(next) {
@@ -271,11 +271,12 @@ pub fn charge(s: &mut State, att: &Unit, att_lost: u8, def: &Unit, def_lost: u8)
 
 /// Activate a power: "Y" (CO power) or "S" (super). Spends its cost from the meter.
 /// (Cost growth after each use and per-CO effects aren't modeled here yet.)
-pub fn spend_power(s: &mut State, pid: PlayerId, kind: &str) {
+pub fn spend_power(s: &mut State, pid: PlayerId, kind: impl crate::data::AsPower) {
+    let kind = kind.as_power();
     if let Some(p) = s.player_mut(pid) {
-        let cost = if kind == "S" { p.scop_cost } else { p.cop_cost };
+        let cost = if kind == crate::data::Power::Scop { p.scop_cost } else { p.cop_cost };
         p.meter = (p.meter - cost).max(0);
-        p.power = kind.to_string();
+        p.power = kind;
         // Each use raises both costs by a fifth of the base (seen in the replays), up to the
         // tenth use: they stop at three times the base.
         if let Some((c, sc)) = co::power_base(&p.co) {
@@ -289,7 +290,7 @@ pub fn spend_power(s: &mut State, pid: PlayerId, kind: &str) {
 
 /// Apply a power's instant effects (see `co::instant`). Returns false when the engine
 /// doesn't model this CO's power yet (it was still activated; only effects are missing).
-pub fn power_effects(s: &mut State, pid: PlayerId, kind: &str) -> bool {
+pub fn power_effects(s: &mut State, pid: PlayerId, kind: impl crate::data::AsPower) -> bool {
     power_effects_at(s, pid, kind, None)
 }
 
@@ -382,22 +383,23 @@ fn aim_missile(s: &State, pid: PlayerId, aim: Aim) -> Option<(u16, u16)> {
 /// The targets of a power's missiles when the engine aims them itself, all chosen on the
 /// board as it stands before any lands (Rachel's three can stack on one tile).
 fn aim_missiles(s: &State, pid: PlayerId, count: usize) -> Vec<(u16, u16)> {
-    let aims: &[Aim] = match co_of(s, pid).as_str() {
-        "Rachel" => &[Aim::Foot, Aim::Value, Aim::Hp],
-        "Sturm" => &[Aim::Sturm],
+    let aims: &[Aim] = match co_of(s, pid) {
+        crate::data::Co::Rachel => &[Aim::Foot, Aim::Value, Aim::Hp],
+        crate::data::Co::Sturm => &[Aim::Sturm],
         _ => &[Aim::Value],
     };
     aims.iter().take(count).filter_map(|&a| aim_missile(s, pid, a)).collect()
 }
 
 /// Where this power's missiles would land on the board as it stands (AWBW's aim).
-pub fn missile_targets(s: &State, pid: PlayerId, kind: &str) -> Vec<(u16, u16)> {
-    co::instant(&co_of(s, pid), kind).map_or(vec![], |e| aim_missiles(s, pid, e.missiles as usize))
+pub fn missile_targets(s: &State, pid: PlayerId, kind: impl crate::data::AsPower,) -> Vec<(u16, u16)> {
+    co::instant(co_of(s, pid), kind).map_or(vec![], |e| aim_missiles(s, pid, e.missiles as usize))
 }
 
 /// The player to move activates a power. Missiles land on `targets` when given (the server
 /// aims them in real games; replays record where), else on the engine's own aim.
-pub fn use_power(s: &mut State, kind: &str, targets: Option<&[(u16, u16)]>) -> Result<(), String> {
+pub fn use_power(s: &mut State, kind: impl crate::data::AsPower, targets: Option<&[(u16, u16)]>) -> Result<(), String> {
+    let kind = kind.as_power();
     if !co::powers_ready(s, s.current).contains(&kind) {
         return Err(format!("power {kind} not ready"));
     }
@@ -408,8 +410,9 @@ pub fn use_power(s: &mut State, kind: &str, targets: Option<&[(u16, u16)]>) -> R
 }
 
 /// As `power_effects`, with missile targets given (the replay checker passes AWBW's).
-pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: &str, targets: Option<&[(u16, u16)]>) -> bool {
-    let Some(e) = co::instant(&co_of(s, pid), kind) else { return false };
+pub fn power_effects_at(s: &mut State, pid: PlayerId, kind: impl crate::data::AsPower, targets: Option<&[(u16, u16)]>) -> bool {
+    let kind = kind.as_power();
+    let Some(e) = co::instant(co_of(s, pid), kind) else { return false };
     let aimed = match targets {
         Some(t) => t.iter().copied().take(e.missiles as usize).collect(),
         None => aim_missiles(s, pid, e.missiles as usize),
@@ -669,7 +672,7 @@ fn rout(s: &mut State, pid: PlayerId) {
 fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
     match a {
         Action::EndTurn => end_turn(s),
-        Action::Power { kind } => use_power(s, kind, None),
+        Action::Power { kind } => use_power(s, * kind, None),
         Action::Build { at, kind } => {
             let me = s.current;
             let p = s.player(me).ok_or("no player")?;

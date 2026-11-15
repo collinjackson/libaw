@@ -43,7 +43,7 @@ pub enum Action {
     Move { unit: UnitId, path: Vec<Pos>, then: Then },
     Build { at: Pos, kind: crate::data::UnitType },
     /// Activate the CO power ("Y") or super power ("S"). Only generated when `State::powers`.
-    Power { kind: String },
+    Power { kind: crate::data::Power, },
     EndTurn,
 }
 
@@ -109,8 +109,8 @@ pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
     if indirect && moved {
         return vec![];
     }
-    let pw = s.player(u.owner).map(|p| p.power.clone()).unwrap_or_else(|| "N".into());
-    let co = s.player(u.owner).map(|p| p.co.clone()).unwrap_or_default();
+    let pw = s.player(u.owner).map(|p| p.power).unwrap_or_default();
+    let co = s.player(u.owner).map(|p| p.co).unwrap_or(crate::data::Co::NoCO);
     let mut maxr = info.range[1] as i32;
     if indirect {
         maxr = (maxr + co::range_bonus(&co, &pw, u.kind)).max(2);
@@ -141,8 +141,8 @@ pub fn seam_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {
     }
     let mut maxr = info.range[1] as i32;
     if is_indirect(u.kind) {
-        let pw = s.player(u.owner).map(|p| p.power.clone()).unwrap_or_else(|| "N".into());
-        let co = s.player(u.owner).map(|p| p.co.clone()).unwrap_or_default();
+        let pw = s.player(u.owner).map(|p| p.power).unwrap_or_default();
+        let co = s.player(u.owner).map(|p| p.co).unwrap_or(crate::data::Co::NoCO);
         maxr = (maxr + co::range_bonus(&co, &pw, u.kind)).max(2);
     }
     s.buildings.iter()
@@ -308,7 +308,7 @@ pub fn legal_actions(s: &State) -> Vec<Action> {
         out.push(Action::Build { at, kind });
     }
     for kind in crate::co::powers_ready(s, s.current) {
-        out.push(Action::Power { kind: kind.into() });
+        out.push(Action::Power { kind });
     }
     out.push(Action::EndTurn);
     out
@@ -330,7 +330,7 @@ pub fn is_legal(s: &State, a: &Action) -> bool {
     match a {
         Action::Move { unit, .. } => unit_actions(s, *unit).contains(a),
         Action::Build { at, kind } => builds(s).iter().any(|(p, k)| p == at && k == kind),
-        Action::Power { kind } => crate::co::powers_ready(s, s.current).iter().any(|k| *k == kind.as_str()),
+        Action::Power { kind } => crate::co::powers_ready(s, s.current).contains(kind),
         Action::EndTurn => true,
     }
 }
