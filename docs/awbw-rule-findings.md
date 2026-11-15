@@ -2,7 +2,7 @@
 
 Compiled 2026-11-11 from a rules review. Rules are described as behaviour;
 no AWBW source is included. Game ids refer to the cached public replays in
-`awbw-engine-data`. "Replays" means recorded games show it; "Rules only" means no recorded
+`libaw-data`. "Replays" means recorded games show it; "Rules only" means no recorded
 game has the situation, so it rests on AWBW's rules alone.
 
 ## Fixed: combat rules

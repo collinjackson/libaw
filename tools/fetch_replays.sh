@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Politely fetch AWBW replays (one request per PAUSE seconds) for games listed in a JSON file
-# of {"id","tier","days"}, into ~/repos/awbw-engine-data/replays/game-<id>. Skips games
+# of {"id","tier","days"}, into ~/repos/libaw-data/replays/game-<id>. Skips games
 # already fetched. Uses awbw_chart's exporter.
 #   tools/fetch_replays.sh LIST.json [TIERS=T1,T2] [MIN_DAYS=6] [MAX_GAMES=25]
 set -euo pipefail
 LIST=$1; TIERS=${2:-T1,T2}; MIN_DAYS=${3:-6}; MAX=${4:-25}; PAUSE=${PAUSE:-2}
-OUT=~/repos/awbw-engine-data/replays
+OUT=~/repos/libaw-data/replays
 PY=~/repos/awbw_chart/venv/bin/python
 ids=$(python3 -I -c "
 import json,sys

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Measure the engine and append one line to metrics/history.jsonl. Runs locally: the
-replay corpora live in ~/repos/awbw-engine-data (and awbw_chart's team games), not in git.
+replay corpora live in ~/repos/libaw-data (and awbw_chart's team games), not in git.
 
   python3 -I tools/metrics.py            # print and append
   python3 -I tools/metrics.py --dry-run  # print only
@@ -8,7 +8,7 @@ replay corpora live in ~/repos/awbw-engine-data (and awbw_chart's team games), n
                                          # clean turns than metrics/baseline.json (CI)
 
 AWBW_DATA and AWBW_TEAM override the corpus locations (CI unpacks the private
-awbw-engine-data repo).
+libaw-data repo).
 
 Metrics (one JSON object per run):
   replay.<corpus>: turns compared, clean turns, checks passed/total. Engine fidelity:
@@ -26,7 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target/release/awbw-replay"
-DATA = Path(os.environ.get("AWBW_DATA", Path.home() / "repos/awbw-engine-data"))
+DATA = Path(os.environ.get("AWBW_DATA", Path.home() / "repos/libaw-data"))
 TEAM = Path(os.environ.get("AWBW_TEAM", Path.home() / "repos/awbw_chart/data"))
 
 

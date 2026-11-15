@@ -28,7 +28,7 @@ jobs:
             out/selfplay.txt
           retention-days: 14
   replay-fidelity:
-    # Engine vs recorded AWBW games (private awbw-engine-data repo, read by deploy key).
+    # Engine vs recorded AWBW games (private libaw-data repo, read by deploy key).
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
         if: env.HAS_DATA_KEY == 'true'
         with:
-          repository: collinjackson/awbw-engine-data
+          repository: collinjackson/libaw-data
           ssh-key: ${{ secrets.DATA_DEPLOY_KEY }}
           path: corpus
       - uses: dtolnay/rust-toolchain@stable
