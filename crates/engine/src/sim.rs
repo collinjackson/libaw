@@ -835,7 +835,9 @@ fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {
                         b.capture = CAPTURE_POINTS;
                         b.owner = Some(u.owner);
                         if hq {
-                            // AWBW turns a captured HQ into the captor's city (3 stars, income).
+                            // AWBW turns a captured HQ into the captor's city (3 stars, income). Stored as
+                            // the neutral City tile: as for every building, `owner` says whose it is, and
+                            // awbw::owned_tile picks the army's tile on export.
                             let city = crate::awbw::owned_tile(b.terrain, None);
                             b.terrain = city;
                             let w = s.width as usize;
