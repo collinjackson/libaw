@@ -14,12 +14,12 @@ Replay check unchanged: all 6,848,173 checks over 499 league and 5 team games.
 | 1 | Damage is computed in double precision in AWBW's order of operations, rounded to one decimal the way AWBW does it, then cut to a whole point. A raw x.95 counts as x+1 only when the float product reaches the double nearest to x.95. Pipe seams follow the same rule. | Replays: game-1749614 turn 26 (79.95 on paper, 79 dealt); all 2,243 seam hits. AWBW's public damage calculator agrees: a 5 HP Neotank on a 5 HP Infantry in a city shows 53-56% (56.95 on paper), a 5 HP Tank on a 6 HP Recon on a plain 39-44% (39.95 on paper) |
 | 2 | Sonja's counterattack x1.5 multiplies her own attack value only, not com towers, the power bonus or luck. | Rules only |
 | 3 | Kanbei's counterattacks get the same x1.5 under Samurai Spirit. | Rules only |
-| 4 | Javier's defence against indirect fire: +20, +40 under Tower Shield, +80 under Tower of Power. | AWBW's damage calculator: Artillery on Javier's Tank under Tower of Power shows 7% |
+| 4 | Javier's defence against indirect fire: +20, +40 under Tower Shield, +80 under Tower of Power. | AWBW's damage calculator: Artillery on Javier's Tank on a Road under Tower of Power shows 7% (0% on a Plain) |
 | 5 | Kindle's High Society counts every owned property, com towers and labs included (games started after 2024-08-13). | Rules only |
 | 6 | Colin's Power of Money uses the funds held at each attack, unrounded (+3% per 1000). | Rules only |
 | 7 | Good luck and bad luck are separate uniform rolls, subtracted (Sonja, Flak, Jugger). | Rules only |
 | 8 | Out of ammo: Mech vs Artillery is 32. Machine guns can hit Piperunners (Mech 6, B-Copter 6, Tank 6, Md.Tank 8, Neotank 10, Mega Tank 10). | Rules only |
-| 9 | Max's and Sensei's Rockets take -10% attack like their other weakened units; Max's Rockets also lose 1 range. | AWBW's damage calculator: Max's or Sensei's Rocket on a Md.Tank shows 49-58% (55-64% without the penalty) |
+| 9 | Max's and Sensei's Rockets take -10% attack like their other weakened units; Max's Rockets also lose 1 range. | AWBW's damage calculator: Max's or Sensei's Rocket on a Md.Tank on a Road shows 49-58% (55-64% without the penalty); on a Plain, 44-52% (49-57%) |
 | 10 | Jugger's powers cost 3 and 7 stars. | Rules only |
 
 Follow-up in `awbw-bot`: its own luck roller (`src/play.rs`) should call `co::roll_luck`.
