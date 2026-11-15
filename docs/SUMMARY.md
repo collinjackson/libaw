@@ -7,6 +7,10 @@
 - [Bot guide](bots.md)
 - [Socket API](socket-api.md)
 - [HTTP bot contract](eval-harness/CONTRACT.md)
+
+# Watching games
+
+- [Replay viewer](replay-viewer.md)
 - [Storyboards](storyboard.md)
 
 # Rules
