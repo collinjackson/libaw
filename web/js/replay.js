@@ -55,7 +55,7 @@ export class Replay {
     const { seg, p } = at;
     const st = this.sb.steps[seg.step];
     const before = this.states[seg.step], after = this.states[seg.step + 1];
-    let state = after, fx = null;
+    let state = after, fx = null, under = null;
     const overlay = this.overlays[seg.phase];
     if (overlay) {
       state = before;
@@ -68,8 +68,12 @@ export class Replay {
       state = p < 0.45 ? before : after;
       fx = () => this.fireFx(st, before, p);
     } else if (seg.phase === 'capture') {
-      state = p < 0.5 ? before : after;
+      // A finished capture crossfades the building to its new owner's colours (with art that draws
+      // tiles); otherwise the board switches halfway through.
+      const fade = st.done && this.art?.tile;
+      state = fade || p < 0.5 ? before : after;
       fx = () => this.captureFx(st, p);
+      if (fade) under = () => this.captureFade(st, after, p);
     } else if (seg.phase === 'power') {
       state = before;
       fx = () => this.powerFx(st, p);
@@ -79,6 +83,7 @@ export class Replay {
     // Units that acted keep their colour: a replay greyed out as it goes is hard to follow.
     const shown = { ...state, units: Object.fromEntries(Object.entries(state.units).map(([k, u]) => [k, { ...u, moved: false }])) };
     this.board.draw(shown, { order: this.order, mirrorOdd: true });
+    if (under) under();
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
     if (fx) fx();
     this.setCamera(seg, p);
@@ -127,6 +132,21 @@ export class Replay {
   captureFx(st, p) {
     const [x, y] = st.at;
     if (p > 0.4) this.pop(x, y, st.done ? 'CAPTURED' : `${st.capture}`, (p - 0.4) / 0.6, st.done ? 'fx-cap done' : 'fx-cap');
+  }
+
+  /** The new owner's building fades in over the old one (in the terrain layer, so the unit
+   *  capturing it stays on top), swelling a little and settling back: smoothstep for the fade,
+   *  a damped sine for the swell. Not in AWBW itself; it just makes the change of hands read. */
+  captureFade(st, after, p) {
+    const [x, y] = st.at;
+    const b = after.buildings.find(([bx, by]) => bx === x && by === y);
+    const layer = this.board.svg.querySelector('g.terrain');
+    const q = Math.min(1, Math.max(0, (p - 0.3) / 0.45));
+    if (!b || !layer || q <= 0) return;
+    const fade = q * q * (3 - 2 * q), swell = 1 + 0.16 * Math.sin(Math.PI * q) * (1 - q);
+    const cx = (x + 0.5) * TILE, cy = (y + 1) * TILE;   // swell from the building's base
+    const g = el('g', { opacity: fade, transform: `translate(${cx} ${cy}) scale(${swell}) translate(${-cx} ${-cy})` }, layer);
+    this.art.tile(b[2].terrain, this.data.tmap[b[2].terrain], b[2].owner ?? null, g, { x: x * TILE, y: y * TILE, size: TILE });
   }
 
   powerFx(st, p) {
