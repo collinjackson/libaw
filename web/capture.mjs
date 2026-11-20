@@ -1,10 +1,12 @@
 // Record web/replay.html as a GIF and/or MP4, frame by frame (renderAt(t)), so the file shows
 // exactly what the page does. Needs puppeteer (npm i -g puppeteer) and ffmpeg.
 //
-//   node web/capture.mjs 'http://127.0.0.1:8000/web/replay.html?sb=...' out/turn [--fps 15] [--width 720] [--gif] [--mp4] [--vf FILTERS] [--pages N]
+//   node web/capture.mjs 'http://127.0.0.1:8000/web/replay.html?sb=...' out/turn [--fps 15] [--width 720] [--height H] [--gif] [--mp4] [--vf FILTERS] [--pages N]
 //
 // --pages N records the frames on N pages at once (renderAt(t) depends only on t), for machines
 // with spare cores: a slow cloud CPU spent most of a reel taking screenshots one by one.
+//
+// --height: the window's height (default 3/4 of --width); a square reel wants it equal to --width.
 //
 // Any page that sets window.__replay = {duration, renderAt(t), ready} records the same way.
 //
@@ -18,9 +20,10 @@ import { createRequire } from 'module';
 
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-const [url, out] = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--fps', '--width', '--vf', '--pages'].includes(args[i - 1])));
+const [url, out] = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--fps', '--width', '--height', '--vf', '--pages'].includes(args[i - 1])));
 if (!url || !out) { console.error('usage: node web/capture.mjs URL OUT_PREFIX [--fps 15] [--width 720] [--gif] [--mp4]'); process.exit(2); }
 const fps = Number(flag('--fps', 15)), width = Number(flag('--width', 720));
+const height = Number(flag('--height', Math.round(width * 0.75)));
 const pages = Math.max(1, Number(flag('--pages', 1)) || 1);
 const wantGif = args.includes('--gif') || !args.includes('--mp4'), wantMp4 = args.includes('--mp4');
 
@@ -44,7 +47,7 @@ const launch = async () => { const b = await puppeteer.launch({ headless: true, 
 const u = new URL(url); u.searchParams.set('capture', '1');
 async function open() {
   const page = await (await launch()).newPage();
-  await page.setViewport({ width, height: Math.round(width * 0.75), deviceScaleFactor: 1 });
+  await page.setViewport({ width, height, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => console.error('page error:', e.message));
   page.on('console', (m) => { if (m.type() === 'error') console.error('page console:', m.text()); });
   page.on('requestfailed', (r) => console.error('request failed:', r.url(), r.failure()?.errorText));

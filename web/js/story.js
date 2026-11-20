@@ -85,8 +85,9 @@ export const DUR = { tile: 0.14, fire: 1.1, capture: 0.9, power: 1.6, build: 0.5
  *  {t0, t1, step index, phase, shot} where phase is 'move' | 'fire' | 'capture' | 'power' |
  *  'build' | 'join' | 'hold' | 'other'. Steps between chosen shots are applied as a cut (no time).
  *  before(step, i, shot) -> [{phase, dur}]: extra segments a caller plays ahead of a step (its
- *  own phases, drawn by the viewer's overlays). */
-export function timeline(sb, chosen, { before = null } = {}) {
+ *  own phases, drawn by the viewer's overlays). dur(step) -> seconds or null: a caller's length for
+ *  a step (e.g. longer for a kill), else DUR's. */
+export function timeline(sb, chosen, { before = null, dur = null } = {}) {
   const segs = [];
   let t = 0;
   for (const sh of chosen) {
@@ -96,7 +97,7 @@ export function timeline(sb, chosen, { before = null } = {}) {
         segs.push({ t0: t, t1: t + x.dur, step: i, phase: x.phase, shot: sh });
         t += x.dur;
       }
-      const d = st.type === 'move' ? Math.max(1, st.path.length - 1) * DUR.tile : (DUR[st.type] ?? DUR.other);
+      const d = dur?.(st) ?? (st.type === 'move' ? Math.max(1, st.path.length - 1) * DUR.tile : (DUR[st.type] ?? DUR.other));
       segs.push({ t0: t, t1: t + d, step: i, phase: st.type, shot: sh });
       t += d;
     }

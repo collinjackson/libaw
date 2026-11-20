@@ -15,36 +15,44 @@ function el(name, attrs, parent) {
   return e;
 }
 
+/** Units whose kill gets the mushroom cloud: the big guns and the bombs. */
+export const HEAVY = new Set(['Bomber', 'Rocket', 'Rockets', 'Artillery', 'Battleship', 'Piperunner', 'Missile', 'Missiles', 'Black Bomb', 'Carrier', 'Mega Tank']);
+
 export class Replay {
   /** opts: {data: {units, terrain, tmap}, art, shots: which to play (default all, in order),
-   *  camera: zoom to each shot, before: timeline hook (story.timeline), overlays: {phase:
+   *  camera: zoom to each shot, aspect: the camera box's height / width (0.72; 1 for a square
+   *  frame that a chat's square preview shows whole), hpBars: segmented HP bars (Board), dur:
+   *  timeline step lengths (story.timeline), before: timeline hook (story.timeline), overlays: {phase:
    *  ({layer, box, p, seg, st, before, after, replay}) => void} to draw a caller's phases (or
    *  replace a built-in one), onShot(shot, index)}. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, before = null, overlays = {}, onShot = () => {} } = {}) {
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, dur = null, before = null, overlays = {}, onShot = () => {} } = {}) {
     this.art = art;
     this.sb = sb;
     this.data = data;
-    this.board = new Board(svg, data.tmap, { art });
+    this.board = new Board(svg, data.tmap, { art, hpBars });
     this.states = statesOf(sb);
     this.order = sb.start.players.map((p) => p.id);
     this.shots = shots ?? allShots(sb);
-    this.tl = timeline(sb, this.shots, { before });
+    this.tl = timeline(sb, this.shots, { before, dur });
     this.duration = this.tl.duration;
     this.camera = camera;
+    this.aspect = aspect;
     this.overlays = overlays;
     this.onShot = onShot;
     this.lastShot = null;
   }
 
-  /** The camera box for a shot: about 11 x 8 tiles around its tiles, inside the board. */
+  /** The camera box for a shot: about 11 tiles wide (by 11 * aspect) around its tiles, inside
+   *  the board. A tall shot widens the box to keep its shape, while the board allows. */
   boxFor(shot) {
     const W = this.sb.start.width, H = this.sb.start.height;
     if (!this.camera || !shot?.focus) return [0, 0, W, H];
     const pts = shot.tiles.length ? shot.tiles : [shot.focus];
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     const cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2, cy = (Math.min(...ys) + Math.max(...ys) + 1) / 2;
-    const w = Math.min(W, Math.max(11, Math.max(...xs) - Math.min(...xs) + 5));
-    const h = Math.min(H, Math.max(w * 0.72, Math.max(...ys) - Math.min(...ys) + 4));
+    const tall = Math.max(...ys) - Math.min(...ys) + 4;
+    const w = Math.min(W, Math.max(11, Math.max(...xs) - Math.min(...xs) + 5, tall / this.aspect));
+    const h = Math.min(H, Math.max(w * this.aspect, tall));
     const x = Math.min(Math.max(0, cx - w / 2), W - w), y = Math.min(Math.max(0, cy - h / 2), H - h);
     return [x, y, w, h];
   }
@@ -85,6 +93,7 @@ export class Replay {
     this.board.draw(shown, { order: this.order, mirrorOdd: true });
     if (under) under();
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
+    this.shake = 0;
     if (fx) fx();
     this.setCamera(seg, p);
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
@@ -95,7 +104,9 @@ export class Replay {
 
   setCamera(seg) {
     const [x, y, w, h] = this.boxFor(seg.shot);
-    this.board.svg.setAttribute('viewBox', `${x * TILE} ${y * TILE} ${w * TILE} ${h * TILE}`);
+    // A blast shakes the picture (fireFx sets this.shake, in tiles); deterministic in t.
+    const s = this.shake || 0, dx = s * Math.sin(seg.t0 * 97 + (this.shakeT ?? 0) * 71), dy = s * Math.cos(seg.t0 * 53 + (this.shakeT ?? 0) * 89);
+    this.board.svg.setAttribute('viewBox', `${(x + dx) * TILE} ${(y + dy) * TILE} ${w * TILE} ${h * TILE}`);
     this.board.svg.style.aspectRatio = `${w} / ${h}`;
   }
 
@@ -124,9 +135,56 @@ export class Replay {
       const lost = Math.ceil(u.hp.hi / 10) - side.display_hp;
       if (lost <= 0) continue;
       const q = side === d ? p : p - 0.25;   // the counterattack lands a beat later
-      if (q > 0.35 && q < 0.65) this.flash(side.at[0], side.at[1], 1 - (q - 0.35) / 0.3, side.display_hp <= 0 ? 'fx-boom' : 'fx-hit');
-      if (q > 0.45) this.pop(side.at[0], side.at[1], side.display_hp <= 0 ? 'KO' : `−${lost}`, (q - 0.45) / 0.55, 'fx-dmg');
+      const dead = side.display_hp <= 0;
+      if (dead && q > 0.35) {
+        const by = before.units[(side === d ? a : d)?.unit_id]?.kind;
+        this.blast(side.at[0], side.at[1], (q - 0.35) / 0.65, HEAVY.has(by));
+      } else if (q > 0.35 && q < 0.65) this.flash(side.at[0], side.at[1], 1 - (q - 0.35) / 0.3, 'fx-hit');
+      if (q > 0.45) this.pop(side.at[0], side.at[1], dead ? 'KO' : `−${lost}`, (q - 0.45) / 0.55, 'fx-dmg');
     }
+  }
+
+  /** A unit destroyed at (x, y), r from 0 to 1: a fireball with debris and smoke, or for a heavy
+   *  hitter (HEAVY) a mushroom cloud with a shockwave. Shakes the camera while it lands. */
+  blast(x, y, r, heavy) {
+    const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE, L = this.fxLayer, k = heavy ? 1.6 : 1;
+    const out = (a) => 1 - (1 - a) ** 3;
+    this.shake = Math.max(this.shake || 0, (heavy ? 0.35 : 0.18) * Math.max(0, 1 - r / 0.35));
+    this.shakeT = r;
+    if (r < 0.12) el('circle', { cx, cy, r: TILE * k * (0.4 + 3 * r), class: 'fx-flashw', opacity: 1 - r / 0.12 }, L);
+    // Shockwave ring.
+    if (r < 0.6) el('circle', { cx, cy, r: TILE * k * (0.3 + 2.2 * out(r / 0.6)), class: 'fx-ring', opacity: 1 - r / 0.6 }, L);
+    // Debris: fixed directions, thrown out and falling.
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2 + 0.4, v = TILE * k * (0.9 + 0.35 * (i % 3)), t = Math.min(1, r / 0.7);
+      if (t >= 1) continue;
+      el('rect', { x: cx + Math.cos(ang) * v * t - 2.5, y: cy + Math.sin(ang) * v * t - 2.5 + TILE * 1.2 * t * t, width: 5, height: 5,
+        class: 'fx-debris', opacity: 1 - t, transform: `rotate(${i * 40 + 700 * t} ${cx + Math.cos(ang) * v * t} ${cy + Math.sin(ang) * v * t + TILE * 1.2 * t * t})` }, L);
+    }
+    if (!heavy) {
+      // Fireball, cooling to a smoke puff that drifts up.
+      const f = out(Math.min(1, r / 0.35));
+      if (r < 0.55) {
+        el('circle', { cx, cy, r: TILE * (0.25 + 0.55 * f), class: 'fx-fire', opacity: 1 - Math.max(0, r - 0.3) / 0.25 }, L);
+        el('circle', { cx, cy, r: TILE * (0.12 + 0.3 * f), class: 'fx-core', opacity: 1 - r / 0.55 }, L);
+      }
+      if (r > 0.25) for (let i = 0; i < 3; i++) {
+        const s = (r - 0.25) / 0.75;
+        el('circle', { cx: cx + (i - 1) * TILE * 0.25, cy: cy - TILE * (0.2 + 0.9 * s) - i * 4, r: TILE * (0.25 + 0.3 * s), class: 'fx-smoke', opacity: 0.85 * (1 - s) }, L);
+      }
+      return;
+    }
+    // Mushroom cloud: a stem and a cap that rise and swell, fire cooling to smoke.
+    const g = out(Math.min(1, r / 0.5)), cool = Math.min(1, r / 0.7), fade = r < 0.75 ? 1 : 1 - (r - 0.75) / 0.25;
+    const top = cy - TILE * (0.4 + 1.7 * g), capW = TILE * (0.5 + 0.9 * g), capH = TILE * (0.3 + 0.45 * g);
+    const grp = el('g', { opacity: fade }, L);
+    el('ellipse', { cx, cy: cy + TILE * 0.25, rx: TILE * (0.5 + 1.1 * g), ry: TILE * (0.18 + 0.25 * g), class: 'fx-smoke' }, grp);
+    el('path', { d: `M ${cx - TILE * 0.18} ${cy + TILE * 0.2} Q ${cx - TILE * 0.08} ${(cy + top) / 2} ${cx - TILE * 0.22} ${top + capH * 0.6}`
+      + ` L ${cx + TILE * 0.22} ${top + capH * 0.6} Q ${cx + TILE * 0.08} ${(cy + top) / 2} ${cx + TILE * 0.18} ${cy + TILE * 0.2} Z`, class: 'fx-stem' }, grp);
+    el('ellipse', { cx, cy: top + capH * 0.55, rx: capW * 1.05, ry: capH * 0.45, class: 'fx-smoke' }, grp);
+    el('ellipse', { cx, cy: top, rx: capW, ry: capH, class: 'fx-cloud' }, grp);
+    el('ellipse', { cx, cy: top, rx: capW, ry: capH, class: 'fx-cloud-cool', opacity: cool }, grp);
+    el('ellipse', { cx, cy: top - capH * 0.1, rx: capW * 0.55, ry: capH * 0.5, class: 'fx-core', opacity: 1 - cool }, grp);
   }
 
   captureFx(st, p) {

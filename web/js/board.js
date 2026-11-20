@@ -20,8 +20,11 @@ function use(id, x, y, parent, extra = {}) {
 export class Board {
   /** art: optional art set (web/js/art.js), {unit(u, parent, box), tile(id, entry, owner, parent,
    *  box)}, each -> true when it drew; without one, or when it declines, libaw's own art is used. */
-  constructor(svg, terrainMap, { art = null } = {}) {
+  /** opts: art (an art set), hpBars: a damaged unit's HP as ten segments above it (a recording
+   *  nobody can hover; easier to read than the corner number) instead of the number. */
+  constructor(svg, terrainMap, { art = null, hpBars = false } = {}) {
     this.svg = svg;
+    this.hpBars = hpBars;
     this.tmap = terrainMap;
     this.art = art;
     this.onTile = () => {};
@@ -126,7 +129,14 @@ export class Board {
       const at = flip ? el('g', { transform: `translate(${(2 * u.x + 1) * TILE} 0) scale(-1 1)` }, g) : g;
       if (!this.art?.unit?.(u, at, { x: u.x * TILE, y: u.y * TILE, size: TILE, flip })) use(id, u.x, u.y, at);
       const hp = displayHp(u);
-      if (hp < 10) {
+      if (hp < 10 && this.hpBars) {
+        // Ten segments across the top of the tile, coloured by how hurt the unit is.
+        const tone = hp >= 7 ? 'hi' : hp >= 4 ? 'mid' : 'lo', sw = (TILE - 4) / 10;
+        el('rect', { x: u.x * TILE + 1, y: u.y * TILE - 4, width: TILE - 2, height: 13, rx: 2, class: 'hpbar' }, g);
+        for (let i = 0; i < 10; i++)
+          el('rect', { x: u.x * TILE + 2 + i * sw + 0.5, y: u.y * TILE - 2, width: sw - 1, height: 9,
+            class: i < hp ? `hpseg ${tone}` : 'hpseg off' }, g);
+      } else if (hp < 10) {
         el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);
         el('text', { x: u.x * TILE + TILE - 8, y: u.y * TILE + TILE - 4, class: 'hp' }, g).textContent = hp;
       }
