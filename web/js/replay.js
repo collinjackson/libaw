@@ -15,8 +15,17 @@ function el(name, attrs, parent) {
   return e;
 }
 
-/** Units whose kill gets the mushroom cloud: the big guns and the bombs. */
-export const HEAVY = new Set(['Bomber', 'Rocket', 'Rockets', 'Artillery', 'Battleship', 'Piperunner', 'Missile', 'Missiles', 'Black Bomb', 'Carrier', 'Mega Tank']);
+/** Units whose kill gets the mushroom cloud: bomber-sized hits only. Foot soldiers and vehicles
+ *  don't, except the Mega Tank (player feedback, 2026-11-20). */
+export const HEAVY = new Set(['Bomber', 'Black Bomb', 'Battleship', 'Mega Tank']);
+/** Chunky kills: a bigger fireball with extra bursts, but no cloud (the Mech's bazooka, the heavy
+ *  tanks, the big guns). */
+export const CHUNKY = new Set(['Mech', 'Md.Tank', 'Neotank', 'Artillery', 'Rocket', 'Rockets', 'Piperunner', 'Missile', 'Missiles', 'Carrier', 'Cruiser', 'Stealth']);
+
+/** How big a kill by `kind` goes up: 'heavy', 'chunky' or 'plain'. */
+export function blastSize(kind) {
+  return HEAVY.has(kind) ? 'heavy' : CHUNKY.has(kind) ? 'chunky' : 'plain';
+}
 
 export class Replay {
   /** opts: {data: {units, terrain, tmap}, art, shots: which to play (default all, in order),
@@ -138,18 +147,21 @@ export class Replay {
       const dead = side.display_hp <= 0;
       if (dead && q > 0.35) {
         const by = before.units[(side === d ? a : d)?.unit_id]?.kind;
-        this.blast(side.at[0], side.at[1], (q - 0.35) / 0.65, HEAVY.has(by));
+        this.blast(side.at[0], side.at[1], (q - 0.35) / 0.65, blastSize(by));
       } else if (q > 0.35 && q < 0.65) this.flash(side.at[0], side.at[1], 1 - (q - 0.35) / 0.3, 'fx-hit');
       if (q > 0.45) this.pop(side.at[0], side.at[1], dead ? 'KO' : `−${lost}`, (q - 0.45) / 0.55, 'fx-dmg');
     }
   }
 
-  /** A unit destroyed at (x, y), r from 0 to 1: a fireball with debris and smoke, or for a heavy
-   *  hitter (HEAVY) a mushroom cloud with a shockwave. Shakes the camera while it lands. */
-  blast(x, y, r, heavy) {
-    const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE, L = this.fxLayer, k = heavy ? 1.6 : 1;
+  /** A unit destroyed at (x, y), r from 0 to 1, by blastSize: 'plain' a fireball with debris and
+   *  smoke; 'chunky' a bigger one with two late bursts beside it; 'heavy' a mushroom cloud with a
+   *  shockwave. Shakes the camera while it lands. (`true` still means heavy.) */
+  blast(x, y, r, size = 'plain') {
+    if (size === true) size = 'heavy'; else if (size === false) size = 'plain';
+    const heavy = size === 'heavy', chunky = size === 'chunky';
+    const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE, L = this.fxLayer, k = heavy ? 1.6 : chunky ? 1.25 : 1;
     const out = (a) => 1 - (1 - a) ** 3;
-    this.shake = Math.max(this.shake || 0, (heavy ? 0.35 : 0.18) * Math.max(0, 1 - r / 0.35));
+    this.shake = Math.max(this.shake || 0, (heavy ? 0.35 : chunky ? 0.25 : 0.18) * Math.max(0, 1 - r / 0.35));
     this.shakeT = r;
     if (r < 0.12) el('circle', { cx, cy, r: TILE * k * (0.4 + 3 * r), class: 'fx-flashw', opacity: 1 - r / 0.12 }, L);
     // Shockwave ring.
@@ -165,8 +177,16 @@ export class Replay {
       // Fireball, cooling to a smoke puff that drifts up.
       const f = out(Math.min(1, r / 0.35));
       if (r < 0.55) {
-        el('circle', { cx, cy, r: TILE * (0.25 + 0.55 * f), class: 'fx-fire', opacity: 1 - Math.max(0, r - 0.3) / 0.25 }, L);
-        el('circle', { cx, cy, r: TILE * (0.12 + 0.3 * f), class: 'fx-core', opacity: 1 - r / 0.55 }, L);
+        el('circle', { cx, cy, r: TILE * k * (0.25 + 0.55 * f), class: 'fx-fire', opacity: 1 - Math.max(0, r - 0.3) / 0.25 }, L);
+        el('circle', { cx, cy, r: TILE * k * (0.12 + 0.3 * f), class: 'fx-core', opacity: 1 - r / 0.55 }, L);
+      }
+      // Chunky: two smaller bursts go off a beat later, up-left and down-right of the first.
+      if (chunky) for (const [dx, dy, t0] of [[-0.55, -0.35, 0.1], [0.5, 0.3, 0.2]]) {
+        const s = (r - t0) / 0.35;
+        if (s <= 0 || s >= 1) continue;
+        const bx = cx + dx * TILE, by = cy + dy * TILE, b = out(s);
+        el('circle', { cx: bx, cy: by, r: TILE * (0.15 + 0.4 * b), class: 'fx-fire', opacity: 1 - s }, L);
+        el('circle', { cx: bx, cy: by, r: TILE * (0.08 + 0.2 * b), class: 'fx-core', opacity: 1 - s }, L);
       }
       if (r > 0.25) for (let i = 0; i < 3; i++) {
         const s = (r - 0.25) / 0.75;
