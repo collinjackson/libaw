@@ -153,18 +153,18 @@ export class Replay {
     }
   }
 
-  /** A unit destroyed at (x, y), r from 0 to 1, by blastSize: 'plain' a fireball with debris and
-   *  smoke; 'chunky' a bigger one with two late bursts beside it; 'heavy' a mushroom cloud with a
-   *  shockwave. Shakes the camera while it lands. (`true` still means heavy.) */
+  /** A unit destroyed at (x, y), r from 0 to 1, by blastSize. Every size opens with a flash,
+   *  flame tongues and spark streaks, then rolls into a lumpy dark smoke billow with glowing cracks
+   *  that cool. 'chunky' is bigger, with two late side bursts; 'heavy' rises into a mushroom cloud
+   *  whose cap billows the same way. Shakes the camera while it lands. (`true` still means heavy.) */
   blast(x, y, r, size = 'plain') {
     if (size === true) size = 'heavy'; else if (size === false) size = 'plain';
     const heavy = size === 'heavy', chunky = size === 'chunky';
     const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE, L = this.fxLayer, k = heavy ? 1.6 : chunky ? 1.25 : 1;
-    const out = (a) => 1 - (1 - a) ** 3;
+    const out = (a) => 1 - (1 - a) ** 3, clamp = (a) => Math.max(0, Math.min(1, a));
     this.shake = Math.max(this.shake || 0, (heavy ? 0.35 : chunky ? 0.25 : 0.18) * Math.max(0, 1 - r / 0.35));
     this.shakeT = r;
-    if (r < 0.12) el('circle', { cx, cy, r: TILE * k * (0.4 + 3 * r), class: 'fx-flashw', opacity: 1 - r / 0.12 }, L);
-    // Shockwave ring.
+    if (r < 0.1) el('circle', { cx, cy, r: TILE * k * (0.4 + 3 * r), class: 'fx-flashw', opacity: 1 - r / 0.1 }, L);
     if (r < 0.6) el('circle', { cx, cy, r: TILE * k * (0.3 + 2.2 * out(r / 0.6)), class: 'fx-ring', opacity: 1 - r / 0.6 }, L);
     // Debris: fixed directions, thrown out and falling.
     for (let i = 0; i < 8; i++) {
@@ -173,38 +173,69 @@ export class Replay {
       el('rect', { x: cx + Math.cos(ang) * v * t - 2.5, y: cy + Math.sin(ang) * v * t - 2.5 + TILE * 1.2 * t * t, width: 5, height: 5,
         class: 'fx-debris', opacity: 1 - t, transform: `rotate(${i * 40 + 700 * t} ${cx + Math.cos(ang) * v * t} ${cy + Math.sin(ang) * v * t + TILE * 1.2 * t * t})` }, L);
     }
-    if (!heavy) {
-      // Fireball, cooling to a smoke puff that drifts up.
-      const f = out(Math.min(1, r / 0.35));
-      if (r < 0.55) {
-        el('circle', { cx, cy, r: TILE * k * (0.25 + 0.55 * f), class: 'fx-fire', opacity: 1 - Math.max(0, r - 0.3) / 0.25 }, L);
-        el('circle', { cx, cy, r: TILE * k * (0.12 + 0.3 * f), class: 'fx-core', opacity: 1 - r / 0.55 }, L);
+    // Smoke billow (drawn first, so the fire sits in front of it): lumps that swell and drift up,
+    // with ember cracks that glow, then cool. Heavy's billow is the ground skirt under the stem.
+    const sm = clamp((r - 0.12) / 0.88), fadeS = r < 0.75 ? 1 : 1 - (r - 0.75) / 0.25;
+    if (sm > 0) this.billow(cx, cy - TILE * (heavy ? -0.2 : 0.15 + 0.6 * sm), TILE * k * (0.35 + 0.35 * out(sm)) * (heavy ? 0.9 : 1),
+      heavy ? 0.4 : 1, 1 - clamp(r / 0.6), fadeS * Math.min(1, sm * 4));
+    // Flame tongues, pointing up and out, that shoot up and die back; a hot core under them.
+    if (r < 0.45) {
+      const n = heavy ? 9 : chunky ? 7 : 5, g = out(clamp(r / 0.15)) * (1 - clamp((r - 0.2) / 0.25));
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + ((i / (n - 1)) - 0.5) * 2.6, len = TILE * k * (0.85 + 0.6 * ((i * 5) % 3) / 2) * g, w = TILE * k * 0.13;
+        const tip = (s) => [cx + Math.cos(a) * len * s, cy + Math.sin(a) * len * s];
+        const nx = -Math.sin(a) * w, ny = Math.cos(a) * w, [tx, ty] = tip(1), [ix, iy] = tip(0.6);
+        el('path', { d: `M ${cx + nx} ${cy + ny} Q ${(cx + tx) / 2 + nx * 1.3} ${(cy + ty) / 2 + ny * 1.3} ${tx} ${ty} Q ${(cx + tx) / 2 - nx * 1.3} ${(cy + ty) / 2 - ny * 1.3} ${cx - nx} ${cy - ny} Z`, class: 'fx-fire' }, L);
+        el('path', { d: `M ${cx + nx * 0.5} ${cy + ny * 0.5} Q ${(cx + ix) / 2 + nx * 0.6} ${(cy + iy) / 2 + ny * 0.6} ${ix} ${iy} Q ${(cx + ix) / 2 - nx * 0.6} ${(cy + iy) / 2 - ny * 0.6} ${cx - nx * 0.5} ${cy - ny * 0.5} Z`, class: 'fx-core' }, L);
       }
-      // Chunky: two smaller bursts go off a beat later, up-left and down-right of the first.
-      if (chunky) for (const [dx, dy, t0] of [[-0.55, -0.35, 0.1], [0.5, 0.3, 0.2]]) {
-        const s = (r - t0) / 0.35;
-        if (s <= 0 || s >= 1) continue;
-        const bx = cx + dx * TILE, by = cy + dy * TILE, b = out(s);
-        el('circle', { cx: bx, cy: by, r: TILE * (0.15 + 0.4 * b), class: 'fx-fire', opacity: 1 - s }, L);
-        el('circle', { cx: bx, cy: by, r: TILE * (0.08 + 0.2 * b), class: 'fx-core', opacity: 1 - s }, L);
-      }
-      if (r > 0.25) for (let i = 0; i < 3; i++) {
-        const s = (r - 0.25) / 0.75;
-        el('circle', { cx: cx + (i - 1) * TILE * 0.25, cy: cy - TILE * (0.2 + 0.9 * s) - i * 4, r: TILE * (0.25 + 0.3 * s), class: 'fx-smoke', opacity: 0.85 * (1 - s) }, L);
-      }
-      return;
+      el('circle', { cx, cy, r: TILE * k * (0.15 + 0.22 * g), class: 'fx-fire' }, L);
+      el('circle', { cx, cy, r: TILE * k * (0.08 + 0.14 * g), class: 'fx-core' }, L);
     }
-    // Mushroom cloud: a stem and a cap that rise and swell, fire cooling to smoke.
+    // Spark streaks flying out.
+    if (r < 0.4) for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + 0.9 * (i % 2), s = out(r / 0.4), d0 = TILE * k * (0.3 + 1.6 * s), d1 = d0 + TILE * k * 0.45 * (1 - s);
+      el('line', { x1: cx + Math.cos(a) * d0, y1: cy + Math.sin(a) * d0, x2: cx + Math.cos(a) * d1, y2: cy + Math.sin(a) * d1, class: 'fx-spark', opacity: 1 - r / 0.4 }, L);
+    }
+    // Chunky: two smaller bursts go off a beat later, up-left and down-right of the first.
+    if (chunky) for (const [dx, dy, t0] of [[-0.55, -0.35, 0.1], [0.5, 0.3, 0.2]]) {
+      const s = (r - t0) / 0.35;
+      if (s <= 0 || s >= 1) continue;
+      const bx = cx + dx * TILE, by = cy + dy * TILE, b = out(s);
+      el('circle', { cx: bx, cy: by, r: TILE * (0.15 + 0.4 * b), class: 'fx-fire', opacity: 1 - s }, L);
+      el('circle', { cx: bx, cy: by, r: TILE * (0.08 + 0.2 * b), class: 'fx-core', opacity: 1 - s }, L);
+    }
+    if (!heavy) return;
+    // Mushroom cloud: a stem and a billowing cap that rise and swell, fire cooling to smoke.
     const g = out(Math.min(1, r / 0.5)), cool = Math.min(1, r / 0.7), fade = r < 0.75 ? 1 : 1 - (r - 0.75) / 0.25;
     const top = cy - TILE * (0.4 + 1.7 * g), capW = TILE * (0.5 + 0.9 * g), capH = TILE * (0.3 + 0.45 * g);
     const grp = el('g', { opacity: fade }, L);
-    el('ellipse', { cx, cy: cy + TILE * 0.25, rx: TILE * (0.5 + 1.1 * g), ry: TILE * (0.18 + 0.25 * g), class: 'fx-smoke' }, grp);
     el('path', { d: `M ${cx - TILE * 0.18} ${cy + TILE * 0.2} Q ${cx - TILE * 0.08} ${(cy + top) / 2} ${cx - TILE * 0.22} ${top + capH * 0.6}`
       + ` L ${cx + TILE * 0.22} ${top + capH * 0.6} Q ${cx + TILE * 0.08} ${(cy + top) / 2} ${cx + TILE * 0.18} ${cy + TILE * 0.2} Z`, class: 'fx-stem' }, grp);
-    el('ellipse', { cx, cy: top + capH * 0.55, rx: capW * 1.05, ry: capH * 0.45, class: 'fx-smoke' }, grp);
-    el('ellipse', { cx, cy: top, rx: capW, ry: capH, class: 'fx-cloud' }, grp);
-    el('ellipse', { cx, cy: top, rx: capW, ry: capH, class: 'fx-cloud-cool', opacity: cool }, grp);
-    el('ellipse', { cx, cy: top - capH * 0.1, rx: capW * 0.55, ry: capH * 0.5, class: 'fx-core', opacity: 1 - cool }, grp);
+    // The cap: hot orange lumps, the smoke billow fading in over them as it cools.
+    this.billow(cx, top, capW, capH / capW, 0, 1, grp, 'fx-cloud');
+    this.billow(cx, top, capW, capH / capW, 1 - cool, cool, grp);
+  }
+
+  /** A lumpy smoke cloud centred at (cx, cy), `rx` wide and `squash` × as tall: a body plus a ring of
+   *  lumps, with ember cracks at `glow` (0 to 1) brightness. Drawn into `parent` (the fx layer). */
+  billow(cx, cy, rx, squash, glow, opacity, parent = this.fxLayer, cls = 'fx-billow') {
+    if (opacity <= 0) return;
+    const g = el('g', { opacity }, parent), ry = rx * squash;
+    el('ellipse', { cx, cy, rx: rx * 0.85, ry: ry * 0.85, class: cls }, g);
+    const n = 9, lumps = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2, lr = Math.max(rx, ry) * (0.42 + 0.07 * ((i * 7) % 3)) * (i % 2 ? 0.8 : 1);
+      const lx = cx + Math.cos(a) * rx * 0.7, ly = cy + Math.sin(a) * ry * 0.7;
+      el('circle', { cx: lx, cy: ly, r: lr, class: cls }, g);
+      lumps.push([lx, ly, lr]);
+    }
+    if (glow <= 0) return;
+    // Embers: fire light caught in the folds, a glowing rim along the lower edge of every other lump.
+    for (const [lx, ly, lr] of lumps.filter((_, i) => i % 2 === 0)) {
+      const rr = lr * 0.72, a0 = 0.35, a1 = 2.4;
+      el('path', { d: `M ${lx + Math.cos(a0) * rr} ${ly + Math.sin(a0) * rr} A ${rr} ${rr} 0 0 1 ${lx + Math.cos(a1) * rr} ${ly + Math.sin(a1) * rr}`,
+        class: 'fx-crack', opacity: glow }, g);
+    }
   }
 
   captureFx(st, p) {
