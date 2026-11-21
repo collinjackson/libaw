@@ -38,7 +38,7 @@ export class Replay {
    *  timeline step lengths (story.timeline), before: timeline hook (story.timeline), overlays: {phase:
    *  ({layer, box, p, seg, st, before, after, replay}) => void} to draw a caller's phases (or
    *  replace a built-in one), onShot(shot, index)}. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, dur = null, before = null, overlays = {}, onShot = () => {} } = {}) {
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, dur = null, before = null, hold = null, overlays = {}, onShot = () => {} } = {}) {
     this.art = art;
     this.sb = sb;
     this.data = data;
@@ -46,7 +46,7 @@ export class Replay {
     this.states = statesOf(sb);
     this.order = sb.start.players.map((p) => p.id);
     this.shots = shots ?? allShots(sb);
-    this.tl = timeline(sb, this.shots, { before, dur });
+    this.tl = timeline(sb, this.shots, { before, dur, hold });
     this.duration = this.tl.duration;
     this.camera = camera;
     this.aspect = aspect;
