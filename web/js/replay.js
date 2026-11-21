@@ -22,9 +22,13 @@ export const HEAVY = new Set(['Bomber', 'Black Bomb', 'Battleship', 'Mega Tank']
  *  tanks, the big guns). */
 export const CHUNKY = new Set(['Mech', 'Md.Tank', 'Neotank', 'Artillery', 'Rocket', 'Rockets', 'Piperunner', 'Missile', 'Missiles', 'Carrier', 'Cruiser', 'Stealth']);
 
-/** How big a kill by `kind` goes up: 'heavy', 'chunky' or 'plain'. */
+/** Guns: bullets and flak, not shells. Their kills are a rattle of hits and flak puffs, with no
+ *  fireball or smoke cloud (player feedback, 2026-11-20: the Anti-Air is bullets or flak). */
+export const GUNS = new Set(['Infantry', 'Recon', 'Anti-Air']);
+
+/** How big a kill by `kind` goes up: 'heavy', 'chunky', 'plain' or 'guns'. */
 export function blastSize(kind) {
-  return HEAVY.has(kind) ? 'heavy' : CHUNKY.has(kind) ? 'chunky' : 'plain';
+  return HEAVY.has(kind) ? 'heavy' : CHUNKY.has(kind) ? 'chunky' : GUNS.has(kind) ? 'guns' : 'plain';
 }
 
 export class Replay {
@@ -131,11 +135,18 @@ export class Replay {
 
   fireFx(st, before, p) {
     const a = st.attacker, d = st.defender;
+    const guns = GUNS.has(before.units[a?.unit_id]?.kind);
     if (a && d && p < 0.45) {
-      const q = p / 0.45;
       const [x0, y0] = a.at, [x1, y1] = d.at;
-      const x = x0 + (x1 - x0) * q, y = y0 + (y1 - y0) * q;
-      el('circle', { cx: (x + 0.5) * TILE, cy: (y + 0.5) * TILE, r: 4, class: 'fx-shot' }, this.fxLayer);
+      // A shell, or for guns a burst of tracers one after another.
+      for (let k = 0; k < (guns ? 4 : 1); k++) {
+        const q = (p - k * 0.06) / 0.27;
+        if (guns ? q < 0 || q > 1 : false) continue;
+        const f = guns ? q : p / 0.45, x = x0 + (x1 - x0) * f, y = y0 + (y1 - y0) * f;
+        if (!guns) { el('circle', { cx: (x + 0.5) * TILE, cy: (y + 0.5) * TILE, r: 4, class: 'fx-shot' }, this.fxLayer); continue; }
+        const len = Math.hypot(x1 - x0, y1 - y0) || 1, bx = x - ((x1 - x0) / len) * 0.45, by = y - ((y1 - y0) / len) * 0.45;   // a dash about half a tile long
+        el('line', { x1: (bx + 0.5) * TILE, y1: (by + 0.5) * TILE, x2: (x + 0.5) * TILE, y2: (y + 0.5) * TILE, class: 'fx-tracer' }, this.fxLayer);
+      }
     }
     for (const side of [d, a]) {
       if (!side) continue;
@@ -159,6 +170,7 @@ export class Replay {
    *  whose cap billows the same way. Shakes the camera while it lands. (`true` still means heavy.) */
   blast(x, y, r, size = 'plain') {
     if (size === true) size = 'heavy'; else if (size === false) size = 'plain';
+    if (size === 'guns') return this.flak(x, y, r);
     const heavy = size === 'heavy', chunky = size === 'chunky';
     const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE, L = this.fxLayer, k = heavy ? 1.6 : chunky ? 1.25 : 1;
     const out = (a) => 1 - (1 - a) ** 3, clamp = (a) => Math.max(0, Math.min(1, a));
@@ -214,6 +226,27 @@ export class Replay {
     // The cap: hot orange lumps, the smoke billow fading in over them as it cools.
     this.billow(cx, top, capW, capH / capW, 0, 1, grp, 'fx-cloud');
     this.billow(cx, top, capW, capH / capW, 1 - cool, cool, grp);
+  }
+
+  /** A kill by guns at (x, y), r from 0 to 1: hit sparks rattle across the unit, then flak puffs
+   *  pop around it one after another (a flash, then a small dark puff that drifts and fades). */
+  flak(x, y, r) {
+    const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE, L = this.fxLayer;
+    this.shake = Math.max(this.shake || 0, 0.1 * Math.max(0, 1 - r / 0.4));
+    this.shakeT = r;
+    const spots = [[0.1, -0.15], [-0.25, 0.1], [0.3, 0.2], [-0.05, -0.35], [0.2, -0.3], [-0.3, -0.2]];
+    spots.forEach(([dx, dy], i) => {
+      const s = (r - i * 0.07) / 0.45;
+      if (s <= 0 || s >= 1) return;
+      const px = cx + dx * TILE, py = cy + dy * TILE - TILE * 0.25 * s;
+      if (s < 0.2) el('circle', { cx: px, cy: py, r: TILE * (0.12 + 0.6 * s), class: 'fx-core', opacity: 1 - s / 0.2 }, L);
+      el('circle', { cx: px, cy: py, r: TILE * (0.13 + 0.2 * Math.sqrt(s)), class: 'fx-puff', opacity: (1 - s) * 0.9 }, L);
+      // A few short sparks off each hit.
+      if (s < 0.3) for (let j = 0; j < 3; j++) {
+        const a = i * 1.7 + j * 2.1, d0 = TILE * 0.1, d1 = d0 + TILE * 0.28 * (1 - s / 0.3);
+        el('line', { x1: px + Math.cos(a) * d0, y1: py + Math.sin(a) * d0, x2: px + Math.cos(a) * d1, y2: py + Math.sin(a) * d1, class: 'fx-spark', opacity: 1 - s / 0.3 }, L);
+      }
+    });
   }
 
   /** A lumpy smoke cloud centred at (cx, cy), `rx` wide and `squash` × as tall: a body plus a ring of
