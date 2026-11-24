@@ -49,14 +49,63 @@ export function awbwTileName(id, d, ownerCode) {
   return d?.name ? d.name.toLowerCase().replace(/\s+/g, '') : null;
 }
 
+// AWBW's map renderer joins seas and shoals to their neighbours: it names each sea and shoal tile
+// by what's around it ("sea<mask>", "shoal<0-80>") and draws that tile from its terrain sprite
+// sheet (terrain/terrain_spritesheet.png; terrain/tilesets.js says where each name sits). Its
+// default "new" shoals are the ones players call custom; the classic ones are aw2/'s GIFs.
+const RIVER_TO = {   // the river ids whose water runs off the tile on that side
+  n: [5, 6, 9, 10, 12, 13, 14], s: [5, 6, 7, 8, 11, 12, 14], e: [4, 6, 7, 10, 11, 13, 14], w: [4, 6, 8, 9, 11, 12, 13],
+};
+const isRiver = (id) => id >= 4 && id <= 14;
+
+/** AWBW's joined name for the sea (28) or shoal (29-32) at x, y, or null for any other tile.
+ *  idAt(x, y): the terrain id there (a building's own id), undefined off the map. */
+export function awbwWaterName(idAt, x, y) {
+  const id = idAt(x, y);
+  if (id === 28) {
+    // Eight neighbours from the top left, clockwise; a bit set where land meets this sea. A river
+    // flowing in from a side wets that side's two corners instead.
+    const ring = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]];
+    const inflow = { 1: ['s', 0x05], 3: ['w', 0x14], 5: ['n', 0x50], 7: ['e', 0x41] };
+    let land = 0;
+    ring.forEach(([dx, dy], k) => {
+      const n = idAt(x + dx, y + dy) ?? 32;   // off the map counts as water
+      if ((n >= 26 && n <= 33) || n === 195) return;
+      if (isRiver(n) && inflow[k] && RIVER_TO[inflow[k][0]].includes(n)) land |= inflow[k][1];
+      else land |= 1 << k;
+    });
+    // A corner only counts where neither side next to it is land.
+    land &= ~(((land << 1) | (land >> 1) | (land >> 7)) & 0x55);
+    return `sea${land}`;
+  }
+  if (id >= 29 && id <= 32) {
+    // Up, left, right, down, in base 3: 0 open water (or the map edge), 1 joins this shoal (shoal,
+    // teleporter, a bridge or river running into it), 2 land.
+    const sides = [[0, -1, 's', 26], [-1, 0, 'e', 27], [1, 0, 'w', 27], [0, 1, 'n', 26]];
+    let v = 0;
+    sides.forEach(([dx, dy, flow, bridge], k) => {
+      const n = idAt(x + dx, y + dy);
+      let t = 2;
+      if (n === undefined || n === 28 || n === 33) t = 0;
+      else if ((n >= 29 && n <= 32) || n === 195 || n === bridge) t = 1;
+      else if (isRiver(n) && RIVER_TO[flow].includes(n)) t = 1;
+      v += 3 ** k * t;
+    });
+    return `shoal${v}`;
+  }
+  return null;
+}
+
 /** countries: {playerId: AWBW country code ("os", "bm", "ci", ...)}, e.g. a storyboard's `countries`.
  *  missing: image names (as awbwTileName and `${code}${awbwUnitName(kind)}` give them) known not to
  *  load, drawn with libaw's art from the start. Without it a missing image shows the browser's
  *  broken-image icon until its error fires, which a recording can catch in a frame.
  *  src: (name) => an image URL to draw for that name instead of base's GIF, or null. A recording
  *  uses it to show one frame of an animated GIF chosen by its own clock (a browser plays GIFs by
- *  the wall clock, which a frame-by-frame recording doesn't follow). */
-export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null } = {}) {
+ *  the wall clock, which a frame-by-frame recording doesn't follow).
+ *  nameAt: (id, x, y) => the image name for the tile at board position x, y, or null for
+ *  awbwTileName's (e.g. awbwWaterName's joined seas and shoals, with src drawing them). */
+export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null, nameAt = () => null } = {}) {
   const href = (name) => src(name) ?? `${base}${name}.gif`;
   return {
     name: 'awbw',
@@ -87,7 +136,7 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src 
     /** One tile, bottom-aligned in a box two tiles tall (AWBW's buildings and mountains stand
      *  taller than a tile); rows are drawn top to bottom, so they overlap the row above. */
     tile(id, d, owner, parent, { x, y, size }) {
-      const name = awbwTileName(id, d, owner == null ? null : countries?.[owner]);
+      const name = nameAt(id, Math.round(x / size), Math.round(y / size)) ?? awbwTileName(id, d, owner == null ? null : countries?.[owner]);
       if (!name || missing.has(name)) return false;
       // AWBW's woods, mountains and buildings are drawn over a plain: their GIFs are transparent.
       if (name !== 'plain' && !/sea|shoal|reef|river|bridge/.test(name)) {
