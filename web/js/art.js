@@ -3,7 +3,10 @@
 // from AWBW's own site at view time: libaw ships no AWBW art, only where to find it. A sprite that
 // fails to load falls back to libaw's.
 const SVGNS = 'http://www.w3.org/2000/svg';
-export const AWBW_BASE = 'https://awbw.amarriner.com/terrain/aw2/';
+// AWBW's animated set (units march, owned buildings flash); same names and sizes as the still
+// aw2/ set, which has every one of them too (checked 2026-11-24).
+export const AWBW_BASE = 'https://awbw.amarriner.com/terrain/ani/';
+export const AWBW_STILL_BASE = 'https://awbw.amarriner.com/terrain/aw2/';
 
 export const spriteId = (kind) => `u-${kind.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
 
@@ -49,8 +52,12 @@ export function awbwTileName(id, d, ownerCode) {
 /** countries: {playerId: AWBW country code ("os", "bm", "ci", ...)}, e.g. a storyboard's `countries`.
  *  missing: image names (as awbwTileName and `${code}${awbwUnitName(kind)}` give them) known not to
  *  load, drawn with libaw's art from the start. Without it a missing image shows the browser's
- *  broken-image icon until its error fires, which a recording can catch in a frame. */
-export function awbwArt(countries, { base = AWBW_BASE, missing = new Set() } = {}) {
+ *  broken-image icon until its error fires, which a recording can catch in a frame.
+ *  src: (name) => an image URL to draw for that name instead of base's GIF, or null. A recording
+ *  uses it to show one frame of an animated GIF chosen by its own clock (a browser plays GIFs by
+ *  the wall clock, which a frame-by-frame recording doesn't follow). */
+export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null } = {}) {
+  const href = (name) => src(name) ?? `${base}${name}.gif`;
   return {
     name: 'awbw',
     /** Which way u's sprite faces as drawn with flip false ('left' or 'right'), or null when this
@@ -67,7 +74,7 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set() } = {
       if (flip) { g.setAttribute('transform', `translate(${2 * x + size} 0) scale(-1 1)`); parent.appendChild(g); }
       const img = document.createElementNS(SVGNS, 'image');
       for (const [k, v] of Object.entries({ x, y, width: size, height: size, preserveAspectRatio: 'xMidYMax meet' })) img.setAttribute(k, v);
-      img.setAttribute('href', `${base}${code}${awbwUnitName(u.kind)}.gif`);
+      img.setAttribute('href', href(`${code}${awbwUnitName(u.kind)}`));
       img.style.imageRendering = 'pixelated';
       img.addEventListener('error', () => {
         const use = document.createElementNS(SVGNS, 'use');
@@ -85,13 +92,13 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set() } = {
       // AWBW's woods, mountains and buildings are drawn over a plain: their GIFs are transparent.
       if (name !== 'plain' && !/sea|shoal|reef|river|bridge/.test(name)) {
         const under = document.createElementNS(SVGNS, 'image');
-        for (const [k, v] of Object.entries({ x, y, width: size, height: size, href: `${base}plain.gif` })) under.setAttribute(k, v);
+        for (const [k, v] of Object.entries({ x, y, width: size, height: size, href: href('plain') })) under.setAttribute(k, v);
         under.style.imageRendering = 'pixelated';
         parent.appendChild(under);
       }
       const img = document.createElementNS(SVGNS, 'image');
       for (const [k, v] of Object.entries({ x, y: y - size, width: size, height: 2 * size, preserveAspectRatio: 'xMidYMax meet' })) img.setAttribute(k, v);
-      img.setAttribute('href', `${base}${name}.gif`);
+      img.setAttribute('href', href(name));
       img.style.imageRendering = 'pixelated';
       img.addEventListener('error', () => {
         const use = document.createElementNS(SVGNS, 'use');
