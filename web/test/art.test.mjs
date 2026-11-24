@@ -8,6 +8,13 @@ assert.equal(awbwTileName(113, { name: 'Pipe Seam' }), 'hpipeseam');   // AWBW h
 assert.equal(awbwTileName(114, { name: 'Pipe Seam' }), 'vpipeseam');
 assert.equal(awbwTileName(112, { name: 'Missile Silo Empty' }), 'missilesiloempty');
 assert.equal(awbwTileName(30, { name: 'Shoal' }), 'hshoaln');
+assert.equal(awbwTileName(195, { name: 'Teleport Tile' }), 'teleporter');   // AWBW has no teleporttile.gif
+// A known-missing image goes straight to libaw's art (no document needed: nothing is drawn).
+{
+  const art = awbwArt({ 1: 'os' }, { missing: new Set(['teleporter', 'osmegatank']) });
+  assert.equal(art.tile(195, { name: 'Teleport Tile' }, null, null, { x: 0, y: 0, size: 16 }), false);
+  assert.equal(art.unit({ owner: 1, kind: 'Mega Tank' }, null, { x: 0, y: 0, size: 16 }), false);
+}
 assert.equal(awbwTileName(34, { name: 'Neutral City', building: 'city' }, null), 'neutralcity');
 // A captured tower takes its new owner's colours, whatever the tile id says.
 assert.equal(awbwTileName(133, { name: 'Neutral Com Tower', building: 'com-tower' }, 'bh'), 'blackholecomtower');

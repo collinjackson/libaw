@@ -26,15 +26,19 @@ export const AWBW_FACES_LEFT = new Set(['bm', 'yc', 'bh', 'rf', 'ab', 'pc', 'tg'
 /** Which way an AWBW country's unit sprites face: 'left' or 'right'. */
 export const awbwFacing = (code) => (AWBW_FACES_LEFT.has(code) ? 'left' : 'right');
 
-// Shoals and pipe seams have image names that don't follow their terrain names (both seams are
-// "Pipe Seam"; AWBW's images say which way the pipe runs).
-const AWBW_SHOALS = { 29: 'hshoal', 30: 'hshoaln', 31: 'vshoal', 32: 'vshoale', 113: 'hpipeseam', 114: 'vpipeseam' };
+// Tiles whose AWBW image names don't follow their terrain names: shoals, pipe seams (both are
+// "Pipe Seam"; AWBW's images say which way the pipe runs) and the Teleport Tile ("teleporter").
+// Checked against AWBW 2026-11-24: every other non-building name, and every country's Lab and
+// Com Tower, loads. The ids 1000+ (Sea-N-E-S-W, Shoal-AN...) are the Replay Player's own and
+// have no AWBW image; they fall back to libaw's tile.
+const AWBW_NAMES = { 29: 'hshoal', 30: 'hshoaln', 31: 'vshoal', 32: 'vshoale', 113: 'hpipeseam', 114: 'vpipeseam',
+  195: 'teleporter' };
 
 /** AWBW's image name for a tile: the terrain's name in lower case without spaces ("ESRoad" ->
  *  "esroad", "Neutral City" -> "neutralcity"); a building takes its current owner's country
  *  (ownerCode), since a capture changes the owner and not the tile. d: the terrain-map entry. */
 export function awbwTileName(id, d, ownerCode) {
-  if (AWBW_SHOALS[id]) return AWBW_SHOALS[id];
+  if (AWBW_NAMES[id]) return AWBW_NAMES[id];
   if (d?.building) {
     const country = ownerCode ? AWBW_COUNTRIES[ownerCode] : 'neutral';
     return country ? `${country}${d.building.replace(/-/g, '')}` : null;
@@ -42,8 +46,11 @@ export function awbwTileName(id, d, ownerCode) {
   return d?.name ? d.name.toLowerCase().replace(/\s+/g, '') : null;
 }
 
-/** countries: {playerId: AWBW country code ("os", "bm", "ci", ...)}, e.g. a storyboard's `countries`. */
-export function awbwArt(countries, { base = AWBW_BASE } = {}) {
+/** countries: {playerId: AWBW country code ("os", "bm", "ci", ...)}, e.g. a storyboard's `countries`.
+ *  missing: image names (as awbwTileName and `${code}${awbwUnitName(kind)}` give them) known not to
+ *  load, drawn with libaw's art from the start. Without it a missing image shows the browser's
+ *  broken-image icon until its error fires, which a recording can catch in a frame. */
+export function awbwArt(countries, { base = AWBW_BASE, missing = new Set() } = {}) {
   return {
     name: 'awbw',
     /** Which way u's sprite faces as drawn with flip false ('left' or 'right'), or null when this
@@ -54,7 +61,7 @@ export function awbwArt(countries, { base = AWBW_BASE } = {}) {
     },
     unit(u, parent, { x, y, size, flip }) {
       const code = countries?.[u.owner];
-      if (!code) return false;
+      if (!code || missing.has(`${code}${awbwUnitName(u.kind)}`)) return false;
       // AWBW's sprites already face their side's way: undo the board's mirror for odd seats.
       const g = flip ? document.createElementNS(SVGNS, 'g') : parent;
       if (flip) { g.setAttribute('transform', `translate(${2 * x + size} 0) scale(-1 1)`); parent.appendChild(g); }
@@ -74,7 +81,7 @@ export function awbwArt(countries, { base = AWBW_BASE } = {}) {
      *  taller than a tile); rows are drawn top to bottom, so they overlap the row above. */
     tile(id, d, owner, parent, { x, y, size }) {
       const name = awbwTileName(id, d, owner == null ? null : countries?.[owner]);
-      if (!name) return false;
+      if (!name || missing.has(name)) return false;
       // AWBW's woods, mountains and buildings are drawn over a plain: their GIFs are transparent.
       if (name !== 'plain' && !/sea|shoal|reef|river|bridge/.test(name)) {
         const under = document.createElementNS(SVGNS, 'image');
