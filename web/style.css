@@ -106,7 +106,7 @@ footer.foot { padding: 4px 16px 20px; margin: 0; }
 .mark.attack { fill: var(--attack); }
 .mark.pick { fill: var(--pick); }
 .mark.path { fill: rgba(255,255,255,.35); }
-.unit.moved { filter: saturate(.25) brightness(.82); }
+.unit.moved { filter: brightness(.78) saturate(.9); }   /* dimmed, but still its army's colour */
 .unit.selected use { filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px var(--accent)); }
 .hpbg { fill: #1f2430; opacity: .85; }
 .hp { fill: #fff; font: 700 10px system-ui, sans-serif; text-anchor: middle; }
