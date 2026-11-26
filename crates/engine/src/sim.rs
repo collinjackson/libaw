@@ -17,8 +17,13 @@ pub fn remove_unit(s: &mut State, id: UnitId) {
                 b.capture = CAPTURE_POINTS;
             }
         }
-        for c in u.cargo {
-            s.units.remove(&c);
+        // Cargo goes down with its transport, and cargo's cargo too (a loaded APC in a Lander:
+        // its Infantry was left behind as a ghost, carried by nothing, in a local match).
+        let mut cargo = u.cargo;
+        while let Some(c) = cargo.pop() {
+            if let Some(cu) = s.units.remove(&c) {
+                cargo.extend(cu.cargo);
+            }
         }
         if let Some(t) = u.carried_by.and_then(|t| s.units.get_mut(&t)) {
             t.cargo.retain(|&x| x != id);
