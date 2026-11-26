@@ -106,6 +106,12 @@ footer.foot { padding: 4px 16px 20px; margin: 0; }
 .mark.attack { fill: var(--attack); }
 .mark.pick { fill: var(--pick); }
 .mark.path { fill: rgba(255,255,255,.35); }
+/* The replay ghost's squares: an unload's landing tiles, a Black Boat's repairs, a Black Bomb's
+   blast, a silo's. */
+.mark.drop { fill: rgba(255, 226, 120, .5); stroke: rgba(255,255,255,.85); stroke-width: 2; }
+.mark.repair { fill: rgba(70, 200, 110, .5); }
+.mark.blast { fill: rgba(170, 70, 230, .42); }
+.mark.silo { fill: rgba(255, 255, 255, .5); }
 .unit.moved { filter: brightness(.78) saturate(.9); }   /* dimmed, but still its army's colour */
 .unit.selected use { filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px var(--accent)); }
 .hpbg { fill: #1f2430; opacity: .85; }

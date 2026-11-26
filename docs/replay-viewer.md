@@ -37,6 +37,36 @@ URL options:
 | `art=libaw` or `art=awbw` | Which sprites to draw (default `libaw`). |
 | `camera=1` | Start with "Follow the action" on. |
 | `capture=1` | Hide the controls, for recording. |
+| `ghost=1` | Act out each step first, as the player's cursor and menus would (below). |
+| `ghostpace=K` | The ghost's segments K times as long (`0.5` twice as fast, `0` no ghost). |
+
+### The ghost (`ghost=1`)
+
+After [AWBW Ghost Input](sources.md) (onetrickwolf, MIT), whose behaviour and timings it follows
+in libaw's own drawing: one cursor for the whole turn glides to each unit (Ghost Input's mouse
+timing, 0.12 to 0.7 s by distance), shows its move range and traces the path arrow, and after the
+move opens the menu the player saw at the destination (Fire, Unload, Repair, Supply, Hide or
+Unhide, Capt, Launch, Explode, Delete, Wait, in AWBW's order; a Load or Join alone), hovers the
+choice and presses it. Then, by what the unit did:
+
+- **Fire**: the targets in red, the cursor glides to the one hit, and a damage box shows the
+  damage the shot could do (lowest to highest luck) and the counterattack's.
+- **Unload**: AWBW drops cargo only from where a transport stands, so a transport that moved
+  waits first and is clicked again (a menu of Unload alone), then the cargo list, then the
+  landing tiles with the cursor going to the drop. The cargo rolls out of the transport.
+- **Build**: the cursor on the base, then its build menu (every unit it makes at the player's
+  prices, cheapest first, the ones they couldn't afford greyed) with the bought unit pressed.
+- **Black Bomb**: the blast area (3 tiles), its own tile pressed; the blast hits every unit in it.
+- **Missile silo**: the cursor goes to the target with the 2-tile blast area following it,
+  presses it, and a one-option menu (Fire Silo) confirms.
+- **Black Boat**: green squares on the units beside it, the repaired one pressed.
+- **Supply, Hide, Unhide, Delete, Capt, Join, Load**: just the menu's choice.
+
+Ranges, menus, damage boxes, build menus and landing tiles come from libaw's engine in the page
+(`web/pkg`, built with `wasm-pack build crates/wasm --release --target web --out-dir ../../web/pkg`).
+Without it the ghost plays the same way, showing less: no ranges or damage boxes, menus with the
+choice, Wait and what the unit alone tells.
+
 
 ## Following a game: new boards in place
 
@@ -51,7 +81,10 @@ moves come in, the next turn, or another game), redraws it at time `t` (default:
 and keeps the page, its listeners and the loaded art. With `fade` (ms), the old frame fades out
 over the new one, so units that acted ease back to full colour at a turn change instead of
 jumping. Other members of `__replay`: `duration`, `renderAt(t)`, `segments` (each shot's `t0`,
-`t1`, `step`, `phase`), `steps`, `start`, `stateBefore(i)` (the board before step `i`).
+`t1`, `step`, `phase`), `steps`, `start`, `stateBefore(i)` (the board before step `i`),
+A segment whose `phase` is the step's own type is the step itself;
+the ghost's segments (`ghost: true`: phases `hop`, `aim`, `select`, `menu`, `target`, `drop`,
+`repair`, `blast`, `silo`) come before it, and a move's `menu` right after it.
 
 ## About the AWBW art
 

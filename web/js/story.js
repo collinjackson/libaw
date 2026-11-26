@@ -137,21 +137,26 @@ export const DUR = { tile: 0.14, fire: 1.1, capture: 0.9, power: 1.6, build: 0.5
  *  {t0, t1, step index, phase, shot} where phase is 'move' | 'fire' | 'capture' | 'power' |
  *  'build' | 'join' | 'hold' | 'other'. Steps between chosen shots are applied as a cut (no time).
  *  before(step, i, shot) -> [{phase, dur}]: extra segments a caller plays ahead of a step (its
- *  own phases, drawn by the viewer's overlays). dur(step) -> seconds or null: a caller's length for
+ *  own phases, drawn by the viewer's overlays); a segment's other fields are kept on it.
+ *  after(step, i, shot): the same, played right after the step. dur(step) -> seconds or null: a caller's length for
  *  a step (e.g. longer for a kill), else DUR's. hold(shot) -> seconds or null: the pause after a shot. */
-export function timeline(sb, chosen, { before = null, dur = null, hold = null } = {}) {
+export function timeline(sb, chosen, { before = null, after = null, dur = null, hold = null } = {}) {
   const segs = [];
   let t = 0;
   for (const sh of chosen) {
     for (let i = sh.from; i < sh.to; i++) {
       const st = sb.steps[i];
-      for (const x of (before ? before(st, i, sh) : null) ?? []) {
-        segs.push({ t0: t, t1: t + x.dur, step: i, phase: x.phase, shot: sh });
-        t += x.dur;
-      }
+      const extra = (xs) => {
+        for (const x of xs ?? []) {
+          segs.push({ ...x, t0: t, t1: t + x.dur, step: i, phase: x.phase, shot: sh });
+          t += x.dur;
+        }
+      };
+      extra(before?.(st, i, sh));
       const d = dur?.(st) ?? (st.type === 'move' ? Math.max(1, st.path.length - 1) * DUR.tile : (DUR[st.type] ?? DUR.other));
       segs.push({ t0: t, t1: t + d, step: i, phase: st.type, shot: sh });
       t += d;
+      extra(after?.(st, i, sh));
     }
     const h = hold?.(sh) ?? DUR.hold;   // the pause on the shot's end (hold: e.g. long enough to read its caption)
     segs.push({ t0: t, t1: t + h, step: sh.to - 1, phase: 'hold', shot: sh });

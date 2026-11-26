@@ -25,6 +25,7 @@
   .fx-stem { fill: #e8701e; } .fx-cloud { fill: #ff9a2a; } .fx-cloud-cool { fill: #6d655d; }
   .fx-tracer { stroke: #ffe27a; stroke-width: 3; stroke-linecap: round; } .fx-puff { fill: #3d3a38; }
   .fx-billow { fill: #4a3d36; } .fx-crack { fill: none; stroke: #ff8a2a; stroke-width: 3; stroke-linecap: round; }
+  .fx-area { fill: #fff3a0; }
   .fx-spark { stroke: #ffe27a; stroke-width: 2.5; stroke-linecap: round; }
   .hpbar { fill: #0b0d12; opacity: .85; } .hpseg.hi { fill: #6fdc8c; } .hpseg.mid { fill: #f2d23a; } .hpseg.lo { fill: #ff6a4a; } .hpseg.off { fill: #3a3f4a; }
   .fx-dmg { fill: #fff; stroke: #000; stroke-width: 3; paint-order: stroke; font: 900 18px system-ui, sans-serif; text-anchor: middle; }
@@ -63,7 +64,8 @@ import { segmentAt } from './js/story.js';
 // (js/look.js; custom shoals need it), &hp=bars (segmented HP bars), &cap=numbers (capture points
 // drawn on buildings; otherwise a capturing unit's C badge, with the count on hover),
 // &pad=even (as much room below the board as above it, for tall sprites),
-// &ghost=1 (act out each move first: its range, then the path arrow; a shot marks its target),
+// &ghost=1 (act out each step first, as the player's cursor and menus would: docs/replay-viewer.md),
+// &ghostpace=K (the ghost's segments K times as long: 0.5 twice as fast, 0 none),
 // &face=sides (AWBW art: first seat faces right, second left, instead of each country's own way),
 // &capture=1 (no controls; window.__replay.renderAt(t) for web/capture.mjs).
 const q = new URLSearchParams(location.search);
@@ -86,17 +88,18 @@ $('hp').checked = q.get('hp') === 'bars';
 const water = q.get('water') ? await fetch(q.get('water')).then((r) => r.json()).catch(() => null) : null;
 const name = (id) => sb.names?.[id] ?? `Player ${id}`;
 
-let rp, stop = null;
+let rp, stop = null, ghostPace = q.has('ghostpace') ? Math.max(0, Number(q.get('ghostpace')) || 0) : 1;
 async function setup(t0 = 0) {
   if (stop) stop();
   const hover = rp?.board.hoverTile ?? null;
   rp?.board.destroy();
   const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water, sides: q.get('face') === 'sides' }) : null;
-  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers', ghost: q.get('ghost') === '1', even: q.get('pad') === 'even' });
-  if (rp.ghost) ghostRanges(rp);
+  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers', ghost: q.get('ghost') === '1', ghostPace, even: q.get('pad') === 'even' });
+  if (rp.ghost) loadEngine().catch(() => null);
   // AWBW's top-row sprites stand above the board: learn their heights before the first frame,
   // so the board (and a capture's frame size) has room for them from the start.
   await rp.board.measureArt(rp.states);
+  if (rp.ghost) ghostRanges(rp);
   hookTip();
   if (hover) { rp.board.hoverTile = hover; rp.board.hoverKey = `${hover[0]},${hover[1]}`; }
   $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${sb.steps.length} steps, ${rp.duration.toFixed(1)} s`;
@@ -131,27 +134,13 @@ function tipText(st, x, y) {
 // press), with its CO's power if one was used this turn.
 let engine = null, sel = null, lastHold = null, didHold = false;   // lastHold: {id, phase} of the previous hold
 const loadEngine = () => (engine ??= import('./pkg/libaw_wasm.js').then(async (m) => { await m.default(); return m; }));
-// The ghost's ranges: where each moving unit could go, and what each shooter could hit, worked
-// out by the engine on the board before that step (with any CO power used earlier in the turn).
+// What the ghost shows from the engine (ranges, menus, damage boxes): without pkg/ it plays all
+// the same, showing less.
 async function ghostRanges(r) {
   const m = await loadEngine().catch(() => null);
-  if (!m) return;
-  sb.steps.forEach((s, i) => {
-    const id = s.type === 'move' ? s.unit_id : s.type === 'fire' ? s.attacker?.unit_id : null;
-    if (id == null) return;
-    try {
-      const out = JSON.parse(m.reach(JSON.stringify(withPowers(r.states[i], i)), id));
-      if (out.error) return;
-      if (s.type === 'move') r.ghost.move[i] = new Set(out.moves.map(([x, y]) => key(x, y)));
-      else r.ghost.attack[i] = new Set(out.attack.map(([x, y]) => key(x, y)));
-    } catch {}
-  });
-}
-function withPowers(state, upto) {
-  const st = structuredClone(state);
-  for (const s of sb.steps.slice(0, upto))
-    if (s.type === 'power') { const p = st.players.find((p) => p.id === s.player); if (p) p.power = s.super ? 'S' : 'Y'; }
-  return st;
+  if (!m || r !== rp) return;
+  r.ghostEngine(m);
+  renderAt(lastT);
 }
 function stateNow() {
   const st = structuredClone(rp.board.state);
