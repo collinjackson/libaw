@@ -62,6 +62,7 @@ import { segmentAt } from './js/story.js';
 // &anim=0 (AWBW's still sprites), &shoals=custom|classic, &water=URL of a sea/shoal tile table
 // (js/look.js; custom shoals need it), &hp=bars (segmented HP bars), &cap=numbers (capture points
 // drawn on buildings; otherwise a capturing unit's C badge, with the count on hover),
+// &ghost=1 (act out each move first: its range, then the path arrow; a shot marks its target),
 // &face=sides (AWBW art: first seat faces right, second left, instead of each country's own way),
 // &capture=1 (no controls; window.__replay.renderAt(t) for web/capture.mjs).
 const q = new URLSearchParams(location.search);
@@ -88,7 +89,8 @@ let rp, stop = null;
 async function setup() {
   if (stop) stop();
   const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water, sides: q.get('face') === 'sides' }) : null;
-  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers' });
+  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers', ghost: q.get('ghost') === '1' });
+  if (rp.ghost) ghostRanges(rp);
   // AWBW's top-row sprites stand above the board: learn their heights before the first frame,
   // so the board (and a capture's frame size) has room for them from the start.
   await rp.board.measureArt(rp.states);
@@ -124,6 +126,28 @@ function tipText(st, x, y) {
 // press), with its CO's power if one was used this turn.
 let engine = null, sel = null, lastHold = null, didHold = false;   // lastHold: {id, phase} of the previous hold
 const loadEngine = () => (engine ??= import('./pkg/libaw_wasm.js').then(async (m) => { await m.default(); return m; }));
+// The ghost's ranges: where each moving unit could go, and what each shooter could hit, worked
+// out by the engine on the board before that step (with any CO power used earlier in the turn).
+async function ghostRanges(r) {
+  const m = await loadEngine().catch(() => null);
+  if (!m) return;
+  sb.steps.forEach((s, i) => {
+    const id = s.type === 'move' ? s.unit_id : s.type === 'fire' ? s.attacker?.unit_id : null;
+    if (id == null) return;
+    try {
+      const out = JSON.parse(m.reach(JSON.stringify(withPowers(r.states[i], i)), id));
+      if (out.error) return;
+      if (s.type === 'move') r.ghost.move[i] = new Set(out.moves.map(([x, y]) => key(x, y)));
+      else r.ghost.attack[i] = new Set(out.attack.map(([x, y]) => key(x, y)));
+    } catch {}
+  });
+}
+function withPowers(state, upto) {
+  const st = structuredClone(state);
+  for (const s of sb.steps.slice(0, upto))
+    if (s.type === 'power') { const p = st.players.find((p) => p.id === s.player); if (p) p.power = s.super ? 'S' : 'Y'; }
+  return st;
+}
 function stateNow() {
   const st = structuredClone(rp.board.state);
   const i = segmentAt(rp.tl, lastT)?.seg.step ?? sb.steps.length;

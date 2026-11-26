@@ -17,6 +17,9 @@ function el(name, attrs, parent) {
 
 /** Units whose kill gets the mushroom cloud: bomber-sized hits only. Foot soldiers and vehicles
  *  don't, except the Mega Tank (player feedback, 2026-11-20). */
+/** How long the ghost's aim (range and arrow) and target phases last, in seconds. */
+export const GHOST = { aim: 0.55, target: 0.4 };
+
 export const HEAVY = new Set(['Bomber', 'Black Bomb', 'Battleship', 'Mega Tank']);
 /** Chunky kills: a bigger fireball with extra bursts, but no cloud (the Mech's bazooka, the heavy
  *  tanks, the big guns). */
@@ -38,7 +41,11 @@ export class Replay {
    *  timeline step lengths (story.timeline), before: timeline hook (story.timeline), overlays: {phase:
    *  ({layer, box, p, seg, st, before, after, replay}) => void} to draw a caller's phases (or
    *  replace a built-in one), onShot(shot, index)}. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {} } = {}) {
+  /** ghost: act out each move first, as a player's cursor would (after AWBW Ghost Input by
+   *  onetrickwolf): its move range, then the path arrow drawn out, then the move along it; a
+   *  shot first marks the tiles in range and its target. Fill replay.ghost.move[step] /
+   *  .attack[step] (Sets of "x,y") with the ranges; without them only the arrows show. */
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, ghost = false } = {}) {
     this.art = art;
     this.sb = sb;
     this.data = data;
@@ -46,7 +53,11 @@ export class Replay {
     this.states = statesOf(sb);
     this.order = sb.start.players.map((p) => p.id);
     this.shots = shots ?? allShots(sb);
-    this.tl = timeline(sb, this.shots, { before, dur, hold });
+    this.ghost = ghost ? { move: {}, attack: {} } : null;
+    const aim = ghost ? (st) => (st.type === 'move' && st.path.length > 1 ? [{ phase: 'aim', dur: GHOST.aim }]
+      : st.type === 'fire' ? [{ phase: 'target', dur: GHOST.target }] : null) : null;
+    const pre = before && aim ? (st, i, sh) => [...(aim(st) ?? []), ...(before(st, i, sh) ?? [])] : before ?? aim;
+    this.tl = timeline(sb, this.shots, { before: pre, dur, hold });
     this.duration = this.tl.duration;
     this.camera = camera;
     this.aspect = aspect;
@@ -76,15 +87,24 @@ export class Replay {
     const { seg, p } = at;
     const st = this.sb.steps[seg.step];
     const before = this.states[seg.step], after = this.states[seg.step + 1];
-    let state = after, fx = null, under = null;
+    let state = after, fx = null, under = null, marks = this.marks ?? {}, arrow = null;
     const overlay = this.overlays[seg.phase];
-    if (overlay) {
+    if (seg.phase === 'aim') {
+      state = before;
+      if (!this.marks?.move && !this.marks?.attack) marks = { move: this.ghost?.move[seg.step] };
+      arrow = [st.path, 0, ease(Math.min(1, p / 0.7))];
+    } else if (seg.phase === 'target') {
+      state = before;
+      if (!this.marks?.move && !this.marks?.attack) marks = { attack: this.ghost?.attack[seg.step] };
+      fx = () => this.cursor(st.defender?.at, p);
+    } else if (overlay) {
       state = before;
       fx = () => overlay({ layer: this.fxLayer, box: this.boxFor(seg.shot).map((v) => v * TILE), p, seg, st, before, after, replay: this });
     } else if (seg.phase === 'move') {
       state = JSON.parse(JSON.stringify(before));
       const u = state.units[st.unit_id];
       if (u) { [u.x, u.y] = alongPath(st.path, ease(p)); u.moved = false; }
+      if (this.ghost) arrow = [st.path, ease(p), 1];
     } else if (seg.phase === 'fire') {
       state = p < 0.45 ? before : after;
       fx = () => this.fireFx(st, before, p);
@@ -103,13 +123,45 @@ export class Replay {
     }
     // Units that have acted are greyed, as on AWBW; one moving keeps its colour until it stops.
     const shown = state;
-    this.board.draw(shown, { order: this.order, mirrorOdd: true, marks: this.marks ?? {} });
+    this.board.draw(shown, { order: this.order, mirrorOdd: true, marks });
+    if (arrow) this.arrow(...arrow);
     if (under) under();
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
     this.shake = 0;
     if (fx) fx();
     this.setCamera(seg, p);
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
+  }
+
+  /** The move arrow along path from fraction a to b of its length, under the units. */
+  arrow(path, a, b) {
+    const layer = this.board.svg.querySelector('g.marks');
+    if (!layer || b <= a) return;
+    const n = path.length - 1, pts = [];
+    const at = (f) => alongPath(path, f);
+    pts.push(at(a));
+    for (let i = 1; i < n; i++) if (i / n > a && i / n < b) pts.push(path[i]);
+    pts.push(at(b));
+    const xy = pts.map(([x, y]) => [(x + 0.5) * TILE, (y + 0.5) * TILE]);
+    const g = el('g', { class: 'fx-arrow' }, layer);
+    const d = 'M' + xy.map((p) => p.join(' ')).join(' L');
+    el('path', { d, fill: 'none', stroke: '#fff', 'stroke-width': 13, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.9 }, g);
+    el('path', { d, fill: 'none', stroke: '#e8412c', 'stroke-width': 7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+    if (b >= 1 && xy.length > 1) {   // the head, pointing along the last stretch
+      const [x1, y1] = xy[xy.length - 1], [x0, y0] = xy[xy.length - 2];
+      const ang = (Math.atan2(y1 - y0, x1 - x0) * 180) / Math.PI;
+      el('path', { d: 'M 9 0 L -6 -10 L -6 10 Z', fill: '#e8412c', stroke: '#fff', 'stroke-width': 3, 'stroke-linejoin': 'round', transform: `translate(${x1} ${y1}) rotate(${ang})` }, g);
+    }
+  }
+
+  /** A target cursor (four corner brackets) closing in on tile [x, y]. */
+  cursor(at, p) {
+    if (!at) return;
+    const [x, y] = at, s = 4 + 6 * (1 - ease(Math.min(1, p / 0.6))), L = 11;
+    const g = el('g', { class: 'fx-cursor', fill: 'none', stroke: '#fff', 'stroke-width': 4, 'stroke-linecap': 'square' }, this.fxLayer);
+    const x0 = x * TILE - s + 3, y0 = y * TILE - s + 3, x1 = (x + 1) * TILE + s - 3, y1 = (y + 1) * TILE + s - 3;
+    for (const [cx, cy, dx, dy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]])
+      el('path', { d: `M ${cx} ${cy + dy * L} L ${cx} ${cy} L ${cx + dx * L} ${cy}`, style: 'filter: drop-shadow(0 0 2px #000)' }, g);
   }
 
   /** The phase playing at t ('move', 'fire', ...). */
