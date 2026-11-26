@@ -208,16 +208,16 @@ export class Replay {
     const guns = GUNS.has(before.units[a?.unit_id]?.kind);
     if (a && d && p < 0.45) {
       const [x0, y0] = a.at, [x1, y1] = d.at;
-      // A shell, or for guns a burst of tracers one after another.
-      for (let k = 0; k < (guns ? 4 : 1); k++) {
-        const q = (p - k * 0.06) / 0.27;
-        if (guns ? q < 0 || q > 1 : false) continue;
-        const f = guns ? q : p / 0.45, x = x0 + (x1 - x0) * f, y = y0 + (y1 - y0) * f;
-        if (!guns) { el('circle', { cx: (x + 0.5) * TILE, cy: (y + 0.5) * TILE, r: 4, class: 'fx-shot' }, this.fxLayer); continue; }
-        const len = Math.hypot(x1 - x0, y1 - y0) || 1, bx = x - ((x1 - x0) / len) * 0.45, by = y - ((y1 - y0) / len) * 0.45;   // a dash about half a tile long
-        el('line', { x1: (bx + 0.5) * TILE, y1: (by + 0.5) * TILE, x2: (x + 0.5) * TILE, y2: (y + 0.5) * TILE, class: 'fx-tracer' }, this.fxLayer);
+      // A shell. Guns (infantry, recon, anti-air) draw no projectile: the shooter shakes instead.
+      if (!guns) {
+        const f = p / 0.45, x = x0 + (x1 - x0) * f, y = y0 + (y1 - y0) * f;
+        el('circle', { cx: (x + 0.5) * TILE, cy: (y + 0.5) * TILE, r: 4, class: 'fx-shot' }, this.fxLayer);
       }
     }
+    if (a && guns && p < 0.4) this.jolt(a.unit_id, p);
+    // A counterattack with guns shakes the defender a beat later.
+    const au = before.units[a?.unit_id], countered = au && a.display_hp != null && a.display_hp < Math.ceil(au.hp.hi / 10);
+    if (d && countered && GUNS.has(before.units[d.unit_id]?.kind) && p > 0.25 && p < 0.65) this.jolt(d.unit_id, p - 0.25);
     for (const side of [d, a]) {
       if (!side) continue;
       const u = before.units[side.unit_id];
@@ -238,6 +238,14 @@ export class Replay {
       } else if (q > 0.35 && q < 0.65) this.flash(side.at[0], side.at[1], 1 - (q - 0.35) / 0.3, 'fx-hit');
       if (q > 0.45) this.pop(side.at[0], side.at[1], dead ? 'KO' : `−${lost}`, (q - 0.45) / 0.55, 'fx-dmg');
     }
+  }
+
+  /** A unit firing a gun: a quick, small shake of its sprite (q from 0, over about 0.4). */
+  jolt(id, q) {
+    const g = this.board.svg.querySelector(`g.unit[data-id="${id}"]`);
+    if (!g) return;
+    const k = 1.6 * Math.max(0, 1 - q / 0.4);
+    g.setAttribute('transform', `translate(${(k * Math.sin(q * 190)).toFixed(2)} ${(0.5 * k * Math.cos(q * 230)).toFixed(2)})`);
   }
 
   /** A unit destroyed at (x, y), r from 0 to 1, by blastSize. Every size opens with a flash,
