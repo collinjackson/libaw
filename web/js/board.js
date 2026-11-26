@@ -31,11 +31,13 @@ export function unitStatus(u, b) {
 export class Board {
   /** art: optional art set (web/js/art.js), {unit(u, parent, box), tile(id, entry, owner, parent,
    *  box)}, each -> true when it drew; without one, or when it declines, libaw's own art is used. */
-  /** opts: art (an art set), hpBars: a damaged unit's HP as ten segments above it (a recording
+  /** opts: capCounts: a building's capture points left drawn on it (otherwise the capturing unit's
+   *  C badge marks it, as AWBW does). art (an art set), hpBars: a damaged unit's HP as ten segments above it (a recording
    *  nobody can hover; easier to read than the corner number) instead of the number. */
-  constructor(svg, terrainMap, { art = null, hpBars = false } = {}) {
+  constructor(svg, terrainMap, { art = null, hpBars = false, capCounts = true } = {}) {
     this.svg = svg;
     this.hpBars = hpBars;
+    this.capCounts = capCounts;
     this.tmap = terrainMap;
     this.art = art;
     this.onTile = () => {};
@@ -90,7 +92,7 @@ export class Board {
         const b = blds.get(key(x, y));
         if (this.art?.tile?.(terrainAt(state, x, y), d, d.building ? (b?.owner ?? null) : null, terrain,
                             { x: x * TILE, y: y * TILE, size: TILE })) {
-          if (d.building && b && b.capture < 20) {
+          if (this.capCounts && d.building && b && b.capture < 20) {
             const g = el('g', { class: 'bld' }, terrain);
             el('rect', { x: x * TILE + TILE - 17, y: y * TILE + 1, width: 16, height: 12, rx: 3, class: 'capbg' }, g);
             el('text', { x: x * TILE + TILE - 9, y: y * TILE + 10.5, class: 'cap' }, g).textContent = b.capture;
@@ -113,7 +115,7 @@ export class Board {
         if (bname) {
           const g = el('g', { class: `bld ${cls(b?.owner ?? null)}` }, terrain);
           use(`t-bld-${bname}`, x, y, g);
-          if (b && b.capture < 20) {
+          if (this.capCounts && b && b.capture < 20) {
             el('rect', { x: x * TILE + TILE - 17, y: y * TILE + 1, width: 16, height: 12, rx: 3, class: 'capbg' }, g);
             el('text', { x: x * TILE + TILE - 9, y: y * TILE + 10.5, class: 'cap' }, g).textContent = b.capture;
           }

@@ -34,15 +34,15 @@ export function blastSize(kind) {
 export class Replay {
   /** opts: {data: {units, terrain, tmap}, art, shots: which to play (default all, in order),
    *  camera: zoom to each shot, aspect: the camera box's height / width (0.72; 1 for a square
-   *  frame that a chat's square preview shows whole), hpBars: segmented HP bars (Board), dur:
+   *  frame that a chat's square preview shows whole), hpBars: segmented HP bars (Board), capCounts: capture points drawn on buildings (Board), dur:
    *  timeline step lengths (story.timeline), before: timeline hook (story.timeline), overlays: {phase:
    *  ({layer, box, p, seg, st, before, after, replay}) => void} to draw a caller's phases (or
    *  replace a built-in one), onShot(shot, index)}. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, dur = null, before = null, hold = null, overlays = {}, onShot = () => {} } = {}) {
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {} } = {}) {
     this.art = art;
     this.sb = sb;
     this.data = data;
-    this.board = new Board(svg, data.tmap, { art, hpBars });
+    this.board = new Board(svg, data.tmap, { art, hpBars, capCounts });
     this.states = statesOf(sb);
     this.order = sb.start.players.map((p) => p.id);
     this.shots = shots ?? allShots(sb);
