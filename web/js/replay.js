@@ -45,11 +45,11 @@ export class Replay {
    *  onetrickwolf): its move range, then the path arrow drawn out, then the move along it; a
    *  shot first marks the tiles in range and its target. Fill replay.ghost.move[step] /
    *  .attack[step] (Sets of "x,y") with the ranges; without them only the arrows show. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, ghost = false } = {}) {
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, ghost = false, even = false } = {}) {
     this.art = art;
     this.sb = sb;
     this.data = data;
-    this.board = new Board(svg, data.tmap, { art, hpBars, capCounts });
+    this.board = new Board(svg, data.tmap, { art, hpBars, capCounts, even });
     this.states = statesOf(sb);
     this.order = sb.start.players.map((p) => p.id);
     this.shots = shots ?? allShots(sb);
@@ -172,8 +172,9 @@ export class Replay {
     // A blast shakes the picture (fireFx sets this.shake, in tiles); deterministic in t.
     const s = this.shake || 0, dx = s * Math.sin(seg.t0 * 97 + (this.shakeT ?? 0) * 71), dy = s * Math.cos(seg.t0 * 53 + (this.shakeT ?? 0) * 89);
     const up = y <= 0 ? (this.board.headroom ?? 0) : 0;   // the top row's tall sprites, as in Board.draw
-    this.board.svg.setAttribute('viewBox', `${(x + dx) * TILE} ${(y + dy - up) * TILE} ${w * TILE} ${(h + up) * TILE}`);
-    this.board.svg.style.aspectRatio = `${w} / ${h + up}`;
+    const down = this.board.even && y + h >= this.sb.start.height ? (this.board.headroom ?? 0) : 0;
+    this.board.svg.setAttribute('viewBox', `${(x + dx) * TILE} ${(y + dy - up) * TILE} ${w * TILE} ${(h + up + down) * TILE}`);
+    this.board.svg.style.aspectRatio = `${w} / ${h + up + down}`;
   }
 
   flash(x, y, a, cls = 'fx-hit') {

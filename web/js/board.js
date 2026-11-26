@@ -34,8 +34,11 @@ export class Board {
   /** opts: capCounts: a building's capture points left drawn on it (otherwise the capturing unit's
    *  C badge marks it, as AWBW does). art (an art set), hpBars: a damaged unit's HP as ten segments above it (a recording
    *  nobody can hover; easier to read than the corner number) instead of the number. */
-  constructor(svg, terrainMap, { art = null, hpBars = false, capCounts = true } = {}) {
+  /** even: the same margin below the bottom row as the headroom above the top one, so the board
+   *  sits centred in a frame instead of low. */
+  constructor(svg, terrainMap, { art = null, hpBars = false, capCounts = true, even = false } = {}) {
     this.svg = svg;
+    this.even = even;
     this.hpBars = hpBars;
     this.capCounts = capCounts;
     this.tmap = terrainMap;
@@ -70,8 +73,9 @@ export class Board {
     // Headroom above the top row, for sprites that stand taller than their tile and HP bars.
     this.headroom = this.headroomFor(state);
     const head = this.headroom;
-    s.setAttribute('viewBox', `0 ${-head * TILE} ${state.width * TILE} ${(state.height + head) * TILE}`);
-    s.style.aspectRatio = `${state.width} / ${state.height + head}`;
+    const foot = this.even ? head : 0;
+    s.setAttribute('viewBox', `0 ${-head * TILE} ${state.width * TILE} ${(state.height + head + foot) * TILE}`);
+    s.style.aspectRatio = `${state.width} / ${state.height + head + foot}`;
     const cls = (owner) => (owner == null ? 'pn' : `p${Math.max(0, order.indexOf(owner)) % 8}`);
     const terrain = el('g', { class: 'terrain' }, s);
     const name = (x, y) => this.tmap[terrainAt(state, x, y)] ?? { base: 'plain' };
