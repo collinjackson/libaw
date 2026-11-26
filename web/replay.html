@@ -101,7 +101,7 @@ function renderAt(t) { lastT = t; checkSelection(); rp.renderAt(t); $('scrub').v
 let tipAt = null;
 function showTip() {
   const tip = $('tip'), st = rp?.board.state;
-  const text = tipAt && st ? tipText(st, ...tipAt) : '';
+  const text = tipAt && st && !sel ? tipText(st, ...tipAt) : '';   // not over a unit's ranges
   tip.hidden = !text;
   if (!text) return;
   tip.textContent = text;
@@ -121,7 +121,7 @@ function tipText(st, x, y) {
 // Press and hold a unit, as on AWBW: where it can move (blue) until you let go; hold the same
 // unit again for every tile it could fire on (red), and so on, alternating. libaw's engine works it out (pkg/, loaded on the first
 // press), with its CO's power if one was used this turn.
-let engine = null, sel = null, lastHold = null;   // lastHold: {id, phase} of the previous hold
+let engine = null, sel = null, lastHold = null, didHold = false;   // lastHold: {id, phase} of the previous hold
 const loadEngine = () => (engine ??= import('./pkg/libaw_wasm.js').then(async (m) => { await m.default(); return m; }));
 function stateNow() {
   const st = structuredClone(rp.board.state);
@@ -161,23 +161,28 @@ function checkSelection() {
 }
 function hookTip() {
   rp.board.onHover = (t) => { tipAt = t; showTip(); };
-  rp.board.onTile = (x, y) => { tipAt = tipAt && tipAt[0] === x && tipAt[1] === y ? null : [x, y]; showTip(); };
+  rp.board.onTile = (x, y) => {
+    if (didHold) { didHold = false; tipAt = [x, y]; showTip(); return; }   // the click that ends a hold
+    tipAt = tipAt && tipAt[0] === x && tipAt[1] === y ? null : [x, y]; showTip();
+  };
 }
 await setup();
 // Press and hold: ranges after a moment (a quick tap stays a tap), gone on release.
 {
   const svg = $('board');
   let hold = null, pressed = false;
+  let at = null;
   const release = () => {
     pressed = false; clearTimeout(hold);
-    if (clearSelection()) renderAt(lastT);
+    if (didHold && at) tipAt = at;   // the tip comes back where the hold was
+    if (clearSelection()) renderAt(lastT); else showTip();
   };
   svg.addEventListener('pointerdown', (e) => {
     const t = rp.board.tileOf(e);
     if (!t || e.button > 0) return;
     loadEngine();
-    pressed = true; clearTimeout(hold);
-    hold = setTimeout(() => select(t[0], t[1]).then(() => { if (!pressed) release(); }), 180);
+    pressed = true; didHold = false; at = t; clearTimeout(hold);
+    hold = setTimeout(() => (didHold = true, select(t[0], t[1]).then(() => { if (!pressed) release(); })), 180);
   });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) svg.addEventListener(ev, release);
   svg.addEventListener('contextmenu', (e) => e.preventDefault());   // a long press on a phone
