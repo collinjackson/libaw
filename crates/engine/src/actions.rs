@@ -306,14 +306,10 @@ pub fn builds(s: &State) -> Vec<(Pos, U)> {
         if b.owner != Some(me) || s.unit_at(pos.0, pos.1).is_some() {
             continue;
         }
-        let classes: &[M] = match tables().tile(b.terrain).building {
-            Some(B::Base) => &[M::F, M::B, M::T, M::W, M::P],
-            Some(B::Airport) => &[M::A],
-            Some(B::Port) => &[M::S, M::L],
-            // Hachi's Merchant Union: ground units from cities.
-            Some(B::City) if p.co == "Hachi" && p.power == "S" => &[M::F, M::B, M::T, M::W, M::P],
-            _ => continue,
-        };
+        let classes = build_classes(b.terrain, p);
+        if classes.is_empty() {
+            continue;
+        }
         for (name, info) in tables().units() {
             if classes.contains(&info.move_type)
                 && !s.banned.contains(&name)
@@ -324,6 +320,32 @@ pub fn builds(s: &State) -> Vec<(Pos, U)> {
         }
     }
     out.sort();
+    out
+}
+
+/// The movement classes a building of `terrain` produces for player `p`.
+fn build_classes(terrain: u16, p: &crate::state::Player) -> &'static [M] {
+    match tables().tile(terrain).building {
+        Some(B::Base) => &[M::F, M::B, M::T, M::W, M::P],
+        Some(B::Airport) => &[M::A],
+        Some(B::Port) => &[M::S, M::L],
+        // Hachi's Merchant Union: ground units from cities.
+        Some(B::City) if p.co == "Hachi" && p.power == "S" => &[M::F, M::B, M::T, M::W, M::P],
+        _ => &[],
+    }
+}
+
+/// The build menu of the building at `at` as its owner sees it: every unit it makes (none
+/// banned), cheapest first, at the owner's CO's price, whether or not they can afford it.
+pub fn build_menu(s: &State, at: Pos) -> Vec<(U, i64)> {
+    let Some(b) = s.buildings.get(&at) else { return vec![] };
+    let Some(p) = b.owner.and_then(|o| s.player(o)) else { return vec![] };
+    let classes = build_classes(b.terrain, p);
+    let mut out: Vec<(U, i64)> = tables().units()
+        .filter(|(name, info)| classes.contains(&info.move_type) && !s.banned.contains(name))
+        .map(|(name, info)| (name, co::price(info.cost as i64, &p.co, &p.power)))
+        .collect();
+    out.sort_by_key(|&(name, cost)| (cost, tables().unit(name).cost));
     out
 }
 

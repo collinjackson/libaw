@@ -56,3 +56,22 @@ fn is_legal_agrees_with_the_full_legal_list() {
     }
     assert!(checked > 1000, "only {checked} near misses checked");
 }
+
+/// The build menu lists every unit `builds` offers at that building, cheapest first, and only
+/// units that building makes.
+#[test]
+fn build_menu_covers_the_legal_builds() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/eval-harness/test-states");
+    let mut seen = 0;
+    for f in std::fs::read_dir(dir).unwrap().flatten() {
+        let turn: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(f.path()).unwrap()).unwrap();
+        let s = libaw::awbw::state_from(&turn);
+        for (at, kind) in libaw::actions::builds(&s) {
+            let menu = libaw::actions::build_menu(&s, at);
+            assert!(menu.iter().any(|(k, _)| *k == kind), "{kind:?} at {at:?} not in {menu:?}");
+            assert!(menu.windows(2).all(|w| w[0].1 <= w[1].1), "cheapest first: {menu:?}");
+            seen += 1;
+        }
+    }
+    assert!(seen > 0);
+}

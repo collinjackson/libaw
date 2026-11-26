@@ -88,6 +88,26 @@ pub fn reach(state: &str, unit_id: u32) -> String {
     json!({"moves": moves, "attack": attack}).to_string()
 }
 
+/// What a unit may do after moving to (x, y) (its own tile: no move), as the menu there would
+/// offer it (`actions::options_at`): {"options": [then, ...]}, each `then` in the contract's format.
+#[wasm_bindgen]
+pub fn options(state: &str, unit_id: u32, x: u16, y: u16) -> String {
+    let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let Some(u) = s.units.get(&unit_id) else { return err(format!("no unit {unit_id}")) };
+    let out: Vec<Value> = libaw::actions::options_at(&s, u, (x, y)).into_iter()
+        .map(|then| action_to_contract(&Action::Move { unit: unit_id, path: vec![(x, y)], then })["then"].clone()).collect();
+    json!({"options": out}).to_string()
+}
+
+/// The build menu of the building at (x, y) (`actions::build_menu`): {"units": [{"unit", "cost"}, ...]},
+/// cheapest first, at its owner's prices.
+#[wasm_bindgen]
+pub fn build_menu(state: &str, x: u16, y: u16) -> String {
+    let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let out: Vec<Value> = libaw::actions::build_menu(&s, (x, y)).into_iter().map(|(u, c)| json!({"unit": u, "cost": c})).collect();
+    json!({"units": out}).to_string()
+}
+
 /// Apply one action (contract format) for the player to move, if legal.
 #[wasm_bindgen]
 pub fn act(state: &str, action: &str, seed: u32) -> String {
