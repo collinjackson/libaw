@@ -132,6 +132,8 @@ export class Board {
       }
     // Units.
     const units = el('g', { class: 'units' }, s);
+    // HP bars stick out above the tile, so they go in a layer over every unit.
+    const bars = [];
     for (const u of unitsByTile(state).values()) {
       const idx = order.indexOf(u.owner);
       const g = el('g', { class: `unit ${cls(u.owner)}${u.moved ? ' moved' : ''}${selected === u.id ? ' selected' : ''}`, 'data-id': u.id }, units);
@@ -143,10 +145,13 @@ export class Board {
       if (hp < 10 && this.hpBars) {
         // Ten segments across the top of the tile, coloured by how hurt the unit is.
         const tone = hp >= 7 ? 'hi' : hp >= 4 ? 'mid' : 'lo', sw = (TILE - 4) / 10;
-        el('rect', { x: u.x * TILE + 1, y: u.y * TILE - 4, width: TILE - 2, height: 13, rx: 2, class: 'hpbar' }, g);
-        for (let i = 0; i < 10; i++)
-          el('rect', { x: u.x * TILE + 2 + i * sw + 0.5, y: u.y * TILE - 2, width: sw - 1, height: 9,
-            class: i < hp ? `hpseg ${tone}` : 'hpseg off' }, g);
+        bars.push((layer) => {
+          const bg = el('g', { class: `hp-of ${cls(u.owner)}`, 'data-id': u.id }, layer);
+          el('rect', { x: u.x * TILE + 1, y: u.y * TILE - 4, width: TILE - 2, height: 13, rx: 2, class: 'hpbar' }, bg);
+          for (let i = 0; i < 10; i++)
+            el('rect', { x: u.x * TILE + 2 + i * sw + 0.5, y: u.y * TILE - 2, width: sw - 1, height: 9,
+              class: i < hp ? `hpseg ${tone}` : 'hpseg off' }, bg);
+        });
       } else if (hp < 10) {
         el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);
         el('text', { x: u.x * TILE + TILE - 8, y: u.y * TILE + TILE - 4, class: 'hp' }, g).textContent = hp;
@@ -164,6 +169,8 @@ export class Board {
         }
       }
     }
+    const hpLayer = el('g', { class: 'hpbars' }, s);
+    for (const draw of bars) draw(hpLayer);
     this.cursorLayer = el('g', { class: 'cursor' }, s);
   }
 
