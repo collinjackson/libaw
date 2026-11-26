@@ -73,7 +73,7 @@ export class Replay {
   /** Lays out the timeline: the caller's phases and the ghost's (at this.ghostPace). */
   layout() {
     const { before, dur, hold } = this.timing;
-    const plan = this.ghost ? ghostPlan(this.sb, this.states, { pace: this.ghostPace }) : { pre: {}, post: {} };
+    const plan = this.ghost ? ghostPlan(this.sb, this.states, { pace: this.ghostPace, menus: this.ghost.menu }) : { pre: {}, post: {}, asks: {} };
     this.plan = plan;
     const pre = (st, i, sh) => [...(plan.pre[i] ?? []), ...((before && before(st, i, sh)) ?? [])];
     const post = (st, i) => (plan.post[i] ?? []).map((x) => ({ ...x, post: true }));
@@ -345,8 +345,10 @@ export class Replay {
   /** Fill in what the ghost shows from libaw's engine (`m`: the wasm module, web/pkg): each
    *  moving unit's range and each shooter's targets, the unit menus' options, the damage boxes,
    *  the landing tiles of unloads and the build menus, each worked out on the board before its step
-   *  (with any CO power used earlier in the turn). Errors leave the plan's guesses. */
-  ghostEngine(m) {
+   *  (with any CO power used earlier in the turn). Errors leave the plan's guesses. relayout: lay
+   *  the timeline out again with the engine's menus (a menu of Wait alone isn't opened); only
+   *  before playing starts, since it moves later segments. */
+  ghostEngine(m, { relayout = false } = {}) {
     if (!this.ghost || !m) return;
     const g = this.ghost, steps = this.sb.steps, keys = (ps) => new Set(ps.map(([x, y]) => `${x},${y}`));
     const js = [];
@@ -368,10 +370,11 @@ export class Replay {
         if (r) g.move[i] = keys(r.moves);
       }
       // The unit menu: what the engine offers the unit where it stops.
-      const mu = segs.find((x) => x.menu?.kind === 'unit' && x.menu.unit != null && !x.menu.lone);
+      // (also for a move whose guessed menu was Wait alone, so not planned: the engine may know more)
+      const mu = this.plan.asks?.[i] ?? segs.find((x) => x.menu?.kind === 'unit' && x.menu.unit != null && !x.menu.lone)?.menu;
       if (mu) {
-        const r = call(() => m.options(json(i), mu.menu.unit, mu.menu.to[0], mu.menu.to[1]));
-        if (r) g.menu[i] = unitMenu(r.options, mu.menu.chosen, { moved: mu.menu.moved, unit: this.states[i].units[mu.menu.unit] });
+        const r = call(() => m.options(json(i), mu.unit, mu.to[0], mu.to[1]));
+        if (r) g.menu[i] = unitMenu(r.options, mu.chosen, { moved: mu.moved, unit: this.states[i].units[mu.unit] });
       }
       if (s.type === 'fire' && s.attacker && s.defender) {
         // Before the move that brought the attacker here, if one did.
@@ -398,6 +401,7 @@ export class Replay {
         }
       }
     });
+    if (relayout) this.layout();
   }
 
   /** The board before step i with the CO powers used earlier in the turn switched on. */

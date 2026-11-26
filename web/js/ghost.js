@@ -96,9 +96,12 @@ export function diamond([x, y], r, w, h) {
  *  attack then glides to the target with the damage box ('target'), an unload lists the cargo and
  *  shows the landing tiles ('drop'), and so on. A step on its own (an unload by a transport that
  *  already moved, a build) starts with the cursor going to its unit or base. */
-export function ghostPlan(sb, states, { pace = 1 } = {}) {
-  const pre = {}, post = {};
-  if (!(pace > 0)) return { pre, post };
+// menus: the unit menus the engine worked out, by step (Replay.ghost.menu); without one, the plan's
+// guess. A menu with nothing but Wait isn't opened: AWBW just waits the unit.
+export function ghostPlan(sb, states, { pace = 1, menus = {} } = {}) {
+  const pre = {}, post = {}, asks = {};
+  if (!(pace > 0)) return { pre, post, asks };
+  const onlyWait = (o) => o.length === 1 && o[0] === 'Wait';
   const W = sb.start.width, H = sb.start.height;
   let cur = null, lit = null;   // lit: the unit acting, kept in colour while it does
   const seg = (phase, dur, extra = {}) => ({ phase, ghost: true, ...(lit != null ? { lit } : {}), ...extra, dur: dur * pace,
@@ -131,7 +134,9 @@ export function ghostPlan(sb, states, { pace = 1 } = {}) {
       // where a transport stands, so after a move that's a Wait and the unload a command of its own.
       const goes = next && FOLLOW.has(next.type) && actorOf(sb, states, i + 1)?.id === a.id && (next.type !== 'unload' || !moved);
       const chosen = goes ? LABEL[next.type] : 'Wait';
-      menu(post, i, end, { kind: 'unit', unit: a.id, to: end, chosen, moved, options: unitMenu(null, chosen, { moved, unit: a.unit }) });
+      asks[i] = { unit: a.id, to: end, chosen, moved };   // for the engine to fill in (Replay.ghostEngine)
+      const options = menus[i] ?? unitMenu(null, chosen, { moved, unit: a.unit });
+      if (!onlyWait(options)) menu(post, i, end, { kind: 'unit', unit: a.id, to: end, chosen, moved, options });
       return;
     }
     if (st.type === 'build') {
@@ -187,7 +192,7 @@ export function ghostPlan(sb, states, { pace = 1 } = {}) {
       default: break;
     }
   });
-  return { pre, post };
+  return { pre, post, asks };
 }
 
 /** Where the ghost's cursor is in ghost segment `seg` at fraction p, on step `st`:

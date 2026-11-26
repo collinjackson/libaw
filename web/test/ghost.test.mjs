@@ -54,7 +54,11 @@ assert.equal(phases(0), 'aim | menu', 'the first move: no glide in, the cursor j
 assert.equal(plan.post[0][0].menu.chosen, 'Fire');
 assert.equal(phases(1), 'target |', 'the attack follows its move: the menu was already up');
 assert.deepEqual([plan.pre[1][0].from, plan.pre[1][0].to], [[2, 1], [3, 1]], 'the cursor glides to the target');
-assert.equal(plan.post[2][0].menu.chosen, 'Wait', "a transport that moves waits; it's clicked again to unload");
+assert.equal(plan.post[2], undefined, "a transport that moves just waits (a menu of Wait alone isn't opened); it's clicked again to unload");
+assert.deepEqual(plan.asks[2], { unit: plan.asks[2].unit, to: sb.steps[2].path.at(-1), chosen: 'Wait', moved: true }, 'but the engine is still asked');
+// With the engine's menu for that stop, the menu opens after all.
+const withMenu = G.ghostPlan(sb, st, { menus: { 2: ['Unload', 'Wait'] } });
+assert.equal(withMenu.post[2][0].menu.chosen, 'Wait');
 assert.equal(phases(3), 'select menu menu drop |');
 assert.deepEqual(plan.pre[3][1].menu.options, ['Unload'], 'a moved transport offers Unload alone');
 assert.deepEqual(plan.pre[3][2].menu.options, ['Infantry'], 'then its cargo');
