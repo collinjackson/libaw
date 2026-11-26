@@ -159,8 +159,8 @@ export class Board {
           el('text', { x: u.x * TILE + TILE / 2, y: u.y * TILE + 6, class: 'hp hp-unknown' }, bg).textContent = '?';
         });
       } else if (hpUnknown(u)) {
-        el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);
-        el('text', { x: u.x * TILE + TILE - 8, y: u.y * TILE + TILE - 4, class: 'hp hp-unknown' }, g).textContent = '?';
+        el('rect', { x: u.x * TILE + TILE - 16, y: u.y * TILE + TILE - 15, width: 15, height: 14, rx: 3, class: 'hpbg' }, g);
+        el('text', { x: u.x * TILE + TILE - 8.5, y: u.y * TILE + TILE - 3.5, class: 'hp hp-unknown' }, g).textContent = '?';
       } else if (hp < 10 && this.hpBars) {
         // Ten segments across the top of the tile, coloured by how hurt the unit is.
         const tone = hp >= 7 ? 'hi' : hp >= 4 ? 'mid' : 'lo', sw = (TILE - 4) / 10;
@@ -172,8 +172,8 @@ export class Board {
               class: i < hp ? `hpseg ${tone}` : 'hpseg off' }, bg);
         });
       } else if (hp < 10) {
-        el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);
-        el('text', { x: u.x * TILE + TILE - 8, y: u.y * TILE + TILE - 4, class: 'hp' }, g).textContent = hp;
+        el('rect', { x: u.x * TILE + TILE - 16, y: u.y * TILE + TILE - 15, width: 15, height: 14, rx: 3, class: 'hpbg' }, g);
+        el('text', { x: u.x * TILE + TILE - 8.5, y: u.y * TILE + TILE - 3.5, class: 'hp' }, g).textContent = hp;
       }
       // One status badge in the bottom-left corner, as AWBW shows it: capturing, loaded, hidden
       // (a dived sub or hidden stealth), stunned.

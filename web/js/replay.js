@@ -92,7 +92,10 @@ export class Replay {
     if (seg.phase === 'aim') {
       state = before;
       if (!this.marks?.move && !this.marks?.attack) marks = { move: this.ghost?.move[seg.step] };
-      arrow = [st.path, 0, ease(Math.min(1, p / 0.7))];
+      // As on the cartridge: the cursor lands on the unit, then leads the arrow along its path.
+      const f = ease(Math.min(1, Math.max(0, p - 0.15) / 0.6));
+      arrow = [st.path, 0, f];
+      fx = () => this.cursor(alongPath(st.path, f), Math.min(1, p / 0.15));
     } else if (seg.phase === 'target') {
       state = before;
       if (!this.marks?.move && !this.marks?.attack) marks = { attack: this.ghost?.attack[seg.step] };
@@ -104,7 +107,7 @@ export class Replay {
       state = JSON.parse(JSON.stringify(before));
       const u = state.units[st.unit_id];
       if (u) { [u.x, u.y] = alongPath(st.path, ease(p)); u.moved = false; }
-      if (this.ghost) arrow = [st.path, ease(p), 1];
+      if (this.ghost) { arrow = [st.path, ease(p), 1]; fx = () => this.cursor(st.path[st.path.length - 1], 1); }
     } else if (seg.phase === 'fire') {
       state = p < 0.45 ? before : after;
       fx = () => this.fireFx(st, before, p);

@@ -109,7 +109,7 @@ footer.foot { padding: 4px 16px 20px; margin: 0; }
 .unit.moved { filter: brightness(.78) saturate(.9); }   /* dimmed, but still its army's colour */
 .unit.selected use { filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px var(--accent)); }
 .hpbg { fill: #1f2430; opacity: .85; }
-.hp { fill: #fff; font: 700 10px system-ui, sans-serif; text-anchor: middle; }
+.hp { fill: #fff; font: 700 12px system-ui, sans-serif; text-anchor: middle; }
 .capbg { fill: #1f2430; opacity: .85; }
 .cap { fill: #ffd25e; font: 700 9px system-ui, sans-serif; text-anchor: middle; }
 .ubadge rect { fill: #f5a641; stroke: #1f2430; stroke-width: 1.5; }
