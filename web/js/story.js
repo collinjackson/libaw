@@ -45,6 +45,45 @@ export function applyStep(state, step) {
         for (const u of Object.values(units)) if (u.owner === step.player && !['Infantry', 'Mech'].includes(u.kind)) u.moved = false;
       break;
     case 'join': drop(step.from); units[step.into] = clone(step.unit); break;
+    case 'load': {
+      const u = units[step.unit_id], t = units[step.transport_id];
+      if (u) Object.assign(u, { carried_by: step.transport_id, moved: true });
+      if (t && !(t.cargo ??= []).includes(step.unit_id)) t.cargo.push(step.unit_id);
+      break;
+    }
+    case 'unload': {
+      const u = units[step.unit_id], t = units[step.transport_id];
+      if (t) t.cargo = (t.cargo ?? []).filter((c) => c !== step.unit_id);
+      if (u) Object.assign(u, { x: step.to[0], y: step.to[1], carried_by: null, moved: true });
+      break;
+    }
+    case 'hide': case 'unhide':
+      if (units[step.unit_id]) Object.assign(units[step.unit_id], { dived: step.type === 'hide', moved: true });
+      break;
+    case 'delete': drop(step.unit_id); break;
+    case 'repair': {
+      const u = units[step.target_id];
+      if (u && step.display_hp != null) u.hp = { lo: Math.max(1, step.display_hp * 10 - 9), hi: step.display_hp * 10 };
+      if (units[step.unit_id]) units[step.unit_id].moved = true;
+      break;
+    }
+    // Area damage that never kills: Black Bomb (3 tiles round the bomb, which goes) and a silo
+    // (2 tiles round its target, the launcher's silo left empty).
+    case 'explode': case 'launch': {
+      const [cx, cy] = step.type === 'explode' ? step.at : step.target, r = step.type === 'explode' ? 3 : 2;
+      if (step.type === 'explode') drop(step.unit_id);
+      else {
+        const b = s.buildings.find(([x, y]) => x === step.silo[0] && y === step.silo[1]);
+        if (b) b[2].terrain = 112;   // Missile Silo Empty
+        const who = Object.values(units).find((u) => u.carried_by == null && u.x === step.silo[0] && u.y === step.silo[1]);
+        if (who) who.moved = true;
+      }
+      const d = (step.damage ?? 0) * 10;
+      for (const u of Object.values(units))
+        if (u.carried_by == null && Math.abs(u.x - cx) + Math.abs(u.y - cy) <= r)
+          u.hp = { lo: Math.max(1, u.hp.lo - d), hi: Math.max(1, u.hp.hi - d) };
+      break;
+    }
     default: break;
   }
   return s;
@@ -57,7 +96,7 @@ export function statesOf(sb) {
   return out;
 }
 
-/** Shots: a unit's move with what it did there (fire, capture, join), or one other step on its
+/** Shots: a unit's move with what it did there (FOLLOW: fire, capture, join, ...), or one other step on its
  *  own. Each shot: {from, to (exclusive), kind, focus: [x, y] or null, player, tiles}. */
 export function shots(sb) {
   const out = [];
@@ -66,7 +105,7 @@ export function shots(sb) {
     const st = steps[i];
     if (st.type === 'end') continue;
     let j = i + 1;
-    if (st.type === 'move' && j < steps.length && ['fire', 'capture', 'join'].includes(steps[j].type)) j++;
+    if (st.type === 'move' && j < steps.length && FOLLOW.has(steps[j].type)) j++;
     const last = steps[j - 1];
     let focus = null;
     const tiles = [];
@@ -78,6 +117,10 @@ export function shots(sb) {
       tiles.push(last.at); focus = last.at;
     } else if (last.type === 'build') {
       tiles.push([last.unit.x, last.unit.y]); focus = [last.unit.x, last.unit.y];
+    } else if (last.type === 'unload' || last.type === 'explode' || last.type === 'launch') {
+      const at = last.to ?? last.at ?? last.target;
+      tiles.push(at); focus = at;
+      if (last.silo) tiles.push(last.silo);
     }
     out.push({ from: i, to: j, kind: last.type, focus, player: sb.player, tiles });
     i = j - 1;
@@ -85,7 +128,10 @@ export function shots(sb) {
   return out;
 }
 
-export const DUR = { tile: 0.14, fire: 1.1, capture: 0.9, power: 1.6, build: 0.5, join: 0.5, other: 0.2, hold: 0.6 };
+/** Steps that finish the move before them (one shot): what the unit did where it stopped. */
+export const FOLLOW = new Set(['fire', 'capture', 'join', 'load', 'unload', 'supply', 'hide', 'unhide', 'explode', 'launch', 'repair', 'delete']);
+
+export const DUR = { tile: 0.14, fire: 1.1, capture: 0.9, power: 1.6, build: 0.5, join: 0.5, unload: 0.35, explode: 1.2, launch: 1.2, repair: 0.5, other: 0.2, hold: 0.6 };
 
 /** A timeline over the chosen shots (all of them for a full replay): segments
  *  {t0, t1, step index, phase, shot} where phase is 'move' | 'fire' | 'capture' | 'power' |

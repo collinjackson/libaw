@@ -82,6 +82,28 @@ fn steps_of(a: &Value, out: &mut Vec<Value>) {
             let u = unit_from(&body["joinedUnit"]);
             out.push(json!({"type": "join", "from": num(&body["joinId"]), "into": u.id, "unit": u}));
         }
+        "Load" => out.push(json!({"type": "load", "unit_id": num(&body["loadedId"]), "transport_id": num(&body["transportId"])})),
+        "Unload" => {
+            let u = &body["unloadedUnit"];
+            out.push(json!({"type": "unload", "transport_id": num(&body["transportId"]), "unit_id": num(&u["units_id"]),
+                            "to": xy(u, "units_x", "units_y")}));
+        }
+        // The record names only the units supplied, not the APC.
+        "Supply" => out.push(json!({"type": "supply", "supplied": items(&body["suppliedIds"]).into_iter().map(num).collect::<Vec<_>>()})),
+        // Newer records give `unitId`, older (team) ones the whole `unit`.
+        "Hide" | "Unhide" => out.push(json!({"type": kind.to_lowercase(), "unit_id": num(&body["unitId"]).max(num(&body["unit"]["units_id"]))})),
+        "Delete" => out.push(json!({"type": "delete", "unit_id": num(&body["deletedId"])})),
+        // Black Bomb: `damage` HP to every other unit within 3 tiles of `at` (never below 1 HP).
+        "Explode" => out.push(json!({"type": "explode", "unit_id": num(&body["unitId"]), "at": xy(body, "explosionX", "explosionY"),
+                                     "damage": (-num(&body["hp"])).max(0)})),
+        // A missile silo: `damage` HP to every unit within 2 tiles of `target` (never below 1 HP).
+        "Launch" => out.push(json!({"type": "launch", "silo": xy(body, "siloX", "siloY"), "target": xy(body, "targetX", "targetY"),
+                                    "damage": (-num(&body["hp"])).max(0)})),
+        "Repair" => {
+            let r = &body["repairedUnit"];
+            out.push(json!({"type": "repair", "unit_id": num(&body["unitId"]), "target_id": num(&r["units_id"]),
+                            "display_hp": display_json(&r["units_hit_points"])}));
+        }
         "NextTurn" | "End" => out.push(json!({"type": "end", "next": num(&body["nextPId"])})),
         "" => {}
         other => out.push(json!({"type": "other", "action": other})),
@@ -139,6 +161,37 @@ mod tests {
         assert_eq!(out[2]["done"], false);
         assert_eq!(out[3]["unit"]["kind"], "Infantry");
         assert!(out[5]["defender"].is_null());
+    }
+
+    #[test]
+    fn transport_and_special_actions_get_their_own_steps() {
+        let acts = json!([
+            {"action": "Load", "loadedId": 5, "transportId": 6},
+            {"action": "Unload", "transportId": 6, "unloadedUnit": unit(5, 1, "Infantry", 4, 3, 10)},
+            {"action": "Supply", "suppliedIds": [5, 7]},
+            {"action": "Hide", "unitId": 8, "vision": true},
+            {"action": "Unhide", "unit": unit(8, 1, "Sub", 2, 2, 10)},
+            {"action": "Delete", "deletedId": 9},
+            {"action": "Explode", "explosionX": 13, "explosionY": 1, "hp": -5, "unitId": 11},
+            {"action": "Launch", "siloX": 3, "siloY": 4, "targetX": 9, "targetY": 8, "hp": -3},
+            {"action": "Repair", "funds": 100, "repairedUnit": {"units_id": 12, "units_hit_points": 7}, "unitId": 13},
+            {"action": "Resign"},
+        ]);
+        let mut out = Vec::new();
+        for a in items(&acts) {
+            steps_of(a, &mut out);
+        }
+        let kinds: Vec<&str> = out.iter().map(|s| s["type"].as_str().unwrap()).collect();
+        assert_eq!(kinds, ["load", "unload", "supply", "hide", "unhide", "delete", "explode", "launch", "repair", "other"]);
+        assert_eq!(out[0], json!({"type": "load", "unit_id": 5, "transport_id": 6}));
+        assert_eq!(out[1], json!({"type": "unload", "transport_id": 6, "unit_id": 5, "to": [4, 3]}));
+        assert_eq!(out[2]["supplied"], json!([5, 7]));
+        assert_eq!(out[3]["unit_id"], 8);
+        assert_eq!(out[4]["unit_id"], 8);
+        assert_eq!(out[5]["unit_id"], 9);
+        assert_eq!(out[6], json!({"type": "explode", "unit_id": 11, "at": [13, 1], "damage": 5}));
+        assert_eq!(out[7], json!({"type": "launch", "silo": [3, 4], "target": [9, 8], "damage": 3}));
+        assert_eq!(out[8], json!({"type": "repair", "unit_id": 13, "target_id": 12, "display_hp": 7}));
     }
 
     #[test]

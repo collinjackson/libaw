@@ -26,8 +26,20 @@ Steps, in order:
 | `build` | `unit` (a full unit) |
 | `power` | `player`, `co`, `name`, `super` |
 | `join` | `from`, `into`, `unit` (the joined unit) |
+| `load` | `unit_id` (the unit loaded), `transport_id` |
+| `unload` | `transport_id`, `unit_id` (the cargo), `to` (where it lands) |
+| `supply` | `supplied` (ids of the units supplied; the record doesn't name the APC: it's the APC that just moved, or the player's APC beside the first of them) |
+| `hide`, `unhide` | `unit_id` (a Sub dives or surfaces, a Stealth hides or shows) |
+| `delete` | `unit_id` |
+| `explode` | `unit_id` (a Black Bomb), `at`, `damage` (HP taken by every other unit within 3 tiles, never below 1 HP) |
+| `launch` | `silo`, `target`, `damage` (HP taken by every unit within 2 tiles of `target`, never below 1 HP); the silo is left empty |
+| `repair` | `unit_id` (the Black Boat), `target_id`, `display_hp` (the repaired unit's HP after) |
 | `end` | `next` (the next player) |
-| `other` | `action` (a record this version does not show) |
+| `other` | `action` (a record this version does not show, e.g. `AttackSeam`) |
+
+A move followed by what the unit did where it stopped (`fire`, `capture`, `join`, `load`,
+`unload`, `supply`, `hide`, `unhide`, `explode`, `launch`, `repair`, `delete`) is one shot.
+Storyboards made before these steps had their own types carry them as `other`.
 
 Viewers ignore fields they don't know, so a caller can carry its own extras in a storyboard.
 
