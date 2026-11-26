@@ -9,7 +9,7 @@
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px system-ui, sans-serif; }
   .stage { max-width: 960px; margin: 16px auto; padding: 0 16px; }
   .screen { position: relative; overflow: hidden; border-radius: 12px; background: #10141c; }
-  .screen svg { display: block; width: 100%; height: auto; }
+  .screen svg { display: block; width: 100%; height: auto; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .tip { position: absolute; pointer-events: none; transform: translate(-50%, calc(-100% - 4px)); background: rgba(16, 20, 28, .92);
     color: #f7f8fa; font: 600 12px system-ui, sans-serif; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
   .tip[hidden] { display: none; }
@@ -118,10 +118,10 @@ function tipText(st, x, y) {
   if (b && b.capture < 20) out.push(`capture ${b.capture}/20`);
   return out.join(' · ');
 }
-// Click a unit, as on AWBW: where it can move (blue), alternating with every tile it could fire
-// on (red). libaw's engine works it out (pkg/, loaded on the first click), with its CO's power if
-// one was used this turn. Click it again, or anywhere else, to clear.
-let engine = null, sel = null;
+// Press and hold a unit, as on AWBW: where it can move (blue) until you let go; hold the same
+// unit again for every tile it could fire on (red), and so on, alternating. libaw's engine works it out (pkg/, loaded on the first
+// press), with its CO's power if one was used this turn.
+let engine = null, sel = null, lastHold = null;   // lastHold: {id, phase} of the previous hold
 const loadEngine = () => (engine ??= import('./pkg/libaw_wasm.js').then(async (m) => { await m.default(); return m; }));
 function stateNow() {
   const st = structuredClone(rp.board.state);
@@ -138,9 +138,11 @@ async function select(x, y) {
   const r = m && JSON.parse(m.reach(JSON.stringify(stateNow()), u.id));
   if (!r || r.error) return;
   const keys = (ps) => new Set(ps.map(([px, py]) => key(px, py)));
-  sel = { id: u.id, at: key(u.x, u.y), move: keys(r.moves), attack: keys(r.attack), phase: 0 };
+  const attack = keys(r.attack);
+  const phase = lastHold?.id === u.id && lastHold.phase === 0 && attack.size ? 1 : 0;
+  lastHold = { id: u.id, phase };
+  sel = { id: u.id, at: key(u.x, u.y), move: keys(r.moves), attack, phase };
   showMarks();
-  sel.timer = setInterval(() => { sel.phase ^= 1; showMarks(); }, 900);
 }
 function showMarks() {
   rp.marks = !sel ? {} : sel.phase && sel.attack.size ? { attack: sel.attack } : { move: sel.move };
@@ -148,7 +150,7 @@ function showMarks() {
 }
 function clearSelection() {
   if (!sel) return;
-  clearInterval(sel.timer); const was = sel; sel = null; rp.marks = {};
+  const was = sel; sel = null; rp.marks = {};
   return was;
 }
 // The selected unit moved or went (the turn is playing): its ranges no longer hold.
@@ -159,15 +161,27 @@ function checkSelection() {
 }
 function hookTip() {
   rp.board.onHover = (t) => { tipAt = t; showTip(); };
-  rp.board.onTile = (x, y) => {
-    const again = sel && sel.at === key(x, y);
-    if (again) { clearSelection(); renderAt(lastT); return; }
-    tipAt = [x, y]; showTip();
-    const had = clearSelection();
-    select(x, y).then(() => { if (had && !sel) renderAt(lastT); });
-  };
+  rp.board.onTile = (x, y) => { tipAt = tipAt && tipAt[0] === x && tipAt[1] === y ? null : [x, y]; showTip(); };
 }
 await setup();
+// Press and hold: ranges after a moment (a quick tap stays a tap), gone on release.
+{
+  const svg = $('board');
+  let hold = null, pressed = false;
+  const release = () => {
+    pressed = false; clearTimeout(hold);
+    if (clearSelection()) renderAt(lastT);
+  };
+  svg.addEventListener('pointerdown', (e) => {
+    const t = rp.board.tileOf(e);
+    if (!t || e.button > 0) return;
+    loadEngine();
+    pressed = true; clearTimeout(hold);
+    hold = setTimeout(() => select(t[0], t[1]).then(() => { if (!pressed) release(); }), 180);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) svg.addEventListener(ev, release);
+  svg.addEventListener('contextmenu', (e) => e.preventDefault());   // a long press on a phone
+}
 $('art').onchange = $('camera').onchange = $('anim').onchange = $('shoals').onchange = $('hp').onchange = setup;
 $('scrub').oninput = () => { if (stop) { stop(); stop = null; $('btn-play').textContent = 'Play'; } renderAt((rp.duration * $('scrub').value) / 1000); };
 $('btn-play').onclick = () => {
