@@ -43,13 +43,18 @@
     <input id="scrub" type="range" min="0" max="1000" value="0">
     <label><input id="camera" type="checkbox"> Follow the action</label>
     <select id="art"><option value="libaw">libaw art</option><option value="awbw">AWBW art</option></select>
+    <label><input id="anim" type="checkbox" checked> Animate</label>
+    <select id="shoals"><option value="custom">Custom shoals</option><option value="classic">Classic shoals</option></select>
+    <label><input id="hp" type="checkbox"> HP bars</label>
   </div>
 </div>
 <script type="module">
 import { Replay } from './js/replay.js';
-import { awbwArt } from './js/art.js';
+import { awbwLook } from './js/look.js';
 
 // ?sb=URL of a storyboard (awbw-replay --storyboard TURN.json), &art=libaw|awbw, &camera=1,
+// &anim=0 (AWBW's still sprites), &shoals=custom|classic, &water=URL of a sea/shoal tile table
+// (js/look.js; custom shoals need it), &hp=bars (segmented HP bars),
 // &capture=1 (no controls; window.__replay.renderAt(t) for web/capture.mjs).
 const q = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
@@ -65,19 +70,23 @@ const [units, terrain, tmap, sprites, sb] = await Promise.all([
 $('sprites').innerHTML = sprites;
 $('art').value = q.get('art') || 'libaw';
 $('camera').checked = !!q.get('camera');
+$('anim').checked = q.get('anim') !== '0';
+$('shoals').value = q.get('shoals') === 'classic' ? 'classic' : 'custom';
+$('hp').checked = q.get('hp') === 'bars';
+const water = q.get('water') ? await fetch(q.get('water')).then((r) => r.json()).catch(() => null) : null;
 const name = (id) => sb.names?.[id] ?? `Player ${id}`;
 
 let rp, stop = null;
 function setup() {
   if (stop) stop();
-  const art = $('art').value === 'awbw' ? awbwArt(sb.countries) : null;
-  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked });
+  const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water }) : null;
+  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked });
   $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${sb.steps.length} steps, ${rp.duration.toFixed(1)} s`;
   renderAt(0);
 }
 function renderAt(t) { rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); }
 setup();
-$('art').onchange = $('camera').onchange = setup;
+$('art').onchange = $('camera').onchange = $('anim').onchange = $('shoals').onchange = $('hp').onchange = setup;
 $('scrub').oninput = () => { if (stop) { stop(); stop = null; $('btn-play').textContent = 'Play'; } renderAt((rp.duration * $('scrub').value) / 1000); };
 $('btn-play').onclick = () => {
   if (stop) { stop(); stop = null; $('btn-play').textContent = 'Play'; return; }

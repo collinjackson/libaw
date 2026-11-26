@@ -104,8 +104,11 @@ export function awbwWaterName(idAt, x, y) {
  *  uses it to show one frame of an animated GIF chosen by its own clock (a browser plays GIFs by
  *  the wall clock, which a frame-by-frame recording doesn't follow).
  *  nameAt: (id, x, y) => the image name for the tile at board position x, y, or null for
- *  awbwTileName's (e.g. awbwWaterName's joined seas and shoals, with src drawing them). */
-export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null, nameAt = () => null } = {}) {
+ *  awbwTileName's (e.g. awbwWaterName's joined seas and shoals, with src or sheet drawing them).
+ *  sheet: {url, width, height, tiles: {name: [x, y, w, h]}}: names drawn as that region of one
+ *  sprite sheet image (AWBW's terrain sheet holds its joined seas and custom shoals). Drawn by
+ *  clipping, so the sheet needs no CORS headers. */
+export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null, nameAt = () => null, sheet = null } = {}) {
   const href = (name) => src(name) ?? `${base}${name}.gif`;
   return {
     name: 'awbw',
@@ -138,6 +141,23 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src 
     tile(id, d, owner, parent, { x, y, size }) {
       const name = nameAt(id, Math.round(x / size), Math.round(y / size)) ?? awbwTileName(id, d, owner == null ? null : countries?.[owner]);
       if (!name || missing.has(name)) return false;
+      const cell = !src(name) && sheet?.tiles?.[name];
+      if (cell) {
+        // A region of the sheet: an inner <svg> whose viewBox is the tile's rectangle.
+        const box = document.createElementNS(SVGNS, 'svg');
+        for (const [k, v] of Object.entries({ x, y, width: size, height: size, viewBox: cell.join(' '), preserveAspectRatio: 'none' })) box.setAttribute(k, v);
+        const img = document.createElementNS(SVGNS, 'image');
+        for (const [k, v] of Object.entries({ x: 0, y: 0, width: sheet.width, height: sheet.height, href: sheet.url })) img.setAttribute(k, v);
+        img.style.imageRendering = 'pixelated';
+        img.addEventListener('error', () => {
+          const use = document.createElementNS(SVGNS, 'use');
+          for (const [k, v] of Object.entries({ href: `#t-${d?.base ?? 'sea'}`, x, y, width: size, height: size })) use.setAttribute(k, v);
+          box.replaceWith(use);
+        }, { once: true });
+        box.appendChild(img);
+        parent.appendChild(box);
+        return true;
+      }
       // AWBW's woods, mountains and buildings are drawn over a plain: their GIFs are transparent.
       if (name !== 'plain' && !/sea|shoal|reef|river|bridge/.test(name)) {
         const under = document.createElementNS(SVGNS, 'image');
