@@ -118,7 +118,8 @@ function showTip() {
 function tipText(st, x, y) {
   const u = unitsByTile(st).get(key(x, y)), b = buildingsByTile(st).get(key(x, y));
   const out = [`(${x}, ${y})`];
-  if (u) out.push(`${hpUnknown(u) ? '?' : displayHp(u)} HP`);
+  // HP only with HP bars: otherwise the unit's own number already says it.
+  if (u && rp?.board.hpBars) out.push(`${hpUnknown(u) ? '?' : displayHp(u)} HP`);
   if (b && b.capture < 20) out.push(`capture ${b.capture}/20`);
   return out.join(' · ');
 }
