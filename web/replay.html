@@ -167,7 +167,7 @@ function hookTip() {
   };
 }
 await setup();
-// Press and hold: ranges after a moment (a quick tap stays a tap), gone on release.
+// Press and hold: ranges from the moment of the press, gone on release.
 {
   const svg = $('board');
   let hold = null, pressed = false;
@@ -182,7 +182,7 @@ await setup();
     if (!t || e.button > 0) return;
     loadEngine();
     pressed = true; didHold = false; at = t; clearTimeout(hold);
-    hold = setTimeout(() => (didHold = true, select(t[0], t[1]).then(() => { if (!pressed) release(); })), 180);
+    hold = setTimeout(() => (didHold = true, select(t[0], t[1]).then(() => { if (!pressed) release(); })), 0);
   });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) svg.addEventListener(ev, release);
   svg.addEventListener('contextmenu', (e) => e.preventDefault());   // a long press on a phone
