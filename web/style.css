@@ -112,8 +112,8 @@ footer.foot { padding: 4px 16px 20px; margin: 0; }
 .hp { fill: #fff; font: 700 10px system-ui, sans-serif; text-anchor: middle; }
 .capbg { fill: #1f2430; opacity: .85; }
 .cap { fill: #ffd25e; font: 700 9px system-ui, sans-serif; text-anchor: middle; }
-.cargo { fill: #ffd25e; stroke: #1f2430; stroke-width: 1.2; }
-.tag { fill: #fff; font: 700 10px system-ui; }
+.ubadge rect { fill: #f5a641; stroke: #1f2430; stroke-width: 1.5; }
+.ubadge text { fill: #1f2430; font: 800 15px system-ui, sans-serif; text-anchor: middle; }
 .cursor use { pointer-events: none; }
 
 .menu { position: absolute; z-index: 4; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: 5px; min-width: 150px; }

@@ -61,3 +61,24 @@ console.log('art ok');
   delete globalThis.document;
 }
 console.log('art sheet ok');
+// Unit status badges: capturing beats loaded beats hidden beats stunned; AWBW's icons for each.
+{
+  const { unitStatus } = await import('../js/board.js');
+  const inf = { kind: 'Infantry', owner: 1 };
+  assert.equal(unitStatus(inf, { capture: 12, owner: 2 }), 'capture');
+  assert.equal(unitStatus(inf, { capture: 12, owner: null }), 'capture');
+  assert.equal(unitStatus(inf, { capture: 20, owner: 2 }), null);           // not started
+  assert.equal(unitStatus(inf, { capture: 12, owner: 1 }), null);           // its own building
+  assert.equal(unitStatus({ kind: 'Tank', owner: 1 }, { capture: 12, owner: 2 }), null);
+  assert.equal(unitStatus({ kind: 'APC', owner: 1, cargo: [7] }, null), 'load');
+  assert.equal(unitStatus({ kind: 'Sub', owner: 1, dived: true }, null), 'hide');
+  assert.equal(unitStatus({ kind: 'Tank', owner: 1, stunned: true }, null), 'stun');
+  const made = [];
+  globalThis.document = { createElementNS: (_, tag) => { const n = { tag, attrs: {}, style: {}, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener() {} }; made.push(n); return n; } };
+  const kids = [];
+  assert.equal(awbwArt({}).badge('hide', { appendChild: (c) => kids.push(c) }, { x: 40, y: 80, size: 40 }), true);
+  assert.deepEqual([kids[0].attrs.href, kids[0].attrs.x, kids[0].attrs.y, kids[0].attrs.width],
+    ['https://awbw.amarriner.com/terrain/aw1/subdive2.gif', '40', '100', '20']);
+  delete globalThis.document;
+}
+console.log('art badges ok');

@@ -17,6 +17,17 @@ function use(id, x, y, parent, extra = {}) {
   return el('use', { href: `#${id}`, x: x * TILE, y: y * TILE, width: TILE, height: TILE, ...extra }, parent);
 }
 
+/** A unit's status badge, or null: 'capture' (infantry or mech on a building it is
+ *  capturing), 'load' (carrying cargo), 'hide' (a dived sub or hidden stealth), 'stun'. */
+export const BADGE_LETTER = { capture: 'C', load: 'L', hide: 'H', stun: 'S' };
+export function unitStatus(u, b) {
+  if (b && b.capture < 20 && b.owner !== u.owner && (u.kind === 'Infantry' || u.kind === 'Mech')) return 'capture';
+  if (u.cargo?.length) return 'load';
+  if (u.dived) return 'hide';
+  if (u.stunned) return 'stun';
+  return null;
+}
+
 export class Board {
   /** art: optional art set (web/js/art.js), {unit(u, parent, box), tile(id, entry, owner, parent,
    *  box)}, each -> true when it drew; without one, or when it declines, libaw's own art is used. */
@@ -140,8 +151,18 @@ export class Board {
         el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);
         el('text', { x: u.x * TILE + TILE - 8, y: u.y * TILE + TILE - 4, class: 'hp' }, g).textContent = hp;
       }
-      if (u.cargo?.length) el('circle', { cx: u.x * TILE + 6, cy: u.y * TILE + TILE - 6, r: 4, class: 'cargo' }, g);
-      if (u.dived) el('text', { x: u.x * TILE + 3, y: u.y * TILE + 11, class: 'tag' }, g).textContent = '▼';
+      // One status badge in the bottom-left corner, as AWBW shows it: capturing, loaded, hidden
+      // (a dived sub or hidden stealth), stunned.
+      const status = unitStatus(u, blds.get(key(u.x, u.y)));
+      if (status) {
+        const box = { x: u.x * TILE, y: u.y * TILE, size: TILE };
+        if (!this.art?.badge?.(status, g, box)) {
+          const bs = Math.round(TILE * 0.42), bx = box.x + 1, by = box.y + TILE - bs - 1;
+          const b = el('g', { class: `ubadge ${status}` }, g);
+          el('rect', { x: bx, y: by, width: bs, height: bs, rx: 2 }, b);
+          el('text', { x: bx + bs / 2, y: by + bs * 0.78 }, b).textContent = BADGE_LETTER[status];
+        }
+      }
     }
     this.cursorLayer = el('g', { class: 'cursor' }, s);
   }

@@ -7,6 +7,9 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 // aw2/ set, which has every one of them too (checked 2026-11-24).
 export const AWBW_BASE = 'https://awbw.amarriner.com/terrain/ani/';
 export const AWBW_STILL_BASE = 'https://awbw.amarriner.com/terrain/aw2/';
+const AWBW_SITE = 'https://awbw.amarriner.com/';
+/** AWBW's corner icons for a unit's status (C, L, hidden, stunned), under terrain/. */
+export const AWBW_BADGES = { capture: 'aw1/capture', load: 'aw1/load', hide: 'aw1/subdive2', stun: 'stun' };
 
 export const spriteId = (kind) => `u-${kind.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
 
@@ -134,6 +137,19 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src 
         img.replaceWith(use);
       }, { once: true });
       g.appendChild(img);
+      return true;
+    },
+    /** A unit's status badge (board.js unitStatus) with AWBW's icon, in the tile's bottom-left
+     *  corner at half a tile, as AWBW draws it (its game page takes these from terrain/aw1/). */
+    badge(status, parent, { x, y, size }) {
+      const file = AWBW_BADGES[status];
+      if (!file) return false;
+      const img = document.createElementNS(SVGNS, 'image');
+      const s = size / 2;
+      for (const [k, v] of Object.entries({ x, y: y + size - s, width: s, height: s, href: `${AWBW_SITE}terrain/${file}.gif` })) img.setAttribute(k, v);
+      img.style.imageRendering = 'pixelated';
+      img.addEventListener('error', () => img.remove(), { once: true });
+      parent.appendChild(img);
       return true;
     },
     /** One tile, bottom-aligned in a box two tiles tall (AWBW's buildings and mountains stand
