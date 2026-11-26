@@ -79,6 +79,15 @@ pub fn legal(state: &str) -> String {
     json!({"actions": out}).to_string()
 }
 
+/// Where a unit can move and what it could fire on (`actions::reach`): {"moves": [[x, y]...], "attack": [...]}.
+#[wasm_bindgen]
+pub fn reach(state: &str, unit_id: u32) -> String {
+    let s = match load(state) { Ok(s) => s, Err(e) => return err(e) };
+    let Some(u) = s.units.get(&unit_id) else { return err(format!("no unit {unit_id}")) };
+    let (moves, attack) = libaw::actions::reach(&s, u);
+    json!({"moves": moves, "attack": attack}).to_string()
+}
+
 /// Apply one action (contract format) for the player to move, if legal.
 #[wasm_bindgen]
 pub fn act(state: &str, action: &str, seed: u32) -> String {

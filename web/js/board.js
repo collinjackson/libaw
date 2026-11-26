@@ -46,9 +46,9 @@ export class Board {
     svg.addEventListener('mousemove', (e) => {
       const t = this.tileOf(e);
       const k = t && key(t[0], t[1]);
-      if (k !== this.hoverKey) { this.hoverKey = k; this.onHover(t); this.drawCursor(t); }
+      if (k !== this.hoverKey) { this.hoverKey = k; this.hoverTile = t; this.onHover(t); this.drawCursor(t); }
     });
-    svg.addEventListener('mouseleave', () => { this.hoverKey = null; this.onHover(null); this.drawCursor(null); });
+    svg.addEventListener('mouseleave', () => { this.hoverKey = null; this.hoverTile = null; this.onHover(null); this.drawCursor(null); });
   }
 
   tileOf(e) {
@@ -187,6 +187,7 @@ export class Board {
     const hpLayer = el('g', { class: 'hpbars' }, s);
     for (const draw of bars) draw(hpLayer);
     this.cursorLayer = el('g', { class: 'cursor' }, s);
+    if (this.hoverTile) this.drawCursor(this.hoverTile);   // a redraw (playback) keeps the cursor
   }
 
   /** Let the art learn how tall the top row's sprites are, in each of these states (a capture

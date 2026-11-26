@@ -98,6 +98,42 @@ pub fn reachable(s: &State, u: &Unit) -> BTreeMap<Pos, (u32, Vec<Pos>)> {
         .collect()
 }
 
+/// What AWBW shows when you click a unit: the tiles it can move to this turn, and every tile
+/// it could fire on, from where it stands (indirect units) or from any tile it can stop on
+/// (direct units). Movement and range include its CO's power; whose turn it is doesn't matter.
+pub fn reach(s: &State, u: &Unit) -> (Vec<Pos>, Vec<Pos>) {
+    let moves: Vec<Pos> = reachable(s, u).into_keys().collect();
+    let info = tables().unit(u.kind);
+    if info.range[1] == 0 {
+        return (moves, vec![]);
+    }
+    let (minr, mut maxr) = (info.range[0] as u32, info.range[1] as i32);
+    let from: Vec<Pos> = if is_indirect(u.kind) {
+        let pw = s.player(u.owner).map(|p| p.power).unwrap_or_default();
+        let co = s.player(u.owner).map(|p| p.co).unwrap_or(crate::data::Co::NoCO);
+        maxr = (maxr + co::range_bonus(&co, &pw, u.kind)).max(2);
+        vec![(u.x, u.y)]
+    } else {
+        // A direct unit fires after moving, so only from tiles it can end on
+        moves.iter().copied().filter(|&p| s.unit_at(p.0, p.1).is_none_or(|o| o.id == u.id)).collect()
+    };
+    let maxr = maxr.max(0) as u32;
+    let mut hit = alloc::collections::BTreeSet::new();
+    for &f in &from {
+        let r = maxr as i32;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                let (x, y) = (f.0 as i32 + dx, f.1 as i32 + dy);
+                if !s.in_bounds(x, y) { continue; }
+                let p = (x as u16, y as u16);
+                let d = dist(f, p);
+                if d >= minr && d <= maxr && d > 0 { hit.insert(p); }
+            }
+        }
+    }
+    (moves, hit.into_iter().collect())
+}
+
 /// Enemy tiles `u` can attack from `from`. `moved`: whether it moves first this action
 /// (indirect units can't move and fire).
 pub fn attack_targets(s: &State, u: &Unit, from: Pos, moved: bool) -> Vec<Pos> {

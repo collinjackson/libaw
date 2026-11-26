@@ -458,3 +458,18 @@ fn a_fog_view_keeps_move_overrides_only_for_units_in_sight() {
     assert_eq!(view.move_override.get(&mine), Some(&4));
     assert_eq!(view.move_override.get(&theirs), None, "so is its movement");
 }
+
+#[test]
+fn reach_counts_a_power_that_lengthens_range() {
+    // An Artillery fires 2–3 tiles from where it stands; Grit adds one, and one more with his power.
+    for (power, far) in [("N", 4), ("Y", 5)] {
+        let (mut s, me, _) = board("Grit", power, "Andy");
+        let at = (s.width / 2, s.height / 2);
+        let id = add(&mut s, unit(1, me, "Artillery", at));
+        let (moves, attack) = libaw::actions::reach(&s, &s.units[&id]);
+        assert!(moves.contains(&at));
+        let d = |p: &Pos| libaw::rules::dist(at, *p);
+        assert!(attack.iter().all(|p| (2..=far).contains(&d(p))), "{power}");
+        assert!(attack.iter().any(|p| d(p) == far), "{power}");
+    }
+}

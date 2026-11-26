@@ -56,6 +56,7 @@ import { Replay } from './js/replay.js';
 import { awbwLook } from './js/look.js';
 import { TILE } from './js/board.js';
 import { key, displayHp, hpUnknown, unitsByTile, buildingsByTile } from './js/logic.js';
+import { segmentAt } from './js/story.js';
 
 // ?sb=URL of a storyboard (awbw-replay --storyboard TURN.json), &art=libaw|awbw, &camera=1,
 // &anim=0 (AWBW's still sprites), &shoals=custom|classic, &water=URL of a sea/shoal tile table
@@ -94,8 +95,9 @@ async function setup() {
   $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${sb.steps.length} steps, ${rp.duration.toFixed(1)} s`;
   renderAt(0);
 }
-function renderAt(t) { rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); showTip(); }
-// Hover (or tap) a tile for what the board doesn't spell out: a unit's HP, a capture's points left.
+let lastT = 0;
+function renderAt(t) { lastT = t; checkSelection(); rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); showTip(); }
+// Hover (or tap) a tile for what the board doesn't spell out: where it is, a unit's HP, a capture's points left.
 let tipAt = null;
 function showTip() {
   const tip = $('tip'), st = rp?.board.state;
@@ -111,14 +113,59 @@ function showTip() {
 }
 function tipText(st, x, y) {
   const u = unitsByTile(st).get(key(x, y)), b = buildingsByTile(st).get(key(x, y));
-  const out = [];
-  if (u) out.push(`${u.kind} · ${hpUnknown(u) ? '?' : displayHp(u)} HP`);
-  if (b && b.capture < 20) out.push(`capture: ${b.capture} of 20 left`);
+  const out = [`(${x}, ${y})`];
+  if (u) out.push(`${hpUnknown(u) ? '?' : displayHp(u)} HP`);
+  if (b && b.capture < 20) out.push(`capture ${b.capture}/20`);
   return out.join(' · ');
+}
+// Click a unit, as on AWBW: where it can move (blue), alternating with every tile it could fire
+// on (red). libaw's engine works it out (pkg/, loaded on the first click), with its CO's power if
+// one was used this turn. Click it again, or anywhere else, to clear.
+let engine = null, sel = null;
+const loadEngine = () => (engine ??= import('./pkg/libaw_wasm.js').then(async (m) => { await m.default(); return m; }));
+function stateNow() {
+  const st = structuredClone(rp.board.state);
+  const i = segmentAt(rp.tl, lastT)?.seg.step ?? sb.steps.length;
+  for (const s of sb.steps.slice(0, i + 1))
+    if (s.type === 'power') { const p = st.players.find((p) => p.id === s.player); if (p) p.power = s.super ? 'S' : 'Y'; }
+  return st;
+}
+async function select(x, y) {
+  const u = unitsByTile(rp.board.state).get(key(x, y));
+  clearSelection();
+  if (!u) return;
+  const m = await loadEngine().catch(() => null);
+  const r = m && JSON.parse(m.reach(JSON.stringify(stateNow()), u.id));
+  if (!r || r.error) return;
+  const keys = (ps) => new Set(ps.map(([px, py]) => key(px, py)));
+  sel = { id: u.id, at: key(u.x, u.y), move: keys(r.moves), attack: keys(r.attack), phase: 0 };
+  showMarks();
+  sel.timer = setInterval(() => { sel.phase ^= 1; showMarks(); }, 900);
+}
+function showMarks() {
+  rp.marks = !sel ? {} : sel.phase && sel.attack.size ? { attack: sel.attack } : { move: sel.move };
+  renderAt(lastT);
+}
+function clearSelection() {
+  if (!sel) return;
+  clearInterval(sel.timer); const was = sel; sel = null; rp.marks = {};
+  return was;
+}
+// The selected unit moved or went (the turn is playing): its ranges no longer hold.
+function checkSelection() {
+  if (!sel) return;
+  const u = Object.values(rp.board.state?.units ?? {}).find((v) => v.id === sel.id);
+  if (!u || key(u.x, u.y) !== sel.at) clearSelection();
 }
 function hookTip() {
   rp.board.onHover = (t) => { tipAt = t; showTip(); };
-  rp.board.onTile = (x, y) => { tipAt = tipAt && tipAt[0] === x && tipAt[1] === y ? null : [x, y]; showTip(); };
+  rp.board.onTile = (x, y) => {
+    const again = sel && sel.at === key(x, y);
+    if (again) { clearSelection(); renderAt(lastT); return; }
+    tipAt = [x, y]; showTip();
+    const had = clearSelection();
+    select(x, y).then(() => { if (had && !sel) renderAt(lastT); });
+  };
 }
 await setup();
 $('art').onchange = $('camera').onchange = $('anim').onchange = $('shoals').onchange = $('hp').onchange = setup;

@@ -103,7 +103,7 @@ export class Replay {
     }
     // Units that acted keep their colour: a replay greyed out as it goes is hard to follow.
     const shown = { ...state, units: Object.fromEntries(Object.entries(state.units).map(([k, u]) => [k, { ...u, moved: false }])) };
-    this.board.draw(shown, { order: this.order, mirrorOdd: true });
+    this.board.draw(shown, { order: this.order, mirrorOdd: true, marks: this.marks ?? {} });
     if (under) under();
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
     this.shake = 0;
