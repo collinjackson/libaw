@@ -162,9 +162,10 @@ pub fn options_at(s: &State, u: &Unit, to: Pos) -> Vec<Then> {
             if capacity(o.kind) > o.cargo.len() && can_carry(o.kind, u.kind) {
                 out.push(Then::Load);
             }
-            // Transports may join while their cargo together still fits; it passes to the
-            // unit joined.
-            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.len() + u.cargo.len() <= capacity(o.kind) {
+            // A join needs the unit joined into damaged, and neither unit carrying anything:
+            // AWBW's game page offers no Join to or from a loaded transport (checked on the live
+            // site by awbw-functional-tests' transport test).
+            if o.kind == u.kind && o.hp.display_hi() < 10 && o.cargo.is_empty() && u.cargo.is_empty() {
                 out.push(Then::Join);
             }
             return out;

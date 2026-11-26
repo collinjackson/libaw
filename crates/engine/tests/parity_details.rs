@@ -169,27 +169,22 @@ fn a_blocked_drop_in_place_does_not_cost_the_transport_its_move() {
 }
 
 #[test]
-fn transports_join_while_their_cargo_fits() {
+fn loaded_transports_cannot_join() {
+    // AWBW's game page offers Join only when neither transport carries anything.
     let (mut s, me, _) = board("Andy", "N", "Andy");
     let (here, there) = land_pair(&s);
     let a = add(&mut s, Unit { hp: Hp::exact(50), ..unit(1, me, "APC", here) });
+    let b = add(&mut s, Unit { hp: Hp::exact(40), ..unit(3, me, "APC", there) });
+    assert!(libaw::actions::options_at(&s, &s.units[&a], there).contains(&Then::Join), "both empty");
+
     let rider = add(&mut s, Unit { carried_by: Some(a), ..unit(2, me, "Infantry", here) });
     s.units.get_mut(&a).unwrap().cargo.push(rider);
-    let b = add(&mut s, Unit { hp: Hp::exact(40), ..unit(3, me, "APC", there) });
-    assert!(libaw::actions::options_at(&s, &s.units[&a], there).contains(&Then::Join));
-    sim::step(&mut s, &Action::Move { unit: a, path: vec![here, there], then: Then::Join }, &mut avg).unwrap();
-    assert!(!s.units.contains_key(&a));
-    assert_eq!((s.units[&b].hp, s.units[&b].cargo.clone()), (Hp::exact(90), vec![rider]));
-    assert_eq!(s.units[&rider].carried_by, Some(b));
+    assert!(libaw::actions::options_at(&s, &s.units[&a], there).is_empty(), "mover loaded: no Join, nothing else");
 
-    // Two loaded APCs have one slot between them: no join.
-    let (mut s, me, _) = board("Andy", "N", "Andy");
-    for (id, at) in [(1, here), (3, there)] {
-        let apc = add(&mut s, Unit { hp: Hp::exact(50), ..unit(id, me, "APC", at) });
-        let rider = add(&mut s, Unit { carried_by: Some(apc), ..unit(id + 1, me, "Infantry", at) });
-        s.units.get_mut(&apc).unwrap().cargo.push(rider);
-    }
-    assert!(!libaw::actions::options_at(&s, &s.units[&1], there).contains(&Then::Join));
+    s.units.get_mut(&a).unwrap().cargo.clear();
+    s.units.get_mut(&rider).unwrap().carried_by = Some(b);
+    s.units.get_mut(&b).unwrap().cargo.push(rider);
+    assert!(!libaw::actions::options_at(&s, &s.units[&a], there).contains(&Then::Join), "target loaded");
 }
 
 #[test]
