@@ -98,9 +98,9 @@ pub fn reachable(s: &State, u: &Unit) -> BTreeMap<Pos, (u32, Vec<Pos>)> {
         .collect()
 }
 
-/// What AWBW shows when you click a unit: the tiles it can move to this turn, and every tile
-/// it could fire on, from where it stands (indirect units) or from any tile it can stop on
-/// (direct units). Movement and range include its CO's power; whose turn it is doesn't matter.
+/// What AWBW shows when you hold a unit: the tiles it can move to this turn, and every tile in
+/// its firing range from where it stands (as AWBW does, even for a direct unit that could move
+/// first). Movement and range include its CO's power; whose turn it is doesn't matter.
 pub fn reach(s: &State, u: &Unit) -> (Vec<Pos>, Vec<Pos>) {
     let moves: Vec<Pos> = reachable(s, u).into_keys().collect();
     let info = tables().unit(u.kind);
@@ -108,15 +108,12 @@ pub fn reach(s: &State, u: &Unit) -> (Vec<Pos>, Vec<Pos>) {
         return (moves, vec![]);
     }
     let (minr, mut maxr) = (info.range[0] as u32, info.range[1] as i32);
-    let from: Vec<Pos> = if is_indirect(u.kind) {
+    if is_indirect(u.kind) {
         let pw = s.player(u.owner).map(|p| p.power).unwrap_or_default();
         let co = s.player(u.owner).map(|p| p.co).unwrap_or(crate::data::Co::NoCO);
         maxr = (maxr + co::range_bonus(&co, &pw, u.kind)).max(2);
-        vec![(u.x, u.y)]
-    } else {
-        // A direct unit fires after moving, so only from tiles it can end on
-        moves.iter().copied().filter(|&p| s.unit_at(p.0, p.1).is_none_or(|o| o.id == u.id)).collect()
-    };
+    }
+    let from = [(u.x, u.y)];
     let maxr = maxr.max(0) as u32;
     let mut hit = alloc::collections::BTreeSet::new();
     for &f in &from {

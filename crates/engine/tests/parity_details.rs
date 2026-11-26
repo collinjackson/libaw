@@ -473,3 +473,12 @@ fn reach_counts_a_power_that_lengthens_range() {
         assert!(attack.iter().any(|p| d(p) == far), "{power}");
     }
 }
+
+#[test]
+fn reach_shows_a_direct_units_range_from_where_it_stands() {
+    let (mut s, me, _) = board("Andy", "N", "Andy");
+    let at = (s.width / 2, s.height / 2);
+    let id = add(&mut s, unit(1, me, "Tank", at));
+    let (_, attack) = libaw::actions::reach(&s, &s.units[&id]);
+    assert!(!attack.is_empty() && attack.iter().all(|p| libaw::rules::dist(at, *p) == 1));
+}
