@@ -40,7 +40,7 @@ assert.deepEqual(S.shots(sb).map((s) => s.kind), ['fire', 'unload', 'explode', '
 console.log('steps ok');
 
 // Menus: AWBW's order, a Load or Join alone, no Unload after a move.
-assert.deepEqual(G.unitMenu([{ type: 'wait' }, { type: 'attack', target: [1, 1] }, { type: 'capture' }], 'Capt', { moved: true }), ['Fire', 'Capt', 'Wait']);
+assert.deepEqual(G.unitMenu([{ type: 'wait' }, { type: 'attack', target: [1, 1] }, { type: 'capture' }], 'Capture', { moved: true }), ['Fire', 'Capture', 'Wait']);
 assert.deepEqual(G.unitMenu([{ type: 'wait' }, { type: 'unload', cargo_id: 1, to: [0, 0] }], 'Wait', { moved: true }), ['Wait']);
 assert.deepEqual(G.unitMenu([{ type: 'wait' }, { type: 'unload', cargo_id: 1, to: [0, 0] }], 'Unload', { moved: false }), ['Unload', 'Delete', 'Wait']);
 assert.deepEqual(G.unitMenu(null, 'Load'), ['Load']);

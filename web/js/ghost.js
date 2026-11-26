@@ -21,12 +21,12 @@ export const hopTime = (tiles) => Math.min(0.7, Math.max(0.12, 0.06 + 0.035 * ti
 const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
 
 /** The menu option that picks each kind of step. */
-export const LABEL = { fire: 'Fire', capture: 'Capt', join: 'Join', load: 'Load', unload: 'Unload', supply: 'Supply', hide: 'Hide',
+export const LABEL = { fire: 'Fire', capture: 'Capture', join: 'Join', load: 'Load', unload: 'Unload', supply: 'Supply', hide: 'Hide',
   unhide: 'Unhide', explode: 'Explode', launch: 'Launch', repair: 'Repair', delete: 'Delete' };
-const THEN = { wait: 'Wait', attack: 'Fire', attack_seam: 'Fire', capture: 'Capt', load: 'Load', join: 'Join', supply: 'Supply',
+const THEN = { wait: 'Wait', attack: 'Fire', attack_seam: 'Fire', capture: 'Capture', load: 'Load', join: 'Join', supply: 'Supply',
   hide: 'Hide', unhide: 'Unhide', delete: 'Delete', launch: 'Launch', repair: 'Repair', unload: 'Unload' };
 /** AWBW's order for the unit menu. */
-export const MENU_ORDER = ['Fire', 'Unload', 'Repair', 'Supply', 'Hide', 'Unhide', 'Capt', 'Launch', 'Explode', 'Delete', 'Wait'];
+export const MENU_ORDER = ['Fire', 'Unload', 'Repair', 'Supply', 'Hide', 'Unhide', 'Capture', 'Launch', 'Explode', 'Delete', 'Wait'];
 
 /** The unit menu as the player saw it, in AWBW's order: `thens` is what libaw's engine offers
  *  there (wasm `options`, contract format), or null without the engine (then just the chosen
