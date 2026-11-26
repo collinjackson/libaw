@@ -133,24 +133,37 @@ export class Replay {
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
   }
 
-  /** The move arrow along path from fraction a to b of its length, under the units. */
+  /** The move arrow along path from fraction a to b of its length, under the units: drawn in the
+   *  style of the console games' (and AWBW's): a thick bright-red path with a round tail and a
+   *  wide head, its shadow down and to the right. */
   arrow(path, a, b) {
     const layer = this.board.svg.querySelector('g.marks');
     if (!layer || b <= a) return;
     const n = path.length - 1, pts = [];
-    const at = (f) => alongPath(path, f);
-    pts.push(at(a));
+    pts.push(alongPath(path, a));
     for (let i = 1; i < n; i++) if (i / n > a && i / n < b) pts.push(path[i]);
-    pts.push(at(b));
+    pts.push(alongPath(path, b));
     const xy = pts.map(([x, y]) => [(x + 0.5) * TILE, (y + 0.5) * TILE]);
-    const g = el('g', { class: 'fx-arrow' }, layer);
-    const d = 'M' + xy.map((p) => p.join(' ')).join(' L');
-    el('path', { d, fill: 'none', stroke: '#fff', 'stroke-width': 13, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.9 }, g);
-    el('path', { d, fill: 'none', stroke: '#e8412c', 'stroke-width': 7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
-    if (b >= 1 && xy.length > 1) {   // the head, pointing along the last stretch
+    const head = b >= 1 && xy.length > 1;
+    let ang = 0;
+    if (head) {   // the line stops at the head's base, which sits on the last tile
       const [x1, y1] = xy[xy.length - 1], [x0, y0] = xy[xy.length - 2];
-      const ang = (Math.atan2(y1 - y0, x1 - x0) * 180) / Math.PI;
-      el('path', { d: 'M 9 0 L -6 -10 L -6 10 Z', fill: '#e8412c', stroke: '#fff', 'stroke-width': 3, 'stroke-linejoin': 'round', transform: `translate(${x1} ${y1}) rotate(${ang})` }, g);
+      ang = Math.atan2(y1 - y0, x1 - x0);
+      const back = Math.min(TILE * 0.05, Math.hypot(x1 - x0, y1 - y0));
+      xy[xy.length - 1] = [x1 - Math.cos(ang) * back, y1 - Math.sin(ang) * back];
+    }
+    const d = 'M' + xy.map((p) => p.join(' ')).join(' L');
+    const w = TILE * 0.36, sh = TILE * 0.09;
+    const tip = head ? (() => {
+      const [x, y] = pts[pts.length - 1].map((v) => (v + 0.5) * TILE), deg = (ang * 180) / Math.PI;
+      const L = TILE * 0.42, B = TILE * 0.06, W = TILE * 0.42;   // tip ahead of the centre, base just behind
+      return { d: `M ${L} 0 L ${-B} ${-W} L ${-B} ${W} Z`, t: `translate(${x} ${y}) rotate(${deg})` };
+    })() : null;
+    const g = el('g', { class: 'fx-arrow' }, layer);
+    for (const [dx, colour] of [[sh, '#5a1e0c'], [0, '#ff2c14']]) {
+      const part = el('g', { transform: `translate(${dx} ${dx})` }, g);
+      el('path', { d, fill: 'none', stroke: colour, 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, part);
+      if (tip) el('path', { d: tip.d, fill: colour, transform: tip.t }, part);
     }
   }
 
