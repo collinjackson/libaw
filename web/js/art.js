@@ -8,6 +8,8 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 export const AWBW_BASE = 'https://awbw.amarriner.com/terrain/ani/';
 export const AWBW_STILL_BASE = 'https://awbw.amarriner.com/terrain/aw2/';
 const AWBW_SITE = 'https://awbw.amarriner.com/';
+// How far (in board units, a tile being 40) terrain overlaps its neighbours, to hide seams.
+const BLEED = 0.4;
 /** AWBW's corner icons for a unit's status (C, L, hidden, stunned), under terrain/. */
 export const AWBW_BADGES = { capture: 'aw1/capture', load: 'aw1/load', hide: 'aw1/subdive2', stun: 'stun' };
 
@@ -188,7 +190,7 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src 
       if (cell) {
         // A region of the sheet: an inner <svg> whose viewBox is the tile's rectangle.
         const box = document.createElementNS(SVGNS, 'svg');
-        for (const [k, v] of Object.entries({ x, y, width: size, height: size, viewBox: cell.join(' '), preserveAspectRatio: 'none' })) box.setAttribute(k, v);
+        for (const [k, v] of Object.entries({ x: x - BLEED, y: y - BLEED, width: size + 2 * BLEED, height: size + 2 * BLEED, viewBox: cell.join(' '), preserveAspectRatio: 'none' })) box.setAttribute(k, v);
         const img = document.createElementNS(SVGNS, 'image');
         for (const [k, v] of Object.entries({ x: 0, y: 0, width: sheet.width, height: sheet.height, href: sheet.url })) img.setAttribute(k, v);
         img.style.imageRendering = 'pixelated';
@@ -204,12 +206,14 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src 
       // AWBW's woods, mountains and buildings are drawn over a plain: their GIFs are transparent.
       if (name !== 'plain' && !/sea|shoal|reef|river|bridge/.test(name)) {
         const under = document.createElementNS(SVGNS, 'image');
-        for (const [k, v] of Object.entries({ x, y, width: size, height: size, href: href('plain') })) under.setAttribute(k, v);
+        for (const [k, v] of Object.entries({ x: x - BLEED, y: y - BLEED, width: size + 2 * BLEED, height: size + 2 * BLEED, href: href('plain'), preserveAspectRatio: 'none' })) under.setAttribute(k, v);
         under.style.imageRendering = 'pixelated';
         parent.appendChild(under);
       }
       const img = document.createElementNS(SVGNS, 'image');
-      for (const [k, v] of Object.entries({ x, y: y - size, width: size, height: 2 * size, preserveAspectRatio: 'xMidYMax meet' })) img.setAttribute(k, v);
+      // A whole tile is drawn BLEED wider on each side (and below), so at sizes where tiles end
+      // mid-pixel, neighbours overlap instead of leaving a hairline of background between them.
+      for (const [k, v] of Object.entries({ x: x - BLEED, y: y - size, width: size + 2 * BLEED, height: 2 * size + BLEED, preserveAspectRatio: 'xMidYMax meet' })) img.setAttribute(k, v);
       img.setAttribute('href', href(name));
       img.style.imageRendering = 'pixelated';
       img.addEventListener('error', () => {

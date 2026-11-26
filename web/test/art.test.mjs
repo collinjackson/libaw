@@ -56,7 +56,8 @@ console.log('art ok');
   assert.equal(art.tile(28, { name: 'Sea' }, null, parent, { x: 32, y: 48, size: 16 }), true);
   const [box] = parent.kids;
   assert.equal(box.tag, 'svg');
-  assert.deepEqual([box.attrs.x, box.attrs.y, box.attrs.width, box.attrs.viewBox], ['32', '48', '16', '32 16 16 16']);
+  // The tile overlaps its neighbours by 0.4 on each side, to hide seams.
+  assert.deepEqual([box.attrs.x, box.attrs.y, box.attrs.width, box.attrs.viewBox], ['31.6', '47.6', '16.8', '32 16 16 16']);
   assert.deepEqual([box.kids[0].tag, box.kids[0].attrs.href, box.kids[0].attrs.width], ['image', sheet.url, '64']);
   delete globalThis.document;
 }
