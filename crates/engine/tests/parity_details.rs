@@ -7,6 +7,8 @@ use libaw::data::tables;
 use libaw::rules::{base_damage_now, move_cost};
 use libaw::{co, combat, fog, sim, Hp, Player, PlayerId, State, Unit, UnitId};
 
+const SILO: u16 = 111;
+
 fn state() -> State {
     let turn: serde_json::Value = serde_json::from_str(include_str!(
         "../../../docs/eval-harness/test-states/game-1755654-turn-020-D11-pid4205798.json"
@@ -240,10 +242,54 @@ fn sasha_gets_nothing_extra_when_properties_pay_nothing() {
 }
 
 #[test]
-fn a_cruiser_out_of_ammo_cannot_fire_at_aircraft() {
+fn a_cruiser_out_of_ammo_cannot_fire_at_all() {
+    // Checked live (game 1769988): the server refuses with "Unit is out of ammos!", though the
+    // game page offers Fire on aircraft and ships alike.
+    let u = |k: &str| libaw::data::UnitType::from(k);
     let cruiser = unit(1, 0, "Cruiser", (0, 0));
-    assert!(base_damage_now(&cruiser, libaw::data::UnitType::from("B-Copter")).is_some());
-    assert!(base_damage_now(&Unit { ammo: 0, ..cruiser }, libaw::data::UnitType::from("B-Copter")).is_none());
+    assert!(base_damage_now(&cruiser, u("B-Copter")).is_some());
+    let dry = Unit { ammo: 0, ..cruiser };
+    for k in ["B-Copter", "Fighter", "Stealth", "Carrier", "Sub"] {
+        assert_eq!(base_damage_now(&dry, u(k)), None, "{k}");
+    }
+}
+
+#[test]
+fn a_cruiser_spends_no_ammo_on_aircraft() {
+    // Checked live (game 1769988): a shot at a Stealth left its ammo at 9; its nine shots at a
+    // Carrier took it from 9 to 0.
+    let u = |k: &str| libaw::data::UnitType::from(k);
+    let cruiser = unit(1, 0, "Cruiser", (0, 0));
+    for k in ["Stealth", "Fighter", "B-Copter"] {
+        assert!(!libaw::rules::uses_primary(&cruiser, u(k)), "{k}");
+    }
+    assert!(libaw::rules::uses_primary(&cruiser, u("Carrier")));
+}
+
+#[test]
+fn a_md_tank_out_of_ammo_cannot_hit_a_md_tank() {
+    let u = |k: &str| libaw::data::UnitType::from(k);
+    let dry = Unit { ammo: 0, ..unit(1, 0, "Md.Tank", (0, 0)) };
+    assert_eq!(base_damage_now(&dry, u("Md.Tank")), None);
+    assert_eq!(base_damage_now(&dry, u("Tank")), Some(8), "its machine gun still hits a Tank");
+}
+
+#[test]
+fn a_silo_may_be_launched_at_any_tile() {
+    let (mut s, me, foe) = board("Andy", "N", "Andy");
+    let (here, _) = land_pair(&s);
+    s.buildings.insert(here, libaw::state::Building { terrain: SILO, owner: None, capture: 20 });
+    let inf = add(&mut s, unit(1, me, "Infantry", here));
+    add(&mut s, unit(2, foe, "Infantry", (0, 0)));
+    let far = ((s.width - 1) as u16, (s.height - 1) as u16);
+    let launch = |t: Pos| Action::Move { unit: inf, path: vec![here], then: Then::Launch { target: t } };
+    // Offered: tiles that hit the enemy (and one that hits nobody); legal: any tile on the map.
+    assert!(libaw::actions::unit_actions(&s, inf).contains(&launch((0, 0))));
+    assert!(libaw::actions::is_legal(&s, &launch(far)));
+    assert!(libaw::actions::is_legal(&s, &launch((0, 0))));
+    assert!(!libaw::actions::is_legal(&s, &launch((s.width as u16, 0))), "off the map");
+    s.buildings.remove(&here);
+    assert!(!libaw::actions::is_legal(&s, &launch(far)), "no silo");
 }
 
 /// My full-HP Md.Tank beside a 1 HP enemy Infantry: attacking destroys it.

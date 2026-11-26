@@ -265,7 +265,9 @@ pub fn mg_damage(att_kind: U, def_kind: U) -> Option<u8> {
         U::Mech => &[(U::Recon, 18), (U::APC, 20), (U::Artillery, 32), (U::Rocket, 35), (U::Missile, 35), (U::AntiAir, 6), (U::Tank, 6), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 6)],
         U::BCopter => &[(U::Recon, 30), (U::APC, 20), (U::Artillery, 25), (U::Rocket, 35), (U::Missile, 35), (U::AntiAir, 6), (U::Tank, 6), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 6)],
         U::Tank => &[(U::Recon, 40), (U::APC, 45), (U::Artillery, 45), (U::Rocket, 55), (U::Missile, 30), (U::AntiAir, 5), (U::Tank, 6), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 6)],
-        U::MdTank => &[(U::Recon, 45), (U::APC, 45), (U::Artillery, 45), (U::Rocket, 55), (U::Missile, 35), (U::AntiAir, 7), (U::Tank, 8), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 8)],
+        // No Md.Tank entry: AWBW's second-weapon table (ATTACK2) has none, so its game page
+        // offers no Fire on a Md.Tank once a Md.Tank's ammo is gone.
+        U::MdTank => &[(U::Recon, 45), (U::APC, 45), (U::Artillery, 45), (U::Rocket, 55), (U::Missile, 35), (U::AntiAir, 7), (U::Tank, 8), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 8)],
         U::Neotank | U::MegaTank => &[(U::Recon, 65), (U::APC, 65), (U::Artillery, 65), (U::Rocket, 75), (U::Missile, 55), (U::AntiAir, 17), (U::Tank, 10), (U::MdTank, 1), (U::Neotank, 1), (U::MegaTank, 1), (U::Piperunner, 10)],
         _ => &[],
     };
@@ -279,7 +281,9 @@ pub fn base_damage_now(att: &Unit, def_kind: U) -> Option<u8> {
     let info = att.kind.info();
     if info.ammo > 0 && att.ammo == 0 {
         // A Cruiser has no second weapon as AWBW counts them: out of ammo it can't fire at
-        // all, not even its guns at aircraft.
+        // all, not even its guns at aircraft. (AWBW's game page offers Fire, but the server
+        // answers "Unit is out of ammos!": checked live in game 1769988. Its shots at
+        // aircraft, a Stealth included, use no ammo while it has some.)
         if att.kind == U::Cruiser {
             return None;
         }

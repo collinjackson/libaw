@@ -39,7 +39,7 @@ Replay check unchanged apart from one new check, `power.missile_aim` (60 of 60).
 | A7 | Property repair, exact HP: at 8.0 or more the unit goes to exactly 10.0 (free for a 9.x unit); below 8.0 it gains exactly 2.0 and keeps its fraction (7.4 becomes 9.4). Rachel: 7.0 or more goes to 10.0, otherwise +3.0. | With the tighter HP, all 47,057 recorded attacks still fit |
 | A8 | A unit that uses ammo spends 1 on every pipe-seam attack, even at 0 (ammo goes to -1). | game-1751864 turn 32 |
 | A9 | Unit limit: no build once the player has the game's limit of units, carried ones included. League default 50 (65 on high-funds maps). `State::unit_limit` is off unless set (the records don't carry the setting, and custom games can raise it: JuggerMaster's game-1760014 reaches 60 units); `rules::LEAGUE_UNIT_LIMIT` is 50 and the match runner takes `MATCH_UNIT_LIMIT=league`. At the limit the generator offers no builds. | Consistent: nobody builds at 50+ in 42,614 builds (game-1752181 turn 43). All 50 games on the public list of completed league games show a unit limit of 50. |
-| A10 | APC, T-Copter, Lander and Black Boat can't unload while standing on Sea or Reef. Cruiser and Carrier can unload anywhere. | 0 of about 3,900 recorded unloads |
+| A10 | T-Copter, Lander and Black Boat can't unload while standing on Sea or Reef. Cruiser and Carrier can unload anywhere (an APC never stands on Sea). On the site, a transport that has moved unloads by choosing Wait and then being clicked again, which opens an Unload menu only where its cargo can get off; the move menu itself offers Unload only to a transport that hasn't moved. | 0 of about 3,900 recorded unloads; AWBW's game page code; confirmed live by the transport test in advancewarsbyweb/awbw-functional-tests PR #22 (a T-Copter over Sea gets no menu, over land just Unload; a Cruiser at sea gets Unload) |
 | B1 | Sensei's APC, T-Copter, Lander and Black Boat always move +1. | Confirmed in a hot-seat test game on AWBW (game 1762036): Sensei's APC shows 7 movement |
 | B2 | A property repair is all or nothing: if the full step isn't affordable there is no repair (the unit is still resupplied). | Rules only |
 | B5 | Missiles, silos and Kindle's Urban Blight leave a unit at no less than exactly 0.1 HP. | Rules only |
@@ -69,7 +69,7 @@ No recorded game exercises these, so they rest on AWBW's rules. Two were confirm
 | B3 | An Eagle copter that ends at 0 fuel crashes like any other aircraft. |
 | B6 | Hawke's heal skips carried units; Andy's includes them. |
 | B7 | Andy's and Hawke's heals affect only the player's own units in team games. |
-| B8 | Sasha's War Bonds pays on the victim's price to its owner (Kanbei 120%, Colin 80%, Hachi 90%, or 50% under his power), and also when Sonja's super makes her strike first. |
+| B8 | Sasha's War Bonds pays on the victim's price to its owner (Kanbei 120%, Colin 80%, Hachi 90%, or 50% under his power), and also when Sonja's super makes her strike first. Unsettled for Hachi under his power: AWBW's game page values his units at 90% even then; not checked live (it needs both power meters charged). |
 | B9 | Power costs stop growing after the 10th use (3x base). |
 | B10 | Jake's powers give +1 range to every indirect except Battleship and Carrier, so Piperunners too. |
 | B12 | A counterattack on a hidden Stealth does no damage unless the defender is a Fighter or Stealth (dived Sub: Cruiser or Sub). The defender still spends ammo. |
@@ -77,17 +77,36 @@ No recorded game exercises these, so they rest on AWBW's rules. Two were confirm
 | B11 | Sensei's spawns stop at the unit limit, walking his empty cities by row, then column. |
 | B4 | Black Boat repair: +1.0 keeping the fraction; a 9.x unit is topped up to 10.0 free only if it also needs fuel or ammo. |
 | B14 | In fog, properties outside vision appear neutral with full capture points (HQs keep their owner), and an enemy Sonja's unit HP is unknown. |
-| B15 | Elimination by losing all units is checked only when a unit is destroyed, on any day including day 1; a player who simply has no units is not out. With 3+ players the loser's properties turn neutral (the HQ becomes a neutral city) and their turn is skipped. |
-| B16 | Two transports of one kind can join when the combined cargo fits; the cargo passes to the survivor. |
+| B15 | Elimination by losing all units is checked only when a unit is destroyed, on any day including day 1; a player who simply has no units is not out. With 3+ players the loser's properties turn neutral (the HQ becomes a neutral city) and their turn is skipped. Unsettled: live, a player routed by an attack kept their Base and HQ (still their HQ, after a reload in the same turn; game 1769989); a recorded rout by Delete (game-1754929) left the properties neutral. See "Checked live" below. |
+| B16 | ~~Two transports of one kind can join when the combined cargo fits.~~ Wrong, fixed 2026-11-25 (44d29a0): Join is offered only when neither unit carries anything. See "Checked live" below. |
 | B18 | An in-place unload blocked by an unseen unit is rejected without costing the transport its move. |
 | B20 | Under Sonja's super, attacking a direct unit that could hit back but has no ammo and no second weapon does nothing at all. |
 | B21 | Max's powers speed up the Black Bomb too (every unit that isn't an indirect, a foot soldier or a transport). |
 | B22 | Sasha gets no +100 per property when the game's funds per property is 0. |
-| B23 | A Cruiser out of ammo can't fire at all, not even at aircraft (it has no second weapon as AWBW counts them). |
+| B23 | A Cruiser out of ammo can't fire at all, not even at aircraft (it has no second weapon as AWBW counts them). Confirmed live (game 1769988): the game page still offers Fire, but the server answers "Unit is out of ammos!". |
 | B24 | Under Sonja's Counter Break the attacker's strike, which comes second, is resolved as a counterattack: an attacking Sonja, or Kanbei under Samurai Spirit, gets the x1.5 counter bonus on it. |
 
 Also here: `tools/gen_data.py` now keeps the Drake values `data/cos.json` already had by
 hand, so regenerating the data no longer reverts them.
+
+## Checked live on AWBW (2026-11-25/26)
+
+A rules audit listed the rules no recorded game exercises and compared them with AWBW's game
+page code (what its menus offer). The doubtful ones were then played out in hot-seat games on a
+throwaway test account, with Cypress tests from advancewarsbyweb/awbw-functional-tests (PR #22
+for the transport tests; the others are on a local branch). The page only shows what it offers:
+twice here the server decided differently.
+
+| Rule | Engine before | AWBW | Evidence | Engine now |
+|---|---|---|---|---|
+| A transport carrying anything can't Join, and can't be joined (B16) | Join when the cargo together fits | No Join to or from a loaded transport: moving a loaded APC onto a damaged APC opens no menu; an empty APC gets Join | Game page code (`!targetCargo && !currentCargo`); live, transport test in PR #22. No recorded game has a loaded join, so the old rule was an assumption | Fixed (44d29a0) |
+| Unloading at sea (A10) | Already right | As A10 | Live, PR #22 | Unchanged |
+| A Cruiser out of ammo (B23) | Can't fire | Can't fire: the page offers Fire on aircraft and ships, the server refuses | Live, game 1769988: nine shots at a Carrier took its ammo from 9 to 0; then a shot at a Fighter got "Unit is out of ammos!" and did nothing | Unchanged (the audit had it wrong) |
+| A Cruiser's shot at a Stealth uses no ammo | Uses none (any air unit counts as an anti-air target) | Uses none | Live, game 1769988: ammo stayed at 9 after it destroyed a Stealth | Unchanged |
+| A Md.Tank out of ammo against a Md.Tank | Machine gun, base 1 | No Fire offered | Game page: its second-weapon table has no Md.Tank row for a Md.Tank (every other machine-gun value matches it). Not checked live | Fixed: no attack |
+| Missile Silo targets | `is_legal` took only tiles within 2 of an enemy, plus one tile that hits nobody | Any tile on the map | Game page code (aims with the cursor anywhere); live, game 1769992: an Infantry launched at an empty tile 4 away with no unit near it, and the silo emptied | `is_legal` accepts any tile on the map. `legal_actions` still offers the short list, so a search's choices stay few |
+| With 3+ players, who gets a routed player's properties (B15) | Neutral; the HQ becomes a neutral city | Live, routed by an attack: still theirs (their Base and HQ, after a reload in the same turn). The page code hands them to the eliminating player when the server names one | Live, game 1769989. Later turns not seen (the page offered no End Turn after the rout) | Unchanged; unsettled |
+| War Bonds on Hachi's units under his power (B8) | 50% | Page code suggests 90% | Not checked live: it needs Hachi's and Sasha's meters charged | Unchanged; unsettled |
 
 ## Open
 

@@ -325,10 +325,20 @@ pub fn unit_actions(s: &State, unit: UnitId) -> Vec<Action> {
     out
 }
 
-/// Whether `a` is legal: the same answer as `legal_actions(s).contains(a)`, at the cost of one
-/// unit's moves (a referee checking a bot's action needs no more).
+/// Whether `a` is legal, at the cost of one unit's moves (a referee checking a bot's action
+/// needs no more). The same answer as `legal_actions(s).contains(a)`, except that a silo may be
+/// launched at any tile on the map, as AWBW allows, while `legal_actions` offers only tiles that
+/// can hit an enemy plus one that hits nobody, to keep a search's choices few.
 pub fn is_legal(s: &State, a: &Action) -> bool {
     match a {
+        Action::Move { unit, path, then: Then::Launch { target } } => {
+            let wait = Action::Move { unit: *unit, path: path.clone(), then: Then::Wait };
+            let end = path.last().copied();
+            s.in_bounds(target.0 as i32, target.1 as i32)
+                && s.units.get(unit).is_some_and(|u| is_foot(u.kind))
+                && end.is_some_and(|e| s.buildings.get(&e).is_some_and(|b| tables().tile(b.terrain).building == Some(crate::data::BuildingKind::Missile)))
+                && unit_actions(s, *unit).contains(&wait)
+        }
         Action::Move { unit, .. } => unit_actions(s, *unit).contains(a),
         Action::Build { at, kind } => builds(s).iter().any(|(p, k)| p == at && k == kind),
         Action::Power { kind } => crate::co::powers_ready(s, s.current).contains(kind),
