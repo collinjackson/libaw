@@ -227,13 +227,31 @@ $('btn-play').onclick = () => {
 // For a page that hosts this viewer and drives its clock: the timeline's segments
 // ({t0, t1, step, phase}), the storyboard's steps, and the state before step i, so it can
 // sync its own effects (sound, captions) to what is drawn.
+// A still copy of the board laid over it while the new one is drawn underneath. A clone, so
+// AWBW's hotlinked sprites stay drawn (an <img> of the SVG couldn't load them). It keeps its ids
+// and goes before the board, so its references find its own definitions while the board redraws.
+function snapshot() {
+  const svg = $('board'), box = svg.getBoundingClientRect(), scr = $('screen').getBoundingClientRect();
+  const c = svg.cloneNode(true);
+  c.removeAttribute('id');
+  Object.assign(c.style, { position: 'absolute', left: `${box.left - scr.left}px`, top: `${box.top - scr.top}px`,
+    width: `${box.width}px`, height: `${box.height}px`, maxWidth: 'none', maxHeight: 'none', pointerEvents: 'none', transition: 'opacity .25s ease', zIndex: 1 });
+  if (getComputedStyle($('screen')).position === 'static') $('screen').style.position = 'relative';
+  $('screen').insertBefore(c, $('screen').firstChild);
+  return c;
+}
 window.__replay = {
   get duration() { return rp.duration; }, renderAt, ready: true,
   get segments() { return rp.tl.segs; }, get steps() { return sb.steps; }, get start() { return sb.start; },
   player: () => sb.player, stateBefore: (i) => rp.states[i],
   // A longer storyboard of the same turn (a game followed live): swap it in, drawn at t, without
   // reloading the page. Steps already shown keep their times unless a shot grew.
-  async update(next, t = lastT) { sb = next; await setup(t); },
+  // fade (ms): the old frame fades out over the new one (the next turn, where acted units brighten).
+  async update(next, t = lastT, { fade = 0 } = {}) {
+    const old = fade ? snapshot() : null;
+    sb = next; await setup(t);
+    if (old) requestAnimationFrame(() => { old.style.opacity = '0'; setTimeout(() => old.remove(), fade + 50); });
+  },
 };
 </script>
 </body>

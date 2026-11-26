@@ -38,6 +38,21 @@ URL options:
 | `camera=1` | Start with "Follow the action" on. |
 | `capture=1` | Hide the controls, for recording. |
 
+## Following a game: new boards in place
+
+A page that embeds the viewer (in an iframe) and shows game after game, or a game as it's played,
+doesn't need to reload it for each turn. Give the viewer the next storyboard:
+
+    const r = frame.contentWindow.__replay;          // once r.ready
+    await r.update(nextStoryboard, 0, { fade: 250 }); // then play from r.renderAt(0) on
+
+`update(storyboard, t, { fade })` swaps in any storyboard (a longer copy of the same turn as
+moves come in, the next turn, or another game), redraws it at time `t` (default: where it was),
+and keeps the page, its listeners and the loaded art. With `fade` (ms), the old frame fades out
+over the new one, so units that acted ease back to full colour at a turn change instead of
+jumping. Other members of `__replay`: `duration`, `renderAt(t)`, `segments` (each shot's `t0`,
+`t1`, `step`, `phase`), `steps`, `start`, `stateBefore(i)` (the board before step `i`).
+
 ## About the AWBW art
 
 `art=awbw` draws units and terrain with Advance Wars By Web's sprites, which the browser loads
