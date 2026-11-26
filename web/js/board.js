@@ -203,15 +203,20 @@ export class Board {
    *  can change a building's sprite), so the first frame drawn already has its headroom. */
   measureArt(states) {
     if (!this.art?.measure) return Promise.resolve();
-    const tiles = [];
-    for (const state of states) {
+    // Every tile's sprite on every row (the first state's whole board, then each state's buildings,
+    // whose owners change), and every unit's: all loaded before the first frame.
+    const tiles = [], units = [];
+    states.forEach((state, i) => {
       const blds = buildingsByTile(state);
-      for (let x = 0; x < state.width; x++) {
-        const id = terrainAt(state, x, 0), d = this.tmap[id] ?? {}, b = blds.get(key(x, 0));
-        tiles.push([id, d, d.building ? (b?.owner ?? null) : null, { x: x * TILE, y: 0, size: TILE }]);
+      for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) {
+        const id = terrainAt(state, x, y), d = this.tmap[id] ?? {};
+        if (i && !d.building) continue;
+        const b = blds.get(key(x, y));
+        tiles.push([id, d, d.building ? (b?.owner ?? null) : null, { x: x * TILE, y: y * TILE, size: TILE }]);
       }
-    }
-    return this.art.measure(tiles);
+      for (const u of unitsByTile(state).values()) units.push(u);
+    });
+    return this.art.measure(tiles, units);
   }
 
   /** How far (in tiles) the top row's drawing reaches above the board, rounded up to a whole

@@ -19,6 +19,13 @@ function el(name, attrs, parent) {
  *  don't, except the Mega Tank (player feedback, 2026-11-20). */
 /** How long the ghost's aim (range and arrow) and target phases last, in seconds. */
 export const GHOST = { aim: 0.55, target: 0.4 };
+/** The ghost's cursor travel to a step's first tile, in seconds: 0.06 + 0.035 a tile, from 0.12 to
+ *  0.7 (Ghost Input's mouse timing). */
+const hopTime = (tiles) => Math.min(0.7, Math.max(0.12, 0.06 + 0.035 * tiles));
+/** The tile a step's cursor goes to first, and where it rests after the step. */
+const cursorFirst = (st) => st.type === 'move' ? st.path[0] : st.type === 'fire' ? st.defender?.at
+  : st.type === 'capture' ? st.at : st.type === 'build' || st.type === 'join' ? (st.unit ? [st.unit.x, st.unit.y] : null) : null;
+const cursorLast = (st) => (st.type === 'move' ? st.path[st.path.length - 1] : cursorFirst(st));
 
 export const HEAVY = new Set(['Bomber', 'Black Bomb', 'Battleship', 'Mega Tank']);
 /** Chunky kills: a bigger fireball with extra bursts, but no cloud (the Mech's bazooka, the heavy
@@ -54,8 +61,20 @@ export class Replay {
     this.order = sb.start.players.map((p) => p.id);
     this.shots = shots ?? allShots(sb);
     this.ghost = ghost ? { move: {}, attack: {} } : null;
-    const aim = ghost ? (st) => (st.type === 'move' && st.path.length > 1 ? [{ phase: 'aim', dur: GHOST.aim }]
-      : st.type === 'fire' ? [{ phase: 'target', dur: GHOST.target }] : null) : null;
+    // Each step: the cursor's travel to it (none for the first, where it just appears), then the
+    // move's range and arrow, or the shot's targets.
+    const hops = {};
+    if (ghost) {
+      let at = null;
+      sb.steps.forEach((st, i) => {
+        const to = cursorFirst(st);
+        if (!to) return;
+        if (at) { const d = Math.hypot(to[0] - at[0], to[1] - at[1]); if (d > 0) hops[i] = hopTime(d); }
+        at = cursorLast(st) ?? to;
+      });
+    }
+    const aim = ghost ? (st, i) => [...(hops[i] ? [{ phase: 'hop', dur: hops[i] }] : []),
+      ...(st.type === 'move' && st.path.length > 1 ? [{ phase: 'aim', dur: GHOST.aim }] : st.type === 'fire' ? [{ phase: 'target', dur: GHOST.target }] : [])] : null;
     const pre = before && aim ? (st, i, sh) => [...(aim(st) ?? []), ...(before(st, i, sh) ?? [])] : before ?? aim;
     this.tl = timeline(sb, this.shots, { before: pre, dur, hold });
     this.duration = this.tl.duration;
@@ -89,17 +108,17 @@ export class Replay {
     const before = this.states[seg.step], after = this.states[seg.step + 1];
     let state = after, fx = null, under = null, marks = this.marks ?? {}, arrow = null;
     const overlay = this.overlays[seg.phase];
-    if (seg.phase === 'aim') {
+    if (seg.phase === 'hop') {
+      state = before;
+    } else if (seg.phase === 'aim') {
       state = before;
       if (!this.marks?.move && !this.marks?.attack) marks = { move: this.ghost?.move[seg.step] };
       // As on the cartridge: the cursor lands on the unit, then leads the arrow along its path.
       const f = ease(Math.min(1, Math.max(0, p - 0.15) / 0.6));
       arrow = [st.path, 0, f];
-      fx = () => this.cursor(alongPath(st.path, f), Math.min(1, p / 0.15));
     } else if (seg.phase === 'target') {
       state = before;
       if (!this.marks?.move && !this.marks?.attack) marks = { attack: this.ghost?.attack[seg.step] };
-      fx = () => this.cursor(st.defender?.at, p);
     } else if (overlay) {
       state = before;
       fx = () => overlay({ layer: this.fxLayer, box: this.boxFor(seg.shot).map((v) => v * TILE), p, seg, st, before, after, replay: this });
@@ -107,7 +126,7 @@ export class Replay {
       state = JSON.parse(JSON.stringify(before));
       const u = state.units[st.unit_id];
       if (u) { [u.x, u.y] = alongPath(st.path, ease(p)); u.moved = false; }
-      if (this.ghost) { arrow = [st.path, ease(p), 1]; fx = () => this.cursor(st.path[st.path.length - 1], 1); }
+      if (this.ghost) arrow = [st.path, ease(p), 1];
     } else if (seg.phase === 'fire') {
       state = p < 0.45 ? before : after;
       fx = () => this.fireFx(st, before, p);
@@ -132,6 +151,7 @@ export class Replay {
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
     this.shake = 0;
     if (fx) fx();
+    if (this.ghost) { const c = this.cursorAt(t); if (c) this.cursor(c.at, c.p); }
     this.setCamera(seg, p);
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
   }
@@ -168,6 +188,33 @@ export class Replay {
       el('path', { d, fill: 'none', stroke: colour, 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, part);
       if (tip) el('path', { d: tip.d, fill: colour, transform: tip.t }, part);
     }
+  }
+
+  /** Where the ghost's cursor is at t: one cursor for the whole turn, as a player's. It glides
+   *  (in a straight line, like a mouse) from wherever it last was to the tile each step starts on,
+   *  traces a move's path with the arrow, rests on the destination, glides on to an attack's
+   *  target, and waits where it stopped until the next step. {at: [x, y], p: 1}, or null before
+   *  the first step. */
+  cursorAt(t) {
+    let pos = null;
+    for (const seg of this.tl.segs) {
+      if (seg.t0 > t) break;
+      const st = this.sb.steps[seg.step], dur = seg.t1 - seg.t0, p = dur > 0 ? Math.min(1, (t - seg.t0) / dur) : 1;
+      const live = t < seg.t1;
+      if (seg.phase === 'hop') {
+        const to = cursorFirst(st);
+        if (live && pos && to) return { at: [pos[0] + (to[0] - pos[0]) * p, pos[1] + (to[1] - pos[1]) * p], p: 1 };
+        pos = to ?? pos;
+      } else if (seg.phase === 'aim') {
+        // On the unit a moment (the click), then leading the arrow as it's drawn.
+        if (live) return { at: p < 0.15 ? st.path[0] : alongPath(st.path, ease(Math.min(1, (p - 0.15) / 0.6))), p: 1 };
+        pos = cursorLast(st);
+      } else {
+        const to = seg.phase === 'move' || seg.phase === 'target' || seg.phase === 'capture' || seg.phase === 'build' || seg.phase === 'join' ? cursorLast(st) : null;
+        if (to) pos = to;
+      }
+    }
+    return pos ? { at: pos, p: 1 } : null;
   }
 
   /** A target cursor (four corner brackets) closing in on tile [x, y]. */
