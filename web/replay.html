@@ -62,6 +62,7 @@ import { segmentAt } from './js/story.js';
 // &anim=0 (AWBW's still sprites), &shoals=custom|classic, &water=URL of a sea/shoal tile table
 // (js/look.js; custom shoals need it), &hp=bars (segmented HP bars), &cap=numbers (capture points
 // drawn on buildings; otherwise a capturing unit's C badge, with the count on hover),
+// &face=sides (AWBW art: first seat faces right, second left, instead of each country's own way),
 // &capture=1 (no controls; window.__replay.renderAt(t) for web/capture.mjs).
 const q = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
@@ -86,7 +87,7 @@ const name = (id) => sb.names?.[id] ?? `Player ${id}`;
 let rp, stop = null;
 async function setup() {
   if (stop) stop();
-  const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water }) : null;
+  const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water, sides: q.get('face') === 'sides' }) : null;
   rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers' });
   // AWBW's top-row sprites stand above the board: learn their heights before the first frame,
   // so the board (and a capture's frame size) has room for them from the start.

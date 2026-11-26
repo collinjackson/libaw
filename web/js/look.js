@@ -12,9 +12,9 @@
 // Images load straight from AWBW. One that won't load is swapped for libaw's art (art.js).
 import { AWBW_BASE, AWBW_STILL_BASE, awbwArt, awbwWaterName } from './art.js';
 
-export function awbwLook(sb, { animate = true, shoals = 'custom', water = null } = {}) {
+export function awbwLook(sb, { animate = true, shoals = 'custom', water = null, sides = false } = {}) {
   const base = animate ? AWBW_BASE : AWBW_STILL_BASE;
-  if (shoals !== 'custom' || !water) return awbwArt(sb.countries, { base });
+  if (shoals !== 'custom' || !water) return awbwArt(sb.countries, { base, sides });
   const weather = { R: 'rain', S: 'snow' }[sb.start.weather] ?? 'clear';
   const tiles = water.tiles?.[weather] ?? {};
   const w = sb.start.width, h = sb.start.height, ids = sb.start.terrain;
@@ -26,7 +26,7 @@ export function awbwLook(sb, { animate = true, shoals = 'custom', water = null }
     if (n && tiles[n]) at.set(`${x},${y}`, n);
   }
   return awbwArt(sb.countries, {
-    base, nameAt: (id, x, y) => at.get(`${x},${y}`) ?? null,
+    base, sides, nameAt: (id, x, y) => at.get(`${x},${y}`) ?? null,
     sheet: { url: water.sheet, width: water.width, height: water.height, tiles },
   });
 }

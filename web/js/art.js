@@ -113,7 +113,9 @@ export function awbwWaterName(idAt, x, y) {
  *  sheet: {url, width, height, tiles: {name: [x, y, w, h]}}: names drawn as that region of one
  *  sprite sheet image (AWBW's terrain sheet holds its joined seas and custom shoals). Drawn by
  *  clipping, so the sheet needs no CORS headers. */
-export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null, nameAt = () => null, sheet = null } = {}) {
+// sides: draw every unit facing right before the board's mirror (so the first seat faces right and
+// the second left, as in the console games) instead of the way each country's sprites face on AWBW.
+export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null, nameAt = () => null, sheet = null, sides = false } = {}) {
   const href = (name) => src(name) ?? `${base}${name}.gif`;
   const tall = new Map();   // sprite name -> height / width, once loaded
   return {
@@ -122,14 +124,16 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src 
      *  art set has no sprite for it. libaw's own sprites face right. */
     facing(u) {
       const code = countries?.[u.owner];
-      return code ? awbwFacing(code) : null;
+      return code ? (sides ? 'right' : awbwFacing(code)) : null;
     },
     unit(u, parent, { x, y, size, flip }) {
       const code = countries?.[u.owner];
       if (!code || missing.has(`${code}${awbwUnitName(u.kind)}`)) return false;
-      // AWBW's sprites already face their side's way: undo the board's mirror for odd seats.
-      const g = flip ? document.createElementNS(SVGNS, 'g') : parent;
-      if (flip) { g.setAttribute('transform', `translate(${2 * x + size} 0) scale(-1 1)`); parent.appendChild(g); }
+      // As on AWBW, a country's sprites face the way they were drawn: undo the board's mirror for
+      // odd seats. With sides, turn a left-facing sprite to face right and keep the board's mirror.
+      const mirror = sides ? awbwFacing(code) === 'left' : flip;
+      const g = mirror ? document.createElementNS(SVGNS, 'g') : parent;
+      if (mirror) { g.setAttribute('transform', `translate(${2 * x + size} 0) scale(-1 1)`); parent.appendChild(g); }
       const img = document.createElementNS(SVGNS, 'image');
       for (const [k, v] of Object.entries({ x, y, width: size, height: size, preserveAspectRatio: 'xMidYMax meet' })) img.setAttribute(k, v);
       img.setAttribute('href', href(`${code}${awbwUnitName(u.kind)}`));
