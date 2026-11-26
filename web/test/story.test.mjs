@@ -50,3 +50,15 @@ assert.ok(hs[1].units[8], 'a hidden-HP attacker is not removed');
 assert.ok(hs[1].units[7], 'a hidden-HP defender is not removed');
 assert.deepEqual(hs[1].units[7].hp, { lo: 1, hi: 100 });
 console.log('story ok');
+
+// A unit that has acted stays marked (the board greys it); Eagle's super power readies his
+// non-foot units again.
+{
+  const st = S.statesOf(sb);
+  assert.equal(st[1].units[7].moved, true);
+  const after = S.applyStep(st[1], { type: 'power', player: 1, co: 'Eagle', name: 'Lightning Strike', super: true });
+  assert.equal(after.units[7].moved, false);
+  const cop = S.applyStep(st[1], { type: 'power', player: 1, co: 'Eagle', name: 'Lightning Drive', super: false });
+  assert.equal(cop.units[7].moved, true);
+}
+console.log('moved flags ok');

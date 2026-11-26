@@ -101,8 +101,8 @@ export class Replay {
     } else if (seg.phase === 'build') {
       fx = () => this.flash(st.unit.x, st.unit.y, 1 - p, 'fx-build');
     }
-    // Units that acted keep their colour: a replay greyed out as it goes is hard to follow.
-    const shown = { ...state, units: Object.fromEntries(Object.entries(state.units).map(([k, u]) => [k, { ...u, moved: false }])) };
+    // Units that have acted are greyed, as on AWBW; one moving keeps its colour until it stops.
+    const shown = state;
     this.board.draw(shown, { order: this.order, mirrorOdd: true, marks: this.marks ?? {} });
     if (under) under();
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);

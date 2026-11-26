@@ -39,6 +39,11 @@ export function applyStep(state, step) {
       break;
     }
     case 'build': units[step.unit.id] = clone(step.unit); break;
+    // Eagle's super power (Lightning Strike) lets his units that aren't foot soldiers act again.
+    case 'power':
+      if (step.super && step.co === 'Eagle')
+        for (const u of Object.values(units)) if (u.owner === step.player && !['Infantry', 'Mech'].includes(u.kind)) u.moved = false;
+      break;
     case 'join': drop(step.from); units[step.into] = clone(step.unit); break;
     default: break;
   }
