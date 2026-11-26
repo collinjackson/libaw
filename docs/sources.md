@@ -14,6 +14,11 @@ Where libaw's rules and data come from, under what terms, and what each is used 
   `data/replay-player/COMMIT`.
   - Terms: MIT (`data/replay-player/LICENSE`).
   - Used for: terrain ids, movement costs, defence and unit stats.
+- **[AWBW Ghost Input](https://greasyfork.org/en/scripts/604828-awbw-ghost-input)** by onetrickwolf
+  (userscript, v0.8.8 read 2026-11-26).
+  - Terms: MIT (stated on its Greasy Fork page and in the script).
+  - Used for: how AWBW's game page receives live spectator updates, so Battle Lab's relay can
+    follow a game as it's played. Its look (arrows, cursor) is credited in Battle Lab's settings.
 - **AWBW wiki.**
   - Terms: CC BY-SA (fandom).
   - Used for: rule descriptions, not copied text.
