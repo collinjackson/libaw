@@ -70,7 +70,7 @@ const q = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 if (q.get('capture')) document.body.classList.add('capture');
 if (!q.get('sb')) { $('meta').textContent = 'Add ?sb=URL of a storyboard (docs/storyboard.md).'; throw new Error('no storyboard'); }
-const [units, terrain, tmap, sprites, sb] = await Promise.all([
+let [units, terrain, tmap, sprites, sb] = await Promise.all([
   fetch('../data/units.json').then((r) => r.json()),
   fetch('../data/terrain.json').then((r) => r.json()),
   fetch('assets/terrain-map.json').then((r) => r.json()),
@@ -87,8 +87,10 @@ const water = q.get('water') ? await fetch(q.get('water')).then((r) => r.json())
 const name = (id) => sb.names?.[id] ?? `Player ${id}`;
 
 let rp, stop = null;
-async function setup() {
+async function setup(t0 = 0) {
   if (stop) stop();
+  const hover = rp?.board.hoverTile ?? null;
+  rp?.board.destroy();
   const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water, sides: q.get('face') === 'sides' }) : null;
   rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers', ghost: q.get('ghost') === '1', even: q.get('pad') === 'even' });
   if (rp.ghost) ghostRanges(rp);
@@ -96,8 +98,9 @@ async function setup() {
   // so the board (and a capture's frame size) has room for them from the start.
   await rp.board.measureArt(rp.states);
   hookTip();
+  if (hover) { rp.board.hoverTile = hover; rp.board.hoverKey = `${hover[0]},${hover[1]}`; }
   $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${sb.steps.length} steps, ${rp.duration.toFixed(1)} s`;
-  renderAt(0);
+  renderAt(t0);
 }
 let lastT = 0;
 function renderAt(t) { lastT = t; checkSelection(); rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); showTip(); }
@@ -228,6 +231,9 @@ window.__replay = {
   get duration() { return rp.duration; }, renderAt, ready: true,
   get segments() { return rp.tl.segs; }, get steps() { return sb.steps; }, get start() { return sb.start; },
   player: () => sb.player, stateBefore: (i) => rp.states[i],
+  // A longer storyboard of the same turn (a game followed live): swap it in, drawn at t, without
+  // reloading the page. Steps already shown keep their times unless a shot grew.
+  async update(next, t = lastT) { sb = next; await setup(t); },
 };
 </script>
 </body>

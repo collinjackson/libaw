@@ -45,14 +45,19 @@ export class Board {
     this.art = art;
     this.onTile = () => {};
     this.onHover = () => {};
-    svg.addEventListener('click', (e) => { const t = this.tileOf(e); if (t) this.onTile(t[0], t[1], e); });
+    this.abort = new AbortController();
+    const signal = this.abort.signal;
+    svg.addEventListener('click', (e) => { const t = this.tileOf(e); if (t) this.onTile(t[0], t[1], e); }, { signal });
     svg.addEventListener('mousemove', (e) => {
       const t = this.tileOf(e);
       const k = t && key(t[0], t[1]);
       if (k !== this.hoverKey) { this.hoverKey = k; this.hoverTile = t; this.onHover(t); this.drawCursor(t); }
-    });
-    svg.addEventListener('mouseleave', () => { this.hoverKey = null; this.hoverTile = null; this.onHover(null); this.drawCursor(null); });
+    }, { signal });
+    svg.addEventListener('mouseleave', () => { this.hoverKey = null; this.hoverTile = null; this.onHover(null); this.drawCursor(null); }, { signal });
   }
+
+  /** Stop listening on the svg (before another Board takes it over). */
+  destroy() { this.abort.abort(); }
 
   tileOf(e) {
     if (!this.state) return null;
