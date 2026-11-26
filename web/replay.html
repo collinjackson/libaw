@@ -93,7 +93,14 @@ $('btn-play').onclick = () => {
   $('btn-play').textContent = 'Pause';
   stop = rp.play({ from: (rp.duration * $('scrub').value) / 1000, onEnd: () => { stop = null; $('btn-play').textContent = 'Play'; } });
 };
-window.__replay = { get duration() { return rp.duration; }, renderAt, ready: true };
+// For a page that hosts this viewer and drives its clock: the timeline's segments
+// ({t0, t1, step, phase}), the storyboard's steps, and the state before step i, so it can
+// sync its own effects (sound, captions) to what is drawn.
+window.__replay = {
+  get duration() { return rp.duration; }, renderAt, ready: true,
+  get segments() { return rp.tl.segs; }, get steps() { return sb.steps; }, get start() { return sb.start; },
+  player: () => sb.player, stateBefore: (i) => rp.states[i],
+};
 </script>
 </body>
 </html>
