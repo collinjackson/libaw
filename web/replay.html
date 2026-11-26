@@ -77,15 +77,18 @@ const water = q.get('water') ? await fetch(q.get('water')).then((r) => r.json())
 const name = (id) => sb.names?.[id] ?? `Player ${id}`;
 
 let rp, stop = null;
-function setup() {
+async function setup() {
   if (stop) stop();
   const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water }) : null;
   rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked });
+  // AWBW's top-row sprites stand above the board: learn their heights before the first frame,
+  // so the board (and a capture's frame size) has room for them from the start.
+  await rp.board.measureArt(rp.states);
   $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${sb.steps.length} steps, ${rp.duration.toFixed(1)} s`;
   renderAt(0);
 }
 function renderAt(t) { rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); }
-setup();
+await setup();
 $('art').onchange = $('camera').onchange = $('anim').onchange = $('shoals').onchange = $('hp').onchange = setup;
 $('scrub').oninput = () => { if (stop) { stop(); stop = null; $('btn-play').textContent = 'Play'; } renderAt((rp.duration * $('scrub').value) / 1000); };
 $('btn-play').onclick = () => {

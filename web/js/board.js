@@ -65,8 +65,11 @@ export class Board {
     this.state = state;
     const s = this.svg;
     s.replaceChildren();
-    s.setAttribute('viewBox', `0 0 ${state.width * TILE} ${state.height * TILE}`);
-    s.style.aspectRatio = `${state.width} / ${state.height}`;
+    // Headroom above the top row, for sprites that stand taller than their tile and HP bars.
+    this.headroom = this.headroomFor(state);
+    const head = this.headroom;
+    s.setAttribute('viewBox', `0 ${-head * TILE} ${state.width * TILE} ${(state.height + head) * TILE}`);
+    s.style.aspectRatio = `${state.width} / ${state.height + head}`;
     const cls = (owner) => (owner == null ? 'pn' : `p${Math.max(0, order.indexOf(owner)) % 8}`);
     const terrain = el('g', { class: 'terrain' }, s);
     const name = (x, y) => this.tmap[terrainAt(state, x, y)] ?? { base: 'plain' };
@@ -172,6 +175,35 @@ export class Board {
     const hpLayer = el('g', { class: 'hpbars' }, s);
     for (const draw of bars) draw(hpLayer);
     this.cursorLayer = el('g', { class: 'cursor' }, s);
+  }
+
+  /** Let the art learn how tall the top row's sprites are, in each of these states (a capture
+   *  can change a building's sprite), so the first frame drawn already has its headroom. */
+  measureArt(states) {
+    if (!this.art?.measure) return Promise.resolve();
+    const tiles = [];
+    for (const state of states) {
+      const blds = buildingsByTile(state);
+      for (let x = 0; x < state.width; x++) {
+        const id = terrainAt(state, x, 0), d = this.tmap[id] ?? {}, b = blds.get(key(x, 0));
+        tiles.push([id, d, d.building ? (b?.owner ?? null) : null, { x: x * TILE, y: 0, size: TILE }]);
+      }
+    }
+    return this.art.measure(tiles);
+  }
+
+  /** How far (in tiles) the top row's drawing reaches above the board, rounded up to a whole
+   *  tile: a fraction would set every row off the pixel grid, and seams show between rows. */
+  headroomFor(state) {
+    let up = 0;
+    const blds = buildingsByTile(state);
+    for (let x = 0; x < state.width; x++) {
+      const d = this.tmap[terrainAt(state, x, 0)] ?? {};
+      const b = blds.get(key(x, 0));
+      up = Math.max(up, this.art?.overhang?.(terrainAt(state, x, 0), d, d.building ? (b?.owner ?? null) : null, { x: x * TILE, y: 0, size: TILE }) ?? 0);
+    }
+    if (this.hpBars) for (const u of unitsByTile(state).values()) if (u.y === 0 && displayHp(u) < 10) up = Math.max(up, 4 / TILE);
+    return Math.ceil(up);
   }
 
   anyNeighbourKind(state, x, y, kind) {

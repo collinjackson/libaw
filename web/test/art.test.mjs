@@ -82,3 +82,16 @@ console.log('art sheet ok');
   delete globalThis.document;
 }
 console.log('art badges ok');
+// Overhang: a sprite taller than wide stands above its tile, once measured; sheet tiles never do.
+{
+  const loaded = [];
+  globalThis.Image = class { set src(u) { loaded.push(u); this.naturalWidth = 16; this.naturalHeight = u.includes('hq') ? 31 : 16; queueMicrotask(() => this.onload()); } };
+  const art = awbwArt({ 1: 'os' });
+  const hq = [42, { building: 'hq' }, 1, { x: 0, y: 0, size: 40 }];
+  assert.equal(art.overhang(...hq), 0);                    // not measured yet
+  await art.measure([hq, [1, { name: 'Plain' }, null, { x: 40, y: 0, size: 40 }]]);
+  assert.equal(art.overhang(...hq), 15 / 16);
+  assert.equal(art.overhang(1, { name: 'Plain' }, null, { x: 40, y: 0, size: 40 }), 0);
+  delete globalThis.Image;
+}
+console.log('art overhang ok');

@@ -113,6 +113,7 @@ export function awbwWaterName(idAt, x, y) {
  *  clipping, so the sheet needs no CORS headers. */
 export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src = () => null, nameAt = () => null, sheet = null } = {}) {
   const href = (name) => src(name) ?? `${base}${name}.gif`;
+  const tall = new Map();   // sprite name -> height / width, once loaded
   return {
     name: 'awbw',
     /** Which way u's sprite faces as drawn with flip false ('left' or 'right'), or null when this
@@ -154,8 +155,34 @@ export function awbwArt(countries, { base = AWBW_BASE, missing = new Set(), src 
     },
     /** One tile, bottom-aligned in a box two tiles tall (AWBW's buildings and mountains stand
      *  taller than a tile); rows are drawn top to bottom, so they overlap the row above. */
+    /** How far (in tiles) this tile's sprite stands above its tile: AWBW's HQ, bases and
+     *  mountains are taller than they are wide. 0 until measure() has loaded the sprite. */
+    overhang(id, d, owner, { x, y, size }) {
+      const name = this.nameFor(id, d, owner, { x, y, size });
+      if (!name || (!src(name) && sheet?.tiles?.[name])) return 0;
+      return Math.max(0, (tall.get(name) ?? 1) - 1);
+    },
+    nameFor(id, d, owner, { x, y, size }) {
+      return nameAt(id, Math.round(x / size), Math.round(y / size)) ?? awbwTileName(id, d, owner == null ? null : countries?.[owner]);
+    },
+    /** Load the sprites for these tiles ([[id, entry, owner, box]]) to learn their heights; resolves
+     *  when all have loaded or failed, so a page can size its board before the first frame. */
+    measure(tiles) {
+      if (typeof Image === 'undefined') return Promise.resolve();
+      const wait = new Promise((done) => setTimeout(done, 4000));   // never hold a page up for long
+      return Promise.race([wait, Promise.all(tiles.map(([id, d, owner, box]) => {
+        const name = this.nameFor(id, d, owner, box);
+        if (!name || tall.has(name) || (!src(name) && sheet?.tiles?.[name])) return null;
+        return new Promise((done) => {
+          const im = new Image();
+          im.onload = () => { if (im.naturalWidth) tall.set(name, im.naturalHeight / im.naturalWidth); done(); };
+          im.onerror = () => { tall.set(name, 1); done(); };
+          im.src = href(name);
+        });
+      }))]);
+    },
     tile(id, d, owner, parent, { x, y, size }) {
-      const name = nameAt(id, Math.round(x / size), Math.round(y / size)) ?? awbwTileName(id, d, owner == null ? null : countries?.[owner]);
+      const name = this.nameFor(id, d, owner, { x, y, size });
       if (!name || missing.has(name)) return false;
       const cell = !src(name) && sheet?.tiles?.[name];
       if (cell) {

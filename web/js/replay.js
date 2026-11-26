@@ -119,8 +119,9 @@ export class Replay {
     const [x, y, w, h] = this.boxFor(seg.shot);
     // A blast shakes the picture (fireFx sets this.shake, in tiles); deterministic in t.
     const s = this.shake || 0, dx = s * Math.sin(seg.t0 * 97 + (this.shakeT ?? 0) * 71), dy = s * Math.cos(seg.t0 * 53 + (this.shakeT ?? 0) * 89);
-    this.board.svg.setAttribute('viewBox', `${(x + dx) * TILE} ${(y + dy) * TILE} ${w * TILE} ${h * TILE}`);
-    this.board.svg.style.aspectRatio = `${w} / ${h}`;
+    const up = y <= 0 ? (this.board.headroom ?? 0) : 0;   // the top row's tall sprites, as in Board.draw
+    this.board.svg.setAttribute('viewBox', `${(x + dx) * TILE} ${(y + dy - up) * TILE} ${w * TILE} ${(h + up) * TILE}`);
+    this.board.svg.style.aspectRatio = `${w} / ${h + up}`;
   }
 
   flash(x, y, a, cls = 'fx-hit') {
