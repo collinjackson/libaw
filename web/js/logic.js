@@ -4,6 +4,9 @@
 export const key = (x, y) => `${x},${y}`;
 export const sameTile = (a, b) => a[0] === b[0] && a[1] === b[1];
 export const displayHp = (u) => Math.ceil((u.hp?.hi ?? 100) / 10);
+/** HP the replay hides (Sonja's units, seen by her opponents): any value from 1 to 100. Shown as
+ *  "?", the way AWBW does; displayHp still gives 10 for value sums. */
+export const hpUnknown = (u) => !!u.hp && u.hp.lo <= 1 && u.hp.hi >= 100;
 
 /** Units on the board (not carried), by tile. */
 export function unitsByTile(state) {

@@ -1,7 +1,7 @@
 // Draws a libaw state as one SVG, using the symbols in assets/sprites.svg (inlined into the
 // page once). Team colours come from CSS classes .p0 .. .p7 on each unit/building group, by
 // the player's place in turn order; neutral buildings get .pn.
-import { key, displayHp, unitsByTile, buildingsByTile, terrainAt } from './logic.js';
+import { key, displayHp, hpUnknown, unitsByTile, buildingsByTile, terrainAt } from './logic.js';
 
 export const TILE = 40;
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -147,7 +147,17 @@ export class Board {
       const at = flip ? el('g', { transform: `translate(${(2 * u.x + 1) * TILE} 0) scale(-1 1)` }, g) : g;
       if (!this.art?.unit?.(u, at, { x: u.x * TILE, y: u.y * TILE, size: TILE, flip })) use(id, u.x, u.y, at);
       const hp = displayHp(u);
-      if (hp < 10 && this.hpBars) {
+      if (hpUnknown(u) && this.hpBars) {
+        // Hidden HP: an empty bar with a "?".
+        bars.push((layer) => {
+          const bg = el('g', { class: `hp-of ${cls(u.owner)}`, 'data-id': u.id }, layer);
+          el('rect', { x: u.x * TILE + 1, y: u.y * TILE - 4, width: TILE - 2, height: 13, rx: 2, class: 'hpbar' }, bg);
+          el('text', { x: u.x * TILE + TILE / 2, y: u.y * TILE + 6, class: 'hp hp-unknown' }, bg).textContent = '?';
+        });
+      } else if (hpUnknown(u)) {
+        el('rect', { x: u.x * TILE + TILE - 15, y: u.y * TILE + TILE - 14, width: 14, height: 13, rx: 3, class: 'hpbg' }, g);
+        el('text', { x: u.x * TILE + TILE - 8, y: u.y * TILE + TILE - 4, class: 'hp hp-unknown' }, g).textContent = '?';
+      } else if (hp < 10 && this.hpBars) {
         // Ten segments across the top of the tile, coloured by how hurt the unit is.
         const tone = hp >= 7 ? 'hi' : hp >= 4 ? 'mid' : 'lo', sw = (TILE - 4) / 10;
         bars.push((layer) => {
@@ -204,7 +214,7 @@ export class Board {
       const b = blds.get(key(x, 0));
       up = Math.max(up, this.art?.overhang?.(terrainAt(state, x, 0), d, d.building ? (b?.owner ?? null) : null, { x: x * TILE, y: 0, size: TILE }) ?? 0);
     }
-    if (this.hpBars) for (const u of unitsByTile(state).values()) if (u.y === 0 && displayHp(u) < 10) up = Math.max(up, 4 / TILE);
+    if (this.hpBars) for (const u of unitsByTile(state).values()) if (u.y === 0 && (displayHp(u) < 10 || hpUnknown(u))) up = Math.max(up, 4 / TILE);
     return Math.ceil(up);
   }
 

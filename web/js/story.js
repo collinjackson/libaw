@@ -25,7 +25,8 @@ export function applyStep(state, step) {
     case 'fire':
       for (const side of [step.attacker, step.defender]) {
         if (!side || !units[side.unit_id]) continue;
-        if (side.display_hp <= 0) drop(side.unit_id);
+        // display_hp is null when the record hides HP (Sonja): the unit lives on, HP unknown.
+        if (side.display_hp != null && side.display_hp <= 0) drop(side.unit_id);
         else units[side.unit_id].hp = side.hp;
       }
       break;

@@ -153,9 +153,15 @@ export class Replay {
       if (!side) continue;
       const u = before.units[side.unit_id];
       if (!u) continue;
+      const q = side === d ? p : p - 0.25;   // the counterattack lands a beat later
+      if (side.display_hp == null) {   // hidden HP (Sonja): a defender is hit, by an unknown amount
+        if (side !== d) continue;    // an attacker may not have been countered at all
+        if (q > 0.35 && q < 0.65) this.flash(side.at[0], side.at[1], 1 - (q - 0.35) / 0.3, 'fx-hit');
+        if (q > 0.45) this.pop(side.at[0], side.at[1], '?', (q - 0.45) / 0.55, 'fx-dmg');
+        continue;
+      }
       const lost = Math.ceil(u.hp.hi / 10) - side.display_hp;
       if (lost <= 0) continue;
-      const q = side === d ? p : p - 0.25;   // the counterattack lands a beat later
       const dead = side.display_hp <= 0;
       if (dead && q > 0.35) {
         const by = before.units[(side === d ? a : d)?.unit_id]?.kind;

@@ -21,7 +21,7 @@ Steps, in order:
 | type | fields |
 |---|---|
 | `move` | `unit_id`, `path` ([[x, y], ...], start first), `trapped` |
-| `fire` | `attacker`, `defender`: each `{unit_id, at, hp, display_hp}` after the attack, or null when fog hides it |
+| `fire` | `attacker`, `defender`: each `{unit_id, at, hp, display_hp}` after the attack, or null when fog hides it. When the record hides the HP ("?": Sonja's units, seen by her opponents), `display_hp` is null and `hp` is `{lo: 1, hi: 100}`: the unit lives on with unknown HP, and viewers show "?" |
 | `capture` | `at`, `capture` (points left), `done`, `new_owner` |
 | `build` | `unit` (a full unit) |
 | `power` | `player`, `co`, `name`, `super` |

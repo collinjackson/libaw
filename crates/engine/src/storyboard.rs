@@ -5,8 +5,7 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::awbw::{hp_display, items, num, state_from, unit_from};
-use crate::state::Hp;
+use crate::awbw::{hp_display, hp_of, items, num, state_from, unit_from};
 use serde_json::{json, Value};
 
 pub const FORMAT: &str = "libaw-storyboard";
@@ -16,9 +15,15 @@ fn xy(v: &Value, x: &str, y: &str) -> Value {
     json!([num(&v[x]), num(&v[y])])
 }
 
-/// HP after an action, as the engine's range for a displayed value (AWBW records display HP).
+/// HP after an action, as the engine's range for a displayed value (AWBW records display HP), or
+/// 1..=100 when the record hides it ("?": Sonja's units, seen by her opponents).
 fn hp_json(v: &Value) -> Value {
-    serde_json::to_value(Hp::from_display(hp_display(v))).unwrap_or(Value::Null)
+    serde_json::to_value(hp_of(v)).unwrap_or(Value::Null)
+}
+
+/// The displayed HP after an action, or null when the record hides it: hidden HP is unknown, not 0.
+fn display_json(v: &Value) -> Value {
+    if v.as_str() == Some("?") { Value::Null } else { json!(hp_display(v)) }
 }
 
 fn move_step(m: &Value) -> Option<Value> {
@@ -36,7 +41,7 @@ fn side(v: &Value) -> Value {
         return Value::Null; // "?" in fog
     }
     json!({"unit_id": num(&v["units_id"]), "at": xy(v, "units_x", "units_y"), "hp": hp_json(&v["units_hit_points"]),
-           "display_hp": hp_display(&v["units_hit_points"])})
+           "display_hp": display_json(&v["units_hit_points"])})
 }
 
 /// Steps of one AWBW action record. A record that carries its own Move (archive form:
@@ -134,6 +139,18 @@ mod tests {
         assert_eq!(out[2]["done"], false);
         assert_eq!(out[3]["unit"]["kind"], "Infantry");
         assert!(out[5]["defender"].is_null());
+    }
+
+    #[test]
+    fn hidden_hp_after_a_fire_is_unknown_not_zero() {
+        // Sonja's units show "?" to her opponents: the unit lives on with any HP.
+        let fire = json!({"action": "Fire", "attacker": {"units_id": 7, "units_x": 2, "units_y": 1, "units_hit_points": "?"},
+                          "defender": {"units_id": 8, "units_x": 3, "units_y": 1, "units_hit_points": 4}});
+        let mut out = Vec::new();
+        steps_of(&fire, &mut out);
+        assert!(out[0]["attacker"]["display_hp"].is_null());
+        assert_eq!(out[0]["attacker"]["hp"], json!({"lo": 1, "hi": 100}));
+        assert_eq!(out[0]["defender"]["display_hp"], 4);
     }
 
     #[test]

@@ -287,7 +287,7 @@ function showInfo(t) {
   if (u) {
     const info = ui.data.units[u.kind] ?? {};
     html += `<div class="title" style="margin-top:8px">${esc(u.kind)} <span class="muted">· ${esc(playerName(u.owner))}</span></div><div class="kv">
-      <span>HP</span><span>${L.displayHp(u)} / 10 <span class="muted">(${u.hp.lo === u.hp.hi ? u.hp.hi : u.hp.lo + '–' + u.hp.hi})</span></span>
+      <span>HP</span><span>${L.hpUnknown(u) ? '?' : L.displayHp(u)} / 10 <span class="muted">(${u.hp.lo === u.hp.hi ? u.hp.hi : u.hp.lo + '–' + u.hp.hi})</span></span>
       <span>Fuel</span><span>${u.fuel} / ${info.fuel ?? '?'}</span>
       <span>Ammo</span><span>${info.ammo ? `${u.ammo} / ${info.ammo}` : '–'}</span>
       <span>Move</span><span>${info.move ?? '?'} · ${info.move_type ?? ''}</span>

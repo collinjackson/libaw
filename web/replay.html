@@ -55,7 +55,7 @@
 import { Replay } from './js/replay.js';
 import { awbwLook } from './js/look.js';
 import { TILE } from './js/board.js';
-import { key, displayHp, unitsByTile, buildingsByTile } from './js/logic.js';
+import { key, displayHp, hpUnknown, unitsByTile, buildingsByTile } from './js/logic.js';
 
 // ?sb=URL of a storyboard (awbw-replay --storyboard TURN.json), &art=libaw|awbw, &camera=1,
 // &anim=0 (AWBW's still sprites), &shoals=custom|classic, &water=URL of a sea/shoal tile table
@@ -112,7 +112,7 @@ function showTip() {
 function tipText(st, x, y) {
   const u = unitsByTile(st).get(key(x, y)), b = buildingsByTile(st).get(key(x, y));
   const out = [];
-  if (u) out.push(`${u.kind} · ${displayHp(u)} HP`);
+  if (u) out.push(`${u.kind} · ${hpUnknown(u) ? '?' : displayHp(u)} HP`);
   if (b && b.capture < 20) out.push(`capture: ${b.capture} of 20 left`);
   return out.join(' · ');
 }

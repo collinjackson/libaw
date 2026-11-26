@@ -39,4 +39,14 @@ assert.deepEqual(S.alongPath([[0, 0], [2, 0], [2, 2]], 0.5), [2, 0]);
 const extra = S.timeline(sb, hl, { before: (st) => (st.type === 'fire' ? [{ phase: 'cutaway', dur: 1 }] : []) });
 assert.equal(extra.duration, tl.duration + 1);
 assert.equal(extra.segs.find((s) => s.phase === 'cutaway').step, 1);
+// Hidden HP (Sonja, seen by her opponent): the record gives "?", so display_hp is null. The unit
+// stays on the board with its HP unknown, whether it attacked or was hit.
+const hidden = { ...sb, steps: [
+  { type: 'fire', attacker: { unit_id: 8, at: [3, 1], hp: { lo: 1, hi: 100 }, display_hp: null },
+    defender: { unit_id: 7, at: [1, 1], hp: { lo: 1, hi: 100 }, display_hp: null } },
+] };
+const hs = S.statesOf(hidden);
+assert.ok(hs[1].units[8], 'a hidden-HP attacker is not removed');
+assert.ok(hs[1].units[7], 'a hidden-HP defender is not removed');
+assert.deepEqual(hs[1].units[7].hp, { lo: 1, hi: 100 });
 console.log('story ok');

@@ -1,6 +1,6 @@
 // node web/test/logic.test.mjs: terrain lookups.
 import assert from 'assert/strict';
-import { terrainAt } from '../js/logic.js';
+import { terrainAt, displayHp, hpUnknown } from '../js/logic.js';
 
 // AWBW's turn files list buildings apart from the terrain grid, so the grid can hold a plain (1)
 // under a building: the building's own tile (38, an Orange Star city) must win, or the board
@@ -13,4 +13,9 @@ const after = { ...state, buildings: [[0, 0, { terrain: 39, owner: 8, capture: 2
 assert.equal(terrainAt(after, 0, 0), 39);
 // States without buildings still work.
 assert.equal(terrainAt({ width: 1, height: 1, terrain: [5] }, 0, 0), 5);
+// Hidden HP ("?", Sonja) is any value from 1 to 100: unknown, though valued as a whole unit.
+assert.equal(hpUnknown({ hp: { lo: 1, hi: 100 } }), true);
+assert.equal(hpUnknown({ hp: { lo: 91, hi: 100 } }), false);
+assert.equal(hpUnknown({ hp: { lo: 1, hi: 10 } }), false);
+assert.equal(displayHp({ hp: { lo: 1, hi: 100 } }), 10);
 console.log('logic ok');
