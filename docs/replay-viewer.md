@@ -65,8 +65,23 @@ choice and presses it. Then, by what the unit did:
 Ranges, menus, damage boxes, build menus and landing tiles come from libaw's engine in the page
 (`web/pkg`, built with `wasm-pack build crates/wasm --release --target web --out-dir ../../web/pkg`).
 Without it the ghost plays the same way, showing less: no ranges or damage boxes, menus with the
-choice, Wait and what the unit alone tells.
+choice, Wait and what the unit alone tells. The cursor hides 4 seconds after the turn's last step
+is drawn, and comes back with the next frame before the end.
 
+The ghost makes a turn about twice as long as without it. A page that falls behind (a newer turn
+waiting) can speed it up while it plays, the way Ghost Input does when its queue backs up (full
+speed under 1 s behind, 0.6 under 2 s, 0.35 under 3.5 s, then none):
+
+    const r = frame.contentWindow.__replay;
+    pos = r.ghostPace(0.35, pos);   // returns where pos is in the new timeline, drawn there
+    // ...and r.ghostPace(1, pos) once caught up
+
+`ghostPace(pace, t)` lays the timeline out again with the ghost's segments `pace` times as long
+(`0`: none) and returns the time in it that shows what `t` showed (the same moment of the same
+segment, or the start of the next one when the ghost's segment is gone). The pace stays for later
+storyboards given to `update`. In code that builds a `Replay` itself, pass `ghostPace` to the
+constructor or call `replay.setGhostPace(pace, t)`, which returns the new time the same way;
+`story.remapTime(oldTimeline, newTimeline, t)` does the mapping.
 
 ## Following a game: new boards in place
 
@@ -82,7 +97,7 @@ and keeps the page, its listeners and the loaded art. With `fade` (ms), the old 
 over the new one, so units that acted ease back to full colour at a turn change instead of
 jumping. Other members of `__replay`: `duration`, `renderAt(t)`, `segments` (each shot's `t0`,
 `t1`, `step`, `phase`), `steps`, `start`, `stateBefore(i)` (the board before step `i`),
-A segment whose `phase` is the step's own type is the step itself;
+`ghostPace(pace, t)` (above). A segment whose `phase` is the step's own type is the step itself;
 the ghost's segments (`ghost: true`: phases `hop`, `aim`, `select`, `menu`, `target`, `drop`,
 `repair`, `blast`, `silo`) come before it, and a move's `menu` right after it.
 

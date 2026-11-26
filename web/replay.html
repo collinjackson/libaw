@@ -53,7 +53,7 @@
   </div>
 </div>
 <script type="module">
-import { Replay } from './js/replay.js';
+import { Replay, GHOST } from './js/replay.js';
 import { awbwLook } from './js/look.js';
 import { TILE } from './js/board.js';
 import { key, displayHp, hpUnknown, unitsByTile, buildingsByTile } from './js/logic.js';
@@ -105,8 +105,15 @@ async function setup(t0 = 0) {
   $('meta').textContent = `Day ${sb.day}, ${name(sb.player)}'s turn: ${sb.steps.length} steps, ${rp.duration.toFixed(1)} s`;
   renderAt(t0);
 }
-let lastT = 0;
-function renderAt(t) { lastT = t; checkSelection(); rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); showTip(); }
+let lastT = 0, idleTimer = null;
+function renderAt(t) {
+  lastT = t; checkSelection();
+  // The ghost's cursor hides a few seconds after the turn's last step is drawn (and comes back
+  // with the next frame before the end: a turn that grew, a scrub).
+  clearTimeout(idleTimer); rp.idle = false;
+  if (rp.ghost && t >= rp.duration) idleTimer = setTimeout(() => { rp.idle = true; rp.renderAt(lastT); }, GHOST.idle * 1000);
+  rp.renderAt(t); $('scrub').value = Math.round((1000 * t) / rp.duration); showTip();
+}
 // Hover (or tap) a tile for what the board doesn't spell out: where it is, a unit's HP, a capture's points left.
 let tipAt = null;
 function showTip() {
@@ -232,6 +239,10 @@ function snapshot() {
 window.__replay = {
   get duration() { return rp.duration; }, renderAt, ready: true,
   get segments() { return rp.tl.segs; }, get steps() { return sb.steps; }, get start() { return sb.start; },
+  // The ghost's pace (1 as planned, 0.5 twice as fast, 0 no ghost) for a page that's behind: the
+  // timeline is laid out again; returns the time in it that shows what t showed, drawn there.
+  // Kept for later storyboards (update).
+  ghostPace(pace, t = lastT) { ghostPace = Math.max(0, pace); const n = rp.setGhostPace(ghostPace, t); renderAt(n); return n; },
   player: () => sb.player, stateBefore: (i) => rp.states[i],
   // A longer storyboard of the same turn (a game followed live): swap it in, drawn at t, without
   // reloading the page. Steps already shown keep their times unless a shot grew.

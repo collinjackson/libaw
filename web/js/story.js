@@ -165,6 +165,25 @@ export function timeline(sb, chosen, { before = null, after = null, dur = null, 
   return { segs, duration: t };
 }
 
+/** The time in timeline `to` that shows what `from` shows at t: the same segment (by step, phase
+ *  and its place among that step's segments of the phase) at the same fraction; when that
+ *  segment is gone from `to`, the start of the next one that's still there. Past the end, the
+ *  same time past `to`'s end. For a viewer whose timeline changes while it plays. */
+export function remapTime(from, to, t) {
+  const id = (segs) => {
+    const n = new Map();
+    return segs.map((g) => { const k = `${g.step}|${g.phase}`, c = n.get(k) ?? 0; n.set(k, c + 1); return `${k}|${c}`; });
+  };
+  const a = id(from.segs), b = new Map(id(to.segs).map((k, i) => [k, to.segs[i]]));
+  if (t >= from.duration) return to.duration + (t - from.duration);
+  let i = from.segs.findIndex((g) => t < g.t1);
+  if (i < 0) i = from.segs.length - 1;
+  const g = from.segs[i], h = b.get(a[i]);
+  if (h) return h.t0 + (h.t1 - h.t0) * Math.min(1, Math.max(0, (t - g.t0) / Math.max(1e-9, g.t1 - g.t0)));
+  for (let j = i + 1; j < a.length; j++) if (b.has(a[j])) return b.get(a[j]).t0;
+  return to.duration;
+}
+
 /** The segment at time t and how far through it (0..1). */
 export function segmentAt(tl, t) {
   if (!tl.segs.length) return null;

@@ -3,7 +3,7 @@
 // headless capture (frame by frame) show the same thing. Callers can add phases of their own
 // (timeline `before`) and draw them (`overlays`).
 import { Board, TILE } from './board.js';
-import { statesOf, shots as allShots, timeline, segmentAt, alongPath } from './story.js';
+import { statesOf, shots as allShots, timeline, segmentAt, alongPath, remapTime } from './story.js';
 import { GT, ghostPlan, ghostCursor, ghostRest, unitMenu, diamond } from './ghost.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -47,7 +47,8 @@ export class Replay {
    *  path arrow, the move, the menu at the destination with the choice pressed, then an attack's
    *  target with the damage box, an unload's cargo list and landing tiles, a build's menu, and so
    *  on. ghostEngine(wasm module) fills in what needs libaw's engine (ranges, menus, damage); without
-   *  it the ghost still plays, showing less. ghostPace scales the ghost's segments (0: none). */
+   *  it the ghost still plays, showing less. ghostPace scales the ghost's segments (0: none), for a
+   *  page that's behind; setGhostPace changes it while playing. */
   constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, ghost = false, ghostPace = 1, even = false } = {}) {
     this.art = art;
     this.sb = sb;
@@ -78,6 +79,17 @@ export class Replay {
     const post = (st, i) => (plan.post[i] ?? []).map((x) => ({ ...x, post: true }));
     this.tl = timeline(this.sb, this.shots, { before: pre, after: post, dur, hold });
     this.duration = this.tl.duration;
+  }
+
+  /** Change how fast the ghost acts (1: as planned, 0.5: twice as fast, 0: not at all) while
+   *  playing: lays out the timeline again and returns the time in it that shows what t showed
+   *  (story.remapTime), so a page that keeps its own clock carries on from there. */
+  setGhostPace(pace, t = 0) {
+    if (!this.ghost || pace === this.ghostPace) return t;
+    const old = this.tl;
+    this.ghostPace = pace;
+    this.layout();
+    return remapTime(old, this.tl, t);
   }
 
   /** The camera box for a shot: about 11 tiles wide (by 11 * aspect) around its tiles, inside
@@ -149,7 +161,7 @@ export class Replay {
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
     this.shake = 0;
     if (fx) fx();
-    if (this.ghost) { const c = this.cursorAt(t); if (c) this.cursor(c.at, c.p, c.press); }
+    if (this.ghost && !this.idle && t < this.duration + GT.idle) { const c = this.cursorAt(t); if (c) this.cursor(c.at, c.p, c.press); }
     this.setCamera(seg, p);
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
   }

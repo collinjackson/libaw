@@ -80,3 +80,20 @@ assert.deepEqual(G.ghostCursor({ phase: 'target', dur: 1, glide: 0.5, from: [0, 
 assert.equal(G.ghostCursor({ phase: 'target', dur: 1, glide: 0.5, from: [0, 0], to: [2, 0], press: 0.1 }, 0.95, null, S.alongPath).press, true);
 console.log('plan ok');
 
+// Pace: shorter ghost segments, or none; and a time carried over to the new timeline.
+const all = S.shots(sb);
+const tlOf = (pace) => {
+  const p = G.ghostPlan(sb, st, { pace });
+  return S.timeline(sb, all, { before: (s, i) => p.pre[i], after: (s, i) => p.post[i] });
+};
+const full = tlOf(1), half = tlOf(0.5), none = tlOf(0);
+const bare = S.timeline(sb, all);
+assert.equal(none.duration, bare.duration, 'pace 0: no ghost');
+assert.ok(Math.abs(half.duration - (bare.duration + (full.duration - bare.duration) / 2)) < 1e-9);
+const fire = full.segs.find((g) => g.phase === 'fire');
+const mid = (fire.t0 + fire.t1) / 2, fire2 = half.segs.find((g) => g.phase === 'fire');
+assert.ok(Math.abs(S.remapTime(full, half, mid) - (fire2.t0 + fire2.t1) / 2) < 1e-9, 'the same moment of the same segment');
+const menu = full.segs.find((g) => g.phase === 'menu');
+assert.equal(S.remapTime(full, none, menu.t0 + 0.1), none.segs.find((g) => g.step === 1 && g.phase === 'fire').t0, 'a ghost segment that went: the next one still there');
+assert.equal(S.remapTime(full, half, full.duration + 2), half.duration + 2);
+console.log('pace ok');
