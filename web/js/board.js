@@ -157,7 +157,7 @@ export class Board {
     // Units.
     const units = el('g', { class: 'units' }, s);
     // HP bars stick out above the tile, so they go in a layer over every unit.
-    const bars = [], badges = [];
+    const bars = [];
     for (const u of unitsByTile(state).values()) {
       const idx = order.indexOf(u.owner);
       const g = el('g', { class: `unit ${cls(u.owner)}${u.moved ? ' moved' : ''}${selected === u.id ? ' selected' : ''}`, 'data-id': u.id }, units);
@@ -193,10 +193,7 @@ export class Board {
       // One status badge in the bottom-left corner, as AWBW shows it: capturing, loaded, hidden
       // (a dived sub or hidden stealth), stunned.
       const status = unitStatus(u, blds.get(key(u.x, u.y)));
-      // In their own layer over the units and the tall sprites in front of them (AWBW draws its
-      // icons over everything): a capturing Infantry's "C" stays in sight under an HQ's top.
-      if (status) badges.push((layer) => {
-        const g = el('g', { class: `badge-of ${cls(u.owner)}`, 'data-id': u.id }, layer);
+      if (status) {
         const box = { x: u.x * TILE, y: u.y * TILE, size: TILE };
         if (!this.art?.badge?.(status, g, box)) {
           const bs = Math.round(TILE * 0.42), bx = box.x + 1, by = box.y + TILE - bs - 1;
@@ -204,28 +201,8 @@ export class Board {
           el('rect', { x: bx, y: by, width: bs, height: bs, rx: 2 }, b);
           el('text', { x: bx + bs / 2, y: by + bs * 0.78 }, b).textContent = BADGE_LETTER[status];
         }
-      });
-    }
-    // A tall sprite (AWBW's HQ, bases, mountains) stands in front of a unit on the tile above it,
-    // as rows overlap in AWBW: its top is drawn again over the units, cut to the part above its own
-    // tile (2026-11-27: a capturing Infantry stood over the top of muchachoo's HQ).
-    if (this.art?.overhang) {
-      const fronts = el('g', { class: 'fronts' }, s);
-      for (const u of unitsByTile(state).values()) {
-        const x = u.x, y = u.y + 1;
-        if (y >= state.height) continue;
-        const d = name(x, y), b = blds.get(key(x, y)), owner = d.building ? (b?.owner ?? null) : null;
-        const box = { x: x * TILE, y: y * TILE, size: TILE };
-        const up = this.art.overhang(terrainAt(state, x, y), d, owner, box) ?? 0;
-        if (up < 0.25) continue;   // a few pixels of edge (plains drawn a touch large) isn't a sprite standing tall
-        const id = `front-${Board.clips = (Board.clips ?? 0) + 1}`;
-        const clip = el('clipPath', { id }, fronts);
-        el('rect', { x: x * TILE, y: y * TILE - Math.min(1, up) * TILE, width: TILE, height: Math.min(1, up) * TILE }, clip);
-        this.art.tile(terrainAt(state, x, y), d, owner, el('g', { 'clip-path': `url(#${id})` }, fronts), box);
       }
     }
-    const badgeLayer = el('g', { class: 'badges' }, s);
-    for (const draw of badges) draw(badgeLayer);
     const hpLayer = el('g', { class: 'hpbars' }, s);
     for (const draw of bars) draw(hpLayer);
     this.cursorLayer = el('g', { class: 'cursor' }, s);
