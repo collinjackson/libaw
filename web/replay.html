@@ -260,9 +260,14 @@ function checkSelection() {
   const u = Object.values(rp.board.state?.units ?? {}).find((v) => v.id === sel.id);
   if (!u || key(u.x, u.y) !== sel.at) clearSelection();
 }
+// On a touch screen there's no hover to end the tip, so a tap toggles it: tap a tile for its tip,
+// tap that tile again (or wait a few seconds) to close it, tap another to move it there. The
+// mouse events a phone makes up after a tap are ignored.
+let touchTip = false, tipTimer = null;
 function hookTip() {
-  rp.board.onHover = (t) => { tipAt = t; showTip(); };
+  rp.board.onHover = (t) => { if (touchTip) return; tipAt = t; showTip(); };
   rp.board.onTile = (x, y) => {
+    if (touchTip) return;   // the press's release has already decided
     if (didHold) { didHold = false; tipAt = [x, y]; showTip(); return; }   // the click that ends a hold
     tipAt = tipAt && tipAt[0] === x && tipAt[1] === y ? null : [x, y]; showTip();
   };
@@ -272,16 +277,26 @@ await setup();
 {
   const svg = $('board');
   let hold = null, pressed = false;
-  let at = null;
+  let at = null, prev = null, downAt = 0;
   const release = () => {
+    const was = pressed;
     pressed = false; clearTimeout(hold);
-    if (didHold && at) tipAt = at;   // the tip comes back where the hold was
+    if (touchTip && was && at) {
+      // A short tap on the tile whose tip is up closes it; anything else shows it here.
+      const same = prev && prev[0] === at[0] && prev[1] === at[1];
+      tipAt = same && Date.now() - downAt < 400 ? null : at;
+      clearTimeout(tipTimer);
+      if (tipAt) tipTimer = setTimeout(() => { tipAt = null; showTip(); }, 5000);
+    } else if (!touchTip && didHold && at) tipAt = at;   // the tip comes back where the hold was
     if (clearSelection()) renderAt(lastT); else showTip();
   };
+  svg.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') touchTip = false; });
   svg.addEventListener('pointerdown', (e) => {
     const t = rp.board.tileOf(e);
     if (!t || e.button > 0) return;
     loadEngine();
+    touchTip = e.pointerType !== 'mouse';
+    if (touchTip) { prev = tipAt; downAt = Date.now(); tipAt = null; showTip(); }   // out of the way of the ranges
     pressed = true; didHold = false; at = t; clearTimeout(hold);
     hold = setTimeout(() => (didHold = true, select(t[0], t[1]).then(() => { if (!pressed) release(); })), 0);
   });

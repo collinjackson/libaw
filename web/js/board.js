@@ -6,6 +6,12 @@ import { key, displayHp, hpUnknown, unitsByTile, buildingsByTile, terrainAt } fr
 export const TILE = 40;
 const SVGNS = 'http://www.w3.org/2000/svg';
 
+// brightness(.78) saturate(.9): dimmed, but still its army's colour.
+const MOVED_MATRIX = (() => {
+  const v = 0.9, b = 0.78, r = 0.213, g = 0.715, bl = 0.072;
+  const m = [[r + (1 - r) * v, g - g * v, bl - bl * v], [r - r * v, g + (1 - g) * v, bl - bl * v], [r - r * v, g - g * v, bl + (1 - bl) * v]];
+  return m.map((row) => [...row.map((x) => +(x * b).toFixed(4)), 0, 0].join(' ')).concat('0 0 0 1 0').join(' ');
+})();
 function el(name, attrs = {}, parent) {
   const e = document.createElementNS(SVGNS, name);
   for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
@@ -82,6 +88,10 @@ export class Board {
     s.setAttribute('viewBox', `0 ${-head * TILE} ${state.width * TILE} ${(state.height + head + foot) * TILE}`);
     s.style.aspectRatio = `${state.width} / ${state.height + head + foot}`;
     const cls = (owner) => (owner == null ? 'pn' : `p${Math.max(0, order.indexOf(owner)) % 8}`);
+    // Units that have acted are dimmed with an SVG filter: Safari (and so every iPhone browser)
+    // ignores CSS filter functions such as brightness() on SVG elements.
+    const fdef = el('filter', { id: 'libaw-moved', 'color-interpolation-filters': 'sRGB' }, el('defs', {}, s));
+    el('feColorMatrix', { type: 'matrix', values: MOVED_MATRIX }, fdef);
     const terrain = el('g', { class: 'terrain', id: 'board-terrain' }, s);   // (the tooltip's tile icons show parts of it)
     const name = (x, y) => this.tmap[terrainAt(state, x, y)] ?? { base: 'plain' };
     const isWaterish = (x, y) => x >= 0 && y >= 0 && x < state.width && y < state.height &&

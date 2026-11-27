@@ -112,7 +112,7 @@ footer.foot { padding: 4px 16px 20px; margin: 0; }
 .mark.repair { fill: rgba(70, 200, 110, .5); }
 .mark.blast { fill: rgba(170, 70, 230, .42); }
 .mark.silo { fill: rgba(255, 255, 255, .5); }
-.unit.moved { filter: brightness(.78) saturate(.9); }   /* dimmed, but still its army's colour */
+.unit.moved { filter: url(#libaw-moved); }   /* dimmed, but still its army's colour (board.js) */
 .unit.selected use { filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 2px var(--accent)); }
 .hpbg { fill: #1f2430; opacity: .85; }
 .hp { fill: #fff; font: 700 12px system-ui, sans-serif; text-anchor: middle; }
