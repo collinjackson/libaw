@@ -261,9 +261,10 @@ function checkSelection() {
   if (!u || key(u.x, u.y) !== sel.at) clearSelection();
 }
 // On a touch screen there's no hover to end the tip, so a tap toggles it: tap a tile for its tip,
-// tap that tile again (or wait a few seconds) to close it, tap another to move it there. The
-// mouse events a phone makes up after a tap are ignored.
+// tap anywhere (or wait a few seconds) to close it. A long press (a unit's ranges) shows the tip
+// where it was. The mouse events a phone makes up after a tap are ignored.
 let touchTip = false, tipTimer = null;
+function hideTip() { clearTimeout(tipTimer); if (tipAt) { tipAt = null; showTip(); } }
 function hookTip() {
   rp.board.onHover = (t) => { if (touchTip) return; tipAt = t; showTip(); };
   rp.board.onTile = (x, y) => {
@@ -282,9 +283,8 @@ await setup();
     const was = pressed;
     pressed = false; clearTimeout(hold);
     if (touchTip && was && at) {
-      // A short tap on the tile whose tip is up closes it; anything else shows it here.
-      const same = prev && prev[0] === at[0] && prev[1] === at[1];
-      tipAt = same && Date.now() - downAt < 400 ? null : at;
+      // A short tap while the tip is up closes it; anything else shows it here.
+      tipAt = prev && Date.now() - downAt < 400 ? null : at;
       clearTimeout(tipTimer);
       if (tipAt) tipTimer = setTimeout(() => { tipAt = null; showTip(); }, 5000);
     } else if (!touchTip && didHold && at) tipAt = at;   // the tip comes back where the hold was
@@ -301,6 +301,8 @@ await setup();
     hold = setTimeout(() => (didHold = true, select(t[0], t[1]).then(() => { if (!pressed) release(); })), 0);
   });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) svg.addEventListener(ev, release);
+  // A tap off the board (around it, in the page) closes the tip too.
+  document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' && !svg.contains(e.target)) hideTip(); });
   svg.addEventListener('contextmenu', (e) => e.preventDefault());   // a long press on a phone
 }
 $('art').onchange = $('camera').onchange = $('anim').onchange = $('shoals').onchange = $('hp').onchange = setup;
@@ -328,6 +330,7 @@ function snapshot() {
 }
 window.__replay = {
   get duration() { return rp.duration; }, renderAt, ready: true,
+  hideTip: () => hideTip(),   // for the page around an iframe: a tap there closes the tip
   get segments() { return rp.tl.segs; }, get steps() { return sb.steps; }, get start() { return sb.start; },
   // The ghost's pace (1 as planned, 0.5 twice as fast, 0 no ghost) for a page that's behind: the
   // timeline is laid out again; returns the time in it that shows what t showed, drawn there.
