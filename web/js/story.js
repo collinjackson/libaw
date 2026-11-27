@@ -105,7 +105,11 @@ export function shots(sb) {
     const st = steps[i];
     if (st.type === 'end') continue;
     let j = i + 1;
-    if (st.type === 'move' && j < steps.length && FOLLOW.has(steps[j].type)) j++;
+    // A capture records no unit: it follows the move only where that move ended (2026-11-27: a Com
+    // Tower captured by a unit that hadn't moved fell into a Black Boat's move elsewhere).
+    const end = st.type === 'move' ? st.path[st.path.length - 1] : null;
+    const mine = (n) => n.type !== 'capture' || (end && n.at?.[0] === end[0] && n.at?.[1] === end[1]);
+    if (st.type === 'move' && j < steps.length && FOLLOW.has(steps[j].type) && mine(steps[j])) j++;
     const last = steps[j - 1];
     let focus = null;
     const tiles = [];

@@ -62,3 +62,14 @@ console.log('story ok');
   assert.equal(cop.units[7].moved, true);
 }
 console.log('moved flags ok');
+
+// A capture elsewhere (by a unit that didn't move) is its own shot, not the move before it.
+{
+  const steps = [
+    { type: 'move', unit_id: 1, path: [[0, 0], [1, 0]] },
+    { type: 'capture', at: [5, 5], capture: 10, done: false },
+    { type: 'move', unit_id: 2, path: [[2, 2], [3, 2]] },
+    { type: 'capture', at: [3, 2], capture: 10, done: false },
+  ];
+  assert.deepEqual(S.shots({ player: 1, steps }).map((s) => [s.from, s.to]), [[0, 1], [1, 2], [2, 4]]);
+}
