@@ -3,6 +3,7 @@
 // headless capture (frame by frame) show the same thing. Callers can add phases of their own
 // (timeline `before`) and draw them (`overlays`).
 import { Board, TILE } from './board.js';
+import { terrainAt, buildingsByTile, key } from './logic.js';
 import { statesOf, shots as allShots, timeline, segmentAt, alongPath, remapTime } from './story.js';
 import { GT, ghostPlan, ghostCursor, ghostRest, unitMenu, diamond } from './ghost.js';
 
@@ -43,7 +44,9 @@ export class Replay {
    *  ({layer, box, p, seg, st, before, after, replay}) => void} to draw a caller's phases (or
    *  replace a built-in one), onShot(shot, index), safe(shot): {top, bottom}, the fractions of the
    *  frame a caller's overlays cover on that shot (a caption strip), which the camera keeps the
-   *  shot's tiles out of}. */
+   *  shot's tiles out of}, follow: the camera tracks a shot's moving unit, from the path's start to
+   *  its end, and frames the rest of the shot (its target, the tiles it acts on) with one tile
+   *  to spare, not the whole path; zoom: the camera box's least width in tiles (11). */
   /** ghost: act out each step first, as the player's cursor and menus would (after AWBW Ghost
    *  Input by onetrickwolf; ghost.js plans it): the cursor glides to the unit, its range and the
    *  path arrow, the move, the menu at the destination with the choice pressed, then an attack's
@@ -51,7 +54,7 @@ export class Replay {
    *  on. ghostEngine(wasm module) fills in what needs libaw's engine (ranges, menus, damage); without
    *  it the ghost still plays, showing less. ghostPace scales the ghost's segments (0: none), for a
    *  page that's behind; setGhostPace changes it while playing. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, safe = null, ghost = false, ghostPace = 1, even = false, damageBox = false } = {}) {
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, safe = null, follow = false, zoom = 11, ghost = false, ghostPace = 1, even = false, damageBox = false } = {}) {
     this.art = art;
     // The ghost's damage box over an attack's target: off by default. It's up for a moment (the
     // cursor's hover on the target), too short to read, and holding it longer stalls every attack.
@@ -71,6 +74,8 @@ export class Replay {
     this.camera = camera;
     this.aspect = aspect;
     this.safe = safe;
+    this.follow = follow;
+    this.zoom = zoom;
     this.overlays = overlays;
     this.onShot = onShot;
     this.lastShot = null;
@@ -102,20 +107,23 @@ export class Replay {
    *  the board. A tall shot widens the box to keep its shape, while the board allows. With
    *  safe(shot) covering a top or bottom part of the frame, the tiles are framed in the rest: the
    *  box grows to fit them there and may run past the board's edge by the covered part. */
-  boxFor(shot) {
+  boxFor(shot, tiles = null) {
     const W = this.sb.start.width, H = this.sb.start.height;
     if (!this.camera || !shot?.focus) return [0, 0, W, H];
-    const pts = shot.tiles.length ? shot.tiles : [shot.focus];
+    const pts = tiles ?? (shot.tiles.length ? shot.tiles : [shot.focus]);
+    const pad = tiles ? 3 : null;   // follow: a tile to spare each side
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-    const cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2, cy = (Math.min(...ys) + Math.max(...ys) + 1) / 2;
     const sf = this.safe?.(shot) ?? {};
+    // With an area kept clear, the top tiles' tall sprites (an HQ, a mountain) count as shot too.
+    const y0 = Math.min(...ys) - (sf.top || sf.bottom ? this.rise(pts.filter((p) => p[1] === Math.min(...ys))) : 0);
+    const cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2, cy = (y0 + Math.max(...ys) + 1) / 2;
     const top = Math.max(0, sf.top ?? 0), bottom = Math.max(0, sf.bottom ?? 0), room = Math.max(0.3, 1 - top - bottom);
-    const tall = (Math.max(...ys) - Math.min(...ys) + 4) / room;
-    const w = Math.min(W, Math.max(11, Math.max(...xs) - Math.min(...xs) + 5, tall / this.aspect));
+    const tall = (Math.max(...ys) - y0 + (pad ?? 4)) / room;
+    const w = Math.min(W, Math.max(this.zoom, Math.max(...xs) - Math.min(...xs) + (pad ?? 5), tall / this.aspect));
     const h = Math.min(top || bottom ? H / room : H, Math.max(w * this.aspect, tall));
     const x = Math.min(Math.max(0, cx - w / 2), W - w);
     // The tiles' middle at the middle of the uncovered part; the box past the board only where covered.
-    const y = Math.min(Math.max(-top * h, cy - h * (top + room / 2)), H - h + bottom * h);
+    const y = Math.min(Math.max(Math.min(0, y0) - top * h, cy - h * (top + room / 2)), H - h + bottom * h);
     return [x, y, w, h];
   }
 
@@ -131,7 +139,7 @@ export class Replay {
       ({ state, marks, arrow, fx } = this.ghostFrame(seg, p, st, before, after, marks));
     } else if (overlay) {
       state = before;
-      fx = () => overlay({ layer: this.fxLayer, box: this.boxFor(seg.shot).map((v) => v * TILE), p, seg, st, before, after, replay: this });
+      fx = () => overlay({ layer: this.fxLayer, box: this.cameraBox(seg, p).map((v) => v * TILE), p, seg, st, before, after, replay: this });
     } else if (seg.phase === 'move') {
       state = JSON.parse(JSON.stringify(before));
       const u = state.units[st.unit_id];
@@ -281,7 +289,7 @@ export class Replay {
     const w = Math.round(PAD * 2 + 16 + (icon ? 24 : 0) + longest * 7.4 + (cost ? 50 : 0));
     const more = [from > 0, from + MAX < items.length];
     const h = PAD * 2 + shown.length * RH + (more[0] ? 8 : 0) + (more[1] ? 8 : 0);
-    const [bx, by, bw, bh] = this.boxFor(seg.shot).map((v) => v * TILE);
+    const [bx, by, bw, bh] = this.cameraBox(seg, p).map((v) => v * TILE);
     let x = (tx + 1) * TILE + 4;
     if (x + w > bx + bw - 2) x = tx * TILE - 4 - w;
     x = Math.max(bx + 2, Math.min(x, bx + bw - w - 2));
@@ -325,7 +333,7 @@ export class Replay {
   damageBox(seg, p) {
     const d = this.ghost.damage[seg.step];
     if (!d || !seg.to || p < (seg.glide ?? 0) / Math.max(1e-6, seg.dur)) return;
-    const [tx, ty] = seg.to, [bx, by, bw, bh] = this.boxFor(seg.shot).map((v) => v * TILE);
+    const [tx, ty] = seg.to, [bx, by, bw, bh] = this.cameraBox(seg, p).map((v) => v * TILE);
     const range = ([a, b]) => (a === b ? `${a}%` : `${a}–${b}%`);
     const counter = d.counter && d.counter[1] > 0;
     const w = 104, h = counter ? 50 : 34;
@@ -429,8 +437,32 @@ export class Replay {
   /** The phase playing at t ('move', 'fire', ...). */
   phaseAt(t) { return segmentAt(this.tl, t)?.seg.phase ?? null; }
 
-  setCamera(seg) {
-    const [x, y, w, h] = this.boxFor(seg.shot);
+  /** How far (in tiles) the tallest sprite on these tiles stands above its tile (art.overhang). */
+  rise(pts) {
+    const s = this.sb.start, blds = buildingsByTile(s);
+    let up = 0;
+    for (const [x, y] of pts) {
+      if (x !== Math.round(x) || y !== Math.round(y)) continue;
+      const id = terrainAt(s, x, y), d = this.board.tmap?.[id] ?? {};
+      up = Math.max(up, this.art?.overhang?.(id, d, d.building ? (blds.get(key(x, y))?.owner ?? null) : null, { x: x * TILE, y: y * TILE, size: TILE }) ?? 0);
+    }
+    return up;
+  }
+
+  /** The camera box at this point of a segment: boxFor its shot, or with follow, around where the
+   *  shot's moving unit is now and the shot's other tiles. */
+  cameraBox(seg, p = 1) {
+    const sh = seg.shot, i = sh?.from, mv = this.follow && sh?.focus ? this.sb.steps[i] : null;
+    if (mv?.type !== 'move' || mv.path.length < 2) return this.boxFor(sh);
+    const path = mv.path, end = path[path.length - 1];
+    const at = seg.step === i && seg.phase === 'move' && !seg.ghost ? alongPath(path, ease(p))
+      : seg.step > i || (seg.step === i && !seg.ghost) ? end : path[0];
+    const on = new Set(path.map((t) => t.join()));
+    return this.boxFor(sh, [at, ...sh.tiles.filter((t) => !on.has(t.join()))]);
+  }
+
+  setCamera(seg, p) {
+    const [x, y, w, h] = this.cameraBox(seg, p);
     // A blast shakes the picture (fireFx sets this.shake, in tiles); deterministic in t.
     const s = this.shake || 0, dx = s * Math.sin(seg.t0 * 97 + (this.shakeT ?? 0) * 71), dy = s * Math.cos(seg.t0 * 53 + (this.shakeT ?? 0) * 89);
     const up = y <= 0 ? (this.board.headroom ?? 0) : 0;   // the top row's tall sprites, as in Board.draw
