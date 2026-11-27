@@ -82,7 +82,7 @@ export class Board {
     s.setAttribute('viewBox', `0 ${-head * TILE} ${state.width * TILE} ${(state.height + head + foot) * TILE}`);
     s.style.aspectRatio = `${state.width} / ${state.height + head + foot}`;
     const cls = (owner) => (owner == null ? 'pn' : `p${Math.max(0, order.indexOf(owner)) % 8}`);
-    const terrain = el('g', { class: 'terrain' }, s);
+    const terrain = el('g', { class: 'terrain', id: 'board-terrain' }, s);   // (the tooltip's tile icons show parts of it)
     const name = (x, y) => this.tmap[terrainAt(state, x, y)] ?? { base: 'plain' };
     const isWaterish = (x, y) => x >= 0 && y >= 0 && x < state.width && y < state.height &&
       ['sea', 'reef', 'bridge-h', 'bridge-v'].includes(name(x, y).base);

@@ -38,6 +38,7 @@ URL options:
 | `camera=1` | Start with "Follow the action" on. |
 | `capture=1` | Hide the controls, for recording. |
 | `ghost=1` | Act out each step first, as the player's cursor and menus would (below). |
+| `armies=bm,os` | With AWBW's art, draw each seat (in turn order) as that army instead of its own, like AWBW's army override for players who can't tell two armies apart. Leave one blank to keep it. |
 | `ghostpace=K` | The ghost's segments K times as long (`0.5` twice as fast, `0` no ghost). |
 
 ### The ghost (`ghost=1`)

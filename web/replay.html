@@ -13,6 +13,10 @@
   .tip { position: absolute; pointer-events: none; transform: translate(-50%, calc(-100% - 4px)); background: rgba(16, 20, 28, .92);
     color: #f7f8fa; font: 600 12px system-ui, sans-serif; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
   .tip[hidden] { display: none; }
+  .tip { display: flex; align-items: center; gap: 4px; }
+  .screen .tip svg.ico { width: auto !important; height: auto !important; display: block; flex: none; image-rendering: pixelated; }
+  .tip .dim { color: #9aa3b2; font-weight: 500; }
+  .tip .stars { color: #f2c94c; letter-spacing: -1px; }
   .controls { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
   .controls input[type=range] { flex: 1; min-width: 120px; }
   .fx-hit { fill: #fff6b0; stroke: #ffb020; stroke-width: 3; }
@@ -57,6 +61,7 @@ import { Replay, GHOST } from './js/replay.js';
 import { awbwLook } from './js/look.js';
 import { TILE } from './js/board.js';
 import { key, displayHp, hpUnknown, unitsByTile, buildingsByTile, terrainAt } from './js/logic.js';
+import { spriteId, AWBW_COUNTRIES } from './js/art.js';
 import { segmentAt } from './js/story.js';
 
 // ?sb=URL of a storyboard (awbw-replay --storyboard TURN.json), &art=libaw|awbw, &camera=1,
@@ -80,6 +85,11 @@ let [units, terrain, tmap, sprites, sb] = await Promise.all([
   fetch(q.get('sb')).then((r) => r.json()),
 ]);
 $('sprites').innerHTML = sprites;
+// ?armies=bm,os: draw each seat (in turn order) as that AWBW army instead of its own, as AWBW's
+// own army override does for players who can't tell two armies' colours apart. Blank keeps one.
+const armies = (q.get('armies') ?? '').split(',').map((c) => c.trim().toLowerCase());
+const armed = (s) => !armies.some((c) => AWBW_COUNTRIES[c]) ? s : { ...s, countries: { ...s.countries,
+  ...Object.fromEntries(s.start.players.map((p, i) => [p.id, armies[i]]).filter(([, c]) => AWBW_COUNTRIES[c])) } };
 $('art').value = q.get('art') || 'libaw';
 $('camera').checked = !!q.get('camera');
 $('anim').checked = q.get('anim') !== '0';
@@ -93,7 +103,7 @@ async function setup(t0 = 0) {
   if (stop) stop();
   const hover = rp?.board.hoverTile ?? null;
   rp?.board.destroy();
-  const art = $('art').value === 'awbw' ? awbwLook(sb, { animate: $('anim').checked, shoals: $('shoals').value, water, sides: q.get('face') === 'sides' }) : null;
+  const art = $('art').value === 'awbw' ? awbwLook(armed(sb), { animate: $('anim').checked, shoals: $('shoals').value, water, sides: q.get('face') === 'sides' }) : null;
   rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers', ghost: q.get('ghost') === '1', ghostPace, even: q.get('pad') === 'even' });
   if (rp.ghost) loadEngine().catch(() => null);
   // AWBW's top-row sprites stand above the board: learn their heights before the first frame,
@@ -122,40 +132,74 @@ function renderAt(t) {
 let tipAt = null;
 function showTip() {
   const tip = $('tip'), st = rp?.board.state;
-  const text = tipAt && st && !sel ? tipText(st, ...tipAt) : '';   // not over a unit's ranges
-  tip.hidden = !text;
-  if (!text) return;
-  tip.textContent = text;
+  const nodes = tipAt && st && !sel ? tipNodes(st, ...tipAt) : null;   // not over a unit's ranges
+  tip.hidden = !nodes;
+  if (!nodes) return;
+  tip.replaceChildren(...nodes);
   const m = $('board').getScreenCTM(), box = $('screen').getBoundingClientRect();
   if (!m) return;
   const pt = new DOMPoint((tipAt[0] + 0.5) * TILE, tipAt[1] * TILE).matrixTransform(m);
-  tip.style.left = `${pt.x - box.left}px`;
+  const half = tip.offsetWidth / 2 + 2;   // kept inside the board at its edges
+  tip.style.left = `${Math.min(Math.max(pt.x - box.left, half), Math.max(half, box.width - half))}px`;
   tip.style.top = `${Math.max(pt.y - box.top, tip.offsetHeight + 4)}px`;
 }
-// A tile's plain name, as a player says it: "Orange Star City" -> "City", "ESRiver" -> "River",
-// "Sea-N-E" -> "Sea", "HPipe" -> "Pipe". Whose a building is comes after it.
-const BUILDING = /(HQ|City|Base|Airport|Port|Com Tower|Lab|Missile Silo)$/;
-const tileName = (t) => t.name.match(BUILDING)?.[1] ?? (t.name === 'Missile Silo Empty' ? 'Used Missile Silo'
-  : t.name.replace(/^[NESWCHV]+(River|Road|Bridge|Pipe)$/, '$1').replace(/^(Sea|Shoal)-.*/, '$1').replace(/^[NESWHV]+(Pipe.*)/, '$1'));
-// As on AWBW's hover: the unit, what it carries, and the terrain under it (a big sprite like a
-// Mega Tank's hides it), with its defence stars.
-function tipText(st, x, y) {
+// As on AWBW's hover, in pictures: the unit (and what a transport carries) and the tile under it
+// (a big sprite like a Mega Tank's hides it) with its defence stars. The art's colours say whose
+// they are. Drawn with the board's own art.
+const SVGNS = 'http://www.w3.org/2000/svg';
+function icon(vb, w, h) {
+  const s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('viewBox', vb.join(' ')); s.setAttribute('width', w); s.setAttribute('height', h); s.setAttribute('class', 'ico');
+  return s;
+}
+function unitIcon(u, px) {
+  const s = icon([0, 0, TILE, TILE], px, px);
+  const g = document.createElementNS(SVGNS, 'g');
+  g.setAttribute('class', `unit p${Math.max(0, rp.order.indexOf(u.owner)) % 8}`);
+  s.appendChild(g);
+  if (!rp.board.art?.unit?.(u, g, { x: 0, y: 0, size: TILE, flip: false })) {
+    const use = document.createElementNS(SVGNS, 'use');
+    use.setAttribute('href', `#${spriteId(u.kind)}`); use.setAttribute('width', TILE); use.setAttribute('height', TILE);
+    g.appendChild(use);
+  }
+  return s;
+}
+function tileIcon(st, x, y, px) {
+  const id = terrainAt(st, x, y), d = rp.board.tmap[id] ?? {}, b = buildingsByTile(st).get(key(x, y));
+  if (d.building && rp.board.art?.tile) {   // a building on its own, with the height it stands above its tile
+    const s = icon([x * TILE, (y - 0.5) * TILE, TILE, 1.5 * TILE], px, px * 1.5);
+    if (rp.board.art.tile(id, d, b?.owner ?? null, s, { x: x * TILE, y: y * TILE, size: TILE })) return s;
+  }
+  const s = icon([x * TILE, y * TILE, TILE, TILE], px, px);   // the board's own drawing of that tile (water joins and all)
+  const use = document.createElementNS(SVGNS, 'use');
+  use.setAttribute('href', '#board-terrain');
+  s.appendChild(use);
+  return s;
+}
+function tipNodes(st, x, y) {
   const u = unitsByTile(st).get(key(x, y)), b = buildingsByTile(st).get(key(x, y));
-  const out = [`(${x}, ${y})`];
+  const out = [];
+  const text = (t, cls = '') => { const e = document.createElement('span'); e.textContent = t; if (cls) e.className = cls; return e; };
   if (u) {
+    out.push(unitIcon(u, 22));
     // HP only with HP bars: otherwise the unit's own number already says it.
-    out.push(rp?.board.hpBars ? `${u.kind} ${hpUnknown(u) ? '?' : displayHp(u)} HP` : u.kind);
+    if (rp?.board.hpBars) out.push(text(`${hpUnknown(u) ? '?' : displayHp(u)} HP`));
     const cargo = (u.cargo ?? []).map((id) => st.units[id]).filter(Boolean);
-    if (cargo.length) out.push(`carrying ${cargo.map((c) => `${c.kind}${hpUnknown(c) ? ' ?' : displayHp(c) < 10 ? ` ${displayHp(c)} HP` : ''}`).join(', ')}`);
+    if (cargo.length) {
+      out.push(text('carrying', 'dim'));
+      for (const c of cargo) {
+        out.push(unitIcon(c, 18));
+        if (hpUnknown(c) || displayHp(c) < 10) out.push(text(hpUnknown(c) ? '?' : `${displayHp(c)}`));
+      }
+    }
+    out.push(text('on', 'dim'));
   }
-  const t = terrain[terrainAt(st, x, y)];
-  if (t) {
-    const stars = '★'.repeat(t.defense ?? 0);
-    const label = b && !/Missile Silo/.test(t.name) ? `${tileName(t)} (${b.owner != null ? name(b.owner) : 'neutral'})` : tileName(t);
-    out.push(`${u ? 'on ' : ''}${label}${stars ? ` ${stars}` : ''}`);
-  }
-  if (b && b.capture < 20) out.push(`capture ${b.capture}/20`);
-  return out.join(' · ');
+  out.push(tileIcon(st, x, y, 22));
+  const def = rp.data.terrain[terrainAt(st, x, y)]?.defense ?? 0;
+  if (def) out.push(text('★'.repeat(def), 'stars'));
+  if (b && b.capture < 20) out.push(text(`capture ${b.capture}/20`));
+  out.push(text(`${x},${y}`, 'dim'));
+  return out;
 }
 // Press and hold a unit, as on AWBW: where it can move (blue) until you let go; hold the same
 // unit again for every tile it could fire on (red), and so on, alternating. libaw's engine works it out (pkg/, loaded on the first
