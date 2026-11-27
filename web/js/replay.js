@@ -159,9 +159,11 @@ export class Replay {
     if (arrow) this.arrow(...arrow);
     if (under) under();
     this.fxLayer = el('g', { class: 'fx' }, this.board.svg);
+    this.popLayer = el('g', { class: 'fx-pops' }, this.board.svg);   // captures, repairs: over everything
     this.shake = 0;
     if (fx) fx();
     if (this.ghost && !this.idle && t < this.duration + GT.idle) { const c = this.cursorAt(t); if (c) this.cursor(c.at, c.p, c.press); }
+    this.board.svg.appendChild(this.popLayer);   // after the ghost's cursor and menus, which sit on the same tile
     this.setCamera(seg, p);
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
   }
@@ -431,7 +433,9 @@ export class Replay {
 
   pop(x, y, text, p, cls) {
     const rise = 18 * ease(Math.min(1, p));
-    const tx = el('text', { x: (x + 0.5) * TILE, y: (y + 0.62) * TILE - rise, class: cls, opacity: p < 0.85 ? 1 : (1 - p) / 0.15 }, this.fxLayer);
+    const top = -(this.board.headroom ?? 0) * TILE + 14;   // on the top row, it rises no higher than the board's edge
+    const half = text.length * 5 + 4, W = this.board.state.width * TILE;   // and stays inside it at the sides
+    const tx = el('text', { x: Math.min(Math.max((x + 0.5) * TILE, half), W - half), y: Math.max(top, (y + 0.62) * TILE - rise), class: cls, opacity: p < 0.85 ? 1 : (1 - p) / 0.15 }, this.popLayer ?? this.fxLayer);
     tx.textContent = text;
   }
 
