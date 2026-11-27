@@ -41,7 +41,9 @@ export class Replay {
    *  frame that a chat's square preview shows whole), hpBars: segmented HP bars (Board), capCounts: capture points drawn on buildings (Board), dur:
    *  timeline step lengths (story.timeline), before: timeline hook (story.timeline), overlays: {phase:
    *  ({layer, box, p, seg, st, before, after, replay}) => void} to draw a caller's phases (or
-   *  replace a built-in one), onShot(shot, index)}. */
+   *  replace a built-in one), onShot(shot, index), safe(shot): {top, bottom}, the fractions of the
+   *  frame a caller's overlays cover on that shot (a caption strip), which the camera keeps the
+   *  shot's tiles out of}. */
   /** ghost: act out each step first, as the player's cursor and menus would (after AWBW Ghost
    *  Input by onetrickwolf; ghost.js plans it): the cursor glides to the unit, its range and the
    *  path arrow, the move, the menu at the destination with the choice pressed, then an attack's
@@ -49,7 +51,7 @@ export class Replay {
    *  on. ghostEngine(wasm module) fills in what needs libaw's engine (ranges, menus, damage); without
    *  it the ghost still plays, showing less. ghostPace scales the ghost's segments (0: none), for a
    *  page that's behind; setGhostPace changes it while playing. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, ghost = false, ghostPace = 1, even = false, damageBox = false } = {}) {
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, safe = null, ghost = false, ghostPace = 1, even = false, damageBox = false } = {}) {
     this.art = art;
     // The ghost's damage box over an attack's target: off by default. It's up for a moment (the
     // cursor's hover on the target), too short to read, and holding it longer stalls every attack.
@@ -68,6 +70,7 @@ export class Replay {
     this.layout();
     this.camera = camera;
     this.aspect = aspect;
+    this.safe = safe;
     this.overlays = overlays;
     this.onShot = onShot;
     this.lastShot = null;
@@ -96,17 +99,23 @@ export class Replay {
   }
 
   /** The camera box for a shot: about 11 tiles wide (by 11 * aspect) around its tiles, inside
-   *  the board. A tall shot widens the box to keep its shape, while the board allows. */
+   *  the board. A tall shot widens the box to keep its shape, while the board allows. With
+   *  safe(shot) covering a top or bottom part of the frame, the tiles are framed in the rest: the
+   *  box grows to fit them there and may run past the board's edge by the covered part. */
   boxFor(shot) {
     const W = this.sb.start.width, H = this.sb.start.height;
     if (!this.camera || !shot?.focus) return [0, 0, W, H];
     const pts = shot.tiles.length ? shot.tiles : [shot.focus];
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     const cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2, cy = (Math.min(...ys) + Math.max(...ys) + 1) / 2;
-    const tall = Math.max(...ys) - Math.min(...ys) + 4;
+    const sf = this.safe?.(shot) ?? {};
+    const top = Math.max(0, sf.top ?? 0), bottom = Math.max(0, sf.bottom ?? 0), room = Math.max(0.3, 1 - top - bottom);
+    const tall = (Math.max(...ys) - Math.min(...ys) + 4) / room;
     const w = Math.min(W, Math.max(11, Math.max(...xs) - Math.min(...xs) + 5, tall / this.aspect));
-    const h = Math.min(H, Math.max(w * this.aspect, tall));
-    const x = Math.min(Math.max(0, cx - w / 2), W - w), y = Math.min(Math.max(0, cy - h / 2), H - h);
+    const h = Math.min(top || bottom ? H / room : H, Math.max(w * this.aspect, tall));
+    const x = Math.min(Math.max(0, cx - w / 2), W - w);
+    // The tiles' middle at the middle of the uncovered part; the box past the board only where covered.
+    const y = Math.min(Math.max(-top * h, cy - h * (top + room / 2)), H - h + bottom * h);
     return [x, y, w, h];
   }
 
