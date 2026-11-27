@@ -13,7 +13,7 @@
   .tip { position: absolute; pointer-events: none; transform: translate(-50%, calc(-100% - 4px)); background: rgba(16, 20, 28, .92);
     color: #f7f8fa; font: 600 12px system-ui, sans-serif; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
   .tip[hidden] { display: none; }
-  .tip { display: flex; align-items: center; gap: 4px; }
+  .tip { display: flex; align-items: center; gap: .35em; }
   .screen .tip svg.ico { width: auto !important; height: auto !important; display: block; flex: none; image-rendering: pixelated; }
   .tip .dim { color: #9aa3b2; font-weight: 500; }
   .tip .stars { color: #f2c94c; letter-spacing: -1px; }
@@ -132,11 +132,14 @@ function renderAt(t) {
 let tipAt = null;
 function showTip() {
   const tip = $('tip'), st = rp?.board.state;
-  const nodes = tipAt && st && !sel ? tipNodes(st, ...tipAt) : null;   // not over a unit's ranges
+  const m = $('board').getScreenCTM(), box = $('screen').getBoundingClientRect();
+  // Sized to the board as drawn: its icons a little under a tile, its text in step with them.
+  const tilePx = m ? Math.hypot(m.a, m.b) * TILE : 32, ico = Math.round(Math.min(44, Math.max(16, tilePx * 0.8)));
+  const nodes = tipAt && st && !sel ? tipNodes(st, ...tipAt, ico) : null;   // not over a unit's ranges
   tip.hidden = !nodes;
   if (!nodes) return;
+  tip.style.fontSize = `${Math.round(Math.min(16, Math.max(11, ico * 0.5)))}px`;
   tip.replaceChildren(...nodes);
-  const m = $('board').getScreenCTM(), box = $('screen').getBoundingClientRect();
   if (!m) return;
   const pt = new DOMPoint((tipAt[0] + 0.5) * TILE, tipAt[1] * TILE).matrixTransform(m);
   const half = tip.offsetWidth / 2 + 2;   // kept inside the board at its edges
@@ -181,24 +184,24 @@ function tileIcon(st, x, y, px) {
   s.appendChild(use);
   return s;
 }
-function tipNodes(st, x, y) {
+function tipNodes(st, x, y, ico = 22) {
   const u = unitsByTile(st).get(key(x, y)), b = buildingsByTile(st).get(key(x, y));
   const out = [];
   const text = (t, cls = '') => { const e = document.createElement('span'); e.textContent = t; if (cls) e.className = cls; return e; };
   if (u) {
-    out.push(unitIcon(u, 22));
+    out.push(unitIcon(u, ico));
     // HP only with HP bars: otherwise the unit's own number already says it.
     if (rp?.board.hpBars) out.push(text(`${hpUnknown(u) ? '?' : displayHp(u)} HP`));
     const cargo = (u.cargo ?? []).map((id) => st.units[id]).filter(Boolean);
     if (cargo.length) {
       out.push(text('carrying', 'dim'));
       for (const c of cargo) {
-        out.push(unitIcon(c, 18));
+        out.push(unitIcon(c, Math.round(ico * 0.8)));
         if (hpUnknown(c) || displayHp(c) < 10) out.push(text(hpUnknown(c) ? '?' : `${displayHp(c)}`));
       }
     }
   }
-  out.push(tileIcon(st, x, y, 22));
+  out.push(tileIcon(st, x, y, ico));
   const def = rp.data.terrain[terrainAt(st, x, y)]?.defense ?? 0;
   if (def) out.push(text('★'.repeat(def), 'stars'));
   if (b && b.capture < 20) out.push(text(`capture ${b.capture}/20`));
