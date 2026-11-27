@@ -76,6 +76,7 @@ import { segmentAt } from './js/story.js';
 const q = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 if (q.get('capture')) document.body.classList.add('capture');
+const TIPS = q.get('tip') !== '0';   // tip=0: no tile tip (the unit and terrain under the cursor or a tap)
 if (!q.get('sb')) { $('meta').textContent = 'Add ?sb=URL of a storyboard (docs/storyboard.md).'; throw new Error('no storyboard'); }
 let [units, terrain, tmap, sprites, sb] = await Promise.all([
   fetch('../data/units.json').then((r) => r.json()),
@@ -135,7 +136,7 @@ function showTip() {
   const m = $('board').getScreenCTM(), box = $('screen').getBoundingClientRect();
   // Sized to the board as drawn: its icons a little under a tile, its text in step with them.
   const tilePx = m ? Math.hypot(m.a, m.b) * TILE : 32, ico = Math.round(Math.min(44, Math.max(16, tilePx * 0.8)));
-  const nodes = tipAt && st && !sel ? tipNodes(st, ...tipAt, ico) : null;   // not over a unit's ranges
+  const nodes = TIPS && tipAt && st && !sel ? tipNodes(st, ...tipAt, ico) : null;   // not over a unit's ranges; none with tip=0
   tip.hidden = !nodes;
   if (!nodes) return;
   tip.style.fontSize = `${Math.round(Math.min(16, Math.max(11, ico * 0.5)))}px`;

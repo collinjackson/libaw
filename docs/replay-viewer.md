@@ -37,6 +37,7 @@ URL options:
 | `art=libaw` or `art=awbw` | Which sprites to draw (default `libaw`). |
 | `camera=1` | Start with "Follow the action" on. |
 | `capture=1` | Hide the controls, for recording. |
+| `tip=0` | No tile tip: hovering or tapping a tile doesn't show its unit and terrain. |
 | `ghost=1` | Act out each step first, as the player's cursor and menus would (below). |
 | `damage=1` | With the ghost, show the damage box (damage and counter ranges) while the cursor is on an attack's target. Off by default: it's only up for a moment. |
 | `armies=bm,os` | With AWBW's art, draw each seat (in turn order) as that army instead of its own, like AWBW's army override for players who can't tell two armies apart. Leave one blank to keep it. |
