@@ -182,7 +182,8 @@ export class Replay {
     this.popLayer = el('g', { class: 'fx-pops' }, this.board.svg);   // captures, repairs: over everything
     this.shake = 0;
     if (fx) fx();
-    if (this.ghost && !this.idle && t < this.duration + GT.idle) { const c = this.cursorAt(t); if (c) this.cursor(c.at, c.p, c.press); }
+    // No cursor over an overlay (a duel cutaway fills the frame; its brackets floated on top).
+    if (this.ghost && !this.idle && !(overlay && !seg.ghost) && t < this.duration + GT.idle) { const c = this.cursorAt(t); if (c) this.cursor(c.at, c.p, c.press); }
     this.board.svg.appendChild(this.popLayer);   // after the ghost's cursor and menus, which sit on the same tile
     this.setCamera(seg, p);
     if (seg.shot !== this.lastShot) { this.lastShot = seg.shot; this.onShot(seg.shot, this.shots.indexOf(seg.shot)); }
