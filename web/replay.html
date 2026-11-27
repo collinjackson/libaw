@@ -166,11 +166,16 @@ function unitIcon(u, px) {
 }
 function tileIcon(st, x, y, px) {
   const id = terrainAt(st, x, y), d = rp.board.tmap[id] ?? {}, b = buildingsByTile(st).get(key(x, y));
-  if (d.building && rp.board.art?.tile) {   // a building on its own, with the height it stands above its tile
-    const s = icon([x * TILE, (y - 0.5) * TILE, TILE, 1.5 * TILE], px, px * 1.5);
-    if (rp.board.art.tile(id, d, b?.owner ?? null, s, { x: x * TILE, y: y * TILE, size: TILE })) return s;
+  const owner = d.building ? (b?.owner ?? null) : null, box = { x: x * TILE, y: y * TILE, size: TILE };
+  const art = rp.board.art;
+  if (art?.tile) {
+    // This tile alone, drawn afresh, with the height its sprite stands above it (mountains, HQs).
+    const oh = art.overhang?.(id, d, owner, box) ?? 0;
+    const s = icon([x * TILE, (y - oh) * TILE, TILE, (1 + oh) * TILE], px, px * (1 + oh));
+    if (art.tile(id, d, owner, s, box)) return s;
   }
-  const s = icon([x * TILE, y * TILE, TILE, TILE], px, px);   // the board's own drawing of that tile (water joins and all)
+  // libaw's own art: every tile fits its square, so the board's drawing of it shows it alone.
+  const s = icon([x * TILE, y * TILE, TILE, TILE], px, px);
   const use = document.createElementNS(SVGNS, 'use');
   use.setAttribute('href', '#board-terrain');
   s.appendChild(use);
@@ -192,7 +197,6 @@ function tipNodes(st, x, y) {
         if (hpUnknown(c) || displayHp(c) < 10) out.push(text(hpUnknown(c) ? '?' : `${displayHp(c)}`));
       }
     }
-    out.push(text('on', 'dim'));
   }
   out.push(tileIcon(st, x, y, 22));
   const def = rp.data.terrain[terrainAt(st, x, y)]?.defense ?? 0;
