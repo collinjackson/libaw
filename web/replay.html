@@ -104,7 +104,7 @@ async function setup(t0 = 0) {
   const hover = rp?.board.hoverTile ?? null;
   rp?.board.destroy();
   const art = $('art').value === 'awbw' ? awbwLook(armed(sb), { animate: $('anim').checked, shoals: $('shoals').value, water, sides: q.get('face') === 'sides' }) : null;
-  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers', ghost: q.get('ghost') === '1', ghostPace, even: q.get('pad') === 'even' });
+  rp = new Replay($('board'), sb, { data: { units, terrain, tmap }, art, camera: $('camera').checked, hpBars: $('hp').checked, capCounts: q.get('cap') === 'numbers', ghost: q.get('ghost') === '1', ghostPace, even: q.get('pad') === 'even', damageBox: q.get('damage') === '1' });
   if (rp.ghost) loadEngine().catch(() => null);
   // AWBW's top-row sprites stand above the board: learn their heights before the first frame,
   // so the board (and a capture's frame size) has room for them from the start.

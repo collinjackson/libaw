@@ -49,8 +49,11 @@ export class Replay {
    *  on. ghostEngine(wasm module) fills in what needs libaw's engine (ranges, menus, damage); without
    *  it the ghost still plays, showing less. ghostPace scales the ghost's segments (0: none), for a
    *  page that's behind; setGhostPace changes it while playing. */
-  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, ghost = false, ghostPace = 1, even = false } = {}) {
+  constructor(svg, sb, { data, art = null, shots = null, camera = false, aspect = 0.72, hpBars = false, capCounts = true, dur = null, before = null, hold = null, overlays = {}, onShot = () => {}, ghost = false, ghostPace = 1, even = false, damageBox = false } = {}) {
     this.art = art;
+    // The ghost's damage box over an attack's target: off by default. It's up for a moment (the
+    // cursor's hover on the target), too short to read, and holding it longer stalls every attack.
+    this.showDamage = damageBox;
     this.sb = sb;
     this.data = data;
     this.board = new Board(svg, data.tmap, { art, hpBars, capCounts, even });
@@ -247,7 +250,7 @@ export class Replay {
     else if (seg.phase === 'silo') m = { silo: diamond(ghostCursor(seg, p, st, alongPath).at.map(Math.round), seg.radius, W, H) };
     const lit = seg.post ? seg.menu?.unit : seg.lit;
     if (lit != null && state.units[lit]?.moved) { state = JSON.parse(JSON.stringify(state)); state.units[lit].moved = false; }
-    const fx = () => { if (seg.menu) this.menu(seg, p); if (seg.phase === 'target') this.damageBox(seg, p); };
+    const fx = () => { if (seg.menu) this.menu(seg, p); if (seg.phase === 'target' && this.showDamage) this.damageBox(seg, p); };
     return { state, marks: this.marks?.move || this.marks?.attack ? marks : m, arrow, fx };
   }
 
