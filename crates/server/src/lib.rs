@@ -646,11 +646,9 @@ impl Hub {
             return vec![err(conn, msg, "the game is over")];
         }
         let Some(me) = g.seat_of_conn(conn).map(|s| s.player) else { return vec![err(conn, msg, "you hold no seat in this game")] };
-        if let Some(p) = g.state.player_mut(me) {
-            p.eliminated = true;
-        }
-        if g.state.current == me {
-            let _ = sim::end_turn(&mut g.state);
+        // The rule (who may resign when, what becomes of their properties) is the engine's.
+        if let Err(e) = sim::resign(&mut g.state, me) {
+            return vec![err(conn, msg, &e)];
         }
         g.seq += 1;
         let mut out = vec![(conn, with_id(json!({"type": "ok", "game": g.id, "seq": g.seq}), msg))];

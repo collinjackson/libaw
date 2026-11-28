@@ -66,7 +66,7 @@ seat with `format: "awbw"` and forwards each `turn` to the bot's `POST /act`.
 | `legal` | `game`, `filter`? {`unit`, `to`, `then`, `kind`} | `turn` (only for the player to move); with a filter, only the matching actions |
 | `options` | `game`, `unit` | `options` {`unit`, `tiles`: [{`to`, `path`, `then`: [THEN]}]}: one unit's choices, by destination |
 | `act` | `game`, `action` | `ok` {`seq`}, then broadcasts |
-| `resign` | `game` | `ok`, then broadcasts |
+| `resign` | `game` | `ok`, then broadcasts; an error in a team game when it isn't your turn (AWBW). If the game goes on, your properties turn neutral and your units are removed |
 | `leave` | `game` | `left` |
 
 A game's seats are its players, in turn order. Creating a game doesn't seat anyone. A seat

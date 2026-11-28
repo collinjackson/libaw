@@ -85,6 +85,7 @@ No recorded game exercises these, so they rest on AWBW's rules. Two were confirm
 | B22 | Sasha gets no +100 per property when the game's funds per property is 0. |
 | B23 | A Cruiser out of ammo can't fire at all, not even at aircraft (it has no second weapon as AWBW counts them). Confirmed live (game 1769988): the game page still offers Fire, but the server answers "Unit is out of ammos!". |
 | B24 | Under Sonja's Counter Break the attacker's strike, which comes second, is resolved as a counterattack: an attacking Sonja, or Kanbei under Samurai Spirit, gets the x1.5 counter bonus on it. |
+| B25 | Resigning: in a team game a player can resign only on their own turn; in a 1v1, at any time. If the game goes on, the resigner's properties turn neutral and their HQ a neutral city (recorded: game-1548776, a Day 1 resignation in a 12-player, two-team game), and their units are removed. Source for the turn rule: the user, who plays AWBW (2026-11-28). **To verify live:** the turn rule in both game types, a free-for-all (3+ players, no shared teams; allowed at any time for now), and what happens to the resigner's units (the recorded resignation had none). Engine: `sim::resign`, which the socket server's `resign` calls (it used to allow a resign at any time and leave the properties with the player). A Cypress test is written for the live check. |
 
 Also here: `tools/gen_data.py` now keeps the Drake values `data/cos.json` already had by
 hand, so regenerating the data no longer reverts them.

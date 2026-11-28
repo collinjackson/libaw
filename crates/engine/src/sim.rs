@@ -664,6 +664,12 @@ fn rout(s: &mut State, pid: PlayerId) {
     if winner(s).is_some() {
         return;
     }
+    neutralize(s, pid);
+}
+
+/// A player out while the game goes on, not by HQ capture: their properties turn neutral and
+/// their HQ a neutral city.
+fn neutralize(s: &mut State, pid: PlayerId) {
     let w = s.width as usize;
     let theirs: Vec<(u16, u16)> = s.buildings.iter().filter(|(_, b)| b.owner == Some(pid)).map(|(&k, _)| k).collect();
     for k in theirs {
@@ -672,6 +678,41 @@ fn rout(s: &mut State, pid: PlayerId) {
         b.terrain = crate::awbw::owned_tile(b.terrain, None);
         s.terrain[k.1 as usize * w + k.0 as usize] = b.terrain;
     }
+}
+
+/// Whether any team has more than one player: a team game.
+pub fn team_game(s: &State) -> bool {
+    let mut seen = alloc::collections::BTreeSet::new();
+    s.players.iter().any(|p| !seen.insert(p.team.as_str()))
+}
+
+/// `pid` resigns. In a team game AWBW allows it only on the player's own turn (the user, who
+/// plays AWBW, 2026-11-28; to verify live); in a 1v1 at any time. A free-for-all (3+ players, no
+/// shared teams) is allowed at any time here, but AWBW's rule there is unverified. If the game goes
+/// on, the player's properties turn neutral and their HQ a neutral city, as recorded (game-1548776,
+/// docs/awbw-rule-findings.md B15), and their units are removed (as when an HQ is taken; to verify
+/// live); a resignation on their own turn ends it.
+pub fn resign(s: &mut State, pid: PlayerId) -> Result<(), String> {
+    let p = s.player(pid).ok_or("no such player")?;
+    if p.eliminated {
+        return Err("that player is already out".into());
+    }
+    if team_game(s) && s.current != pid {
+        return Err("in a team game you can only resign on your own turn".into());
+    }
+    s.player_mut(pid).unwrap().eliminated = true;
+    if winner(s).is_some() {
+        return Ok(());
+    }
+    neutralize(s, pid);
+    let ids: Vec<UnitId> = s.units.values().filter(|u| u.owner == pid).map(|u| u.id).collect();
+    for id in ids {
+        remove_unit(s, id);
+    }
+    if s.current == pid {
+        end_turn(s)?;
+    }
+    Ok(())
 }
 
 fn apply(s: &mut State, a: &Action, luck: Luck) -> Result<(), String> {

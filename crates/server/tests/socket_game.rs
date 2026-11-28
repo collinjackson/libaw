@@ -212,3 +212,29 @@ fn state_carries_each_players_income() {
         assert!(inc > 0 && inc % fpp == 0, "day-22 income {inc} should be a positive multiple of {fpp}");
     }
 }
+
+#[test]
+fn a_team_game_resign_only_on_your_own_turn() {
+    // last_stand with a third player: 1 and 3 on team A, 2 on team B; player 1 to move.
+    let mut st = last_stand();
+    st["players"][0]["team"] = json!("A");
+    st["players"][1]["team"] = json!("B");
+    st["players"].as_array_mut().unwrap().push(json!({"id": 3, "team": "A", "co": "Andy", "funds": 0, "eliminated": false,
+        "order": 2, "power": "N", "meter": 0, "cop_cost": 0, "scop_cost": 0, "power_attack": 0}));
+    let mut hub = Hub::new();
+    let g = hub.handle(1, &json!({"type": "create", "state": st, "name": "team"}))[0].1["game"].as_str().unwrap().to_string();
+    for (conn, seat) in [(2, 1), (3, 2), (4, 3)] {
+        let j = hub.handle(conn, &json!({"type": "join", "game": g, "player": seat}));
+        assert_eq!(j[0].1["type"], "joined", "{}", j[0].1);
+    }
+    // Player 3 (a teammate) and player 2 (an opponent) can't resign on player 1's turn.
+    for conn in [4, 3] {
+        let r = hub.handle(conn, &json!({"type": "resign", "game": g}));
+        assert_eq!(r[0].1["type"], "error");
+        assert!(r[0].1["message"].as_str().unwrap().contains("own turn"));
+    }
+    // Player 1 can, on their turn; the game goes on (team A still has player 3).
+    let r = hub.handle(2, &json!({"type": "resign", "game": g}));
+    assert_eq!(r[0].1["type"], "ok");
+    assert!(!r.iter().any(|(_, v)| v["type"] == "game_over"));
+}
